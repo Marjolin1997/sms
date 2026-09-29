@@ -6,17 +6,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.security import require_admin
+from app.core.security import Principal, require
 from app.models.sending import Message, MessageEvent
 from app.services import messages as svc
 from app.services.wallet import WalletError
 
-router = APIRouter(prefix="/v1", dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/v1")
 
 _STATUS = {
     "not_found": 404, "conflict": 409, "insufficient_funds": 402, "no_rate": 422,
     "no_route": 422, "sender_not_allowed": 403, "account_disabled": 403,
-    "template_not_usable": 403,
+    "template_not_usable": 403, "sending_paused": 503, "rate_limited": 429,
 }  # fmt: skip
 
 
@@ -42,6 +42,14 @@ class MessageOut(BaseModel):
     error_code: str | None
 
 
+def _own_message(db: Session, public_id: str, p: Principal) -> Message:
+    m = db.scalar(select(Message).where(Message.public_id == public_id))
+    if m is None:
+        raise HTTPException(404, {"code": "not_found", "message": "message not found"})
+    p.check_owner(m.owner_ref)
+    return m
+
+
 def _out(m: Message) -> MessageOut:
     return MessageOut(
         id=m.public_id, status=m.status.value, to=m.destination, sender=m.sender,
@@ -52,7 +60,13 @@ def _out(m: Message) -> MessageOut:
 
 
 @router.post("/messages", response_model=MessageOut, status_code=202)
-def send(body: SendIn, idempotency_key: str = Header(default=""), db: Session = Depends(get_db)):
+def send(
+    body: SendIn,
+    idempotency_key: str = Header(default=""),
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("messages:send")),
+):
+    p.check_owner(body.owner_ref)
     try:
         m = svc.submit(
             db, body.owner_ref, idempotency_key, body.to, body.sender,
@@ -66,18 +80,17 @@ def send(body: SendIn, idempotency_key: str = Header(default=""), db: Session = 
 
 
 @router.get("/messages/{public_id}", response_model=MessageOut)
-def get_message(public_id: str, db: Session = Depends(get_db)):
-    m = db.scalar(select(Message).where(Message.public_id == public_id))
-    if m is None:
-        raise HTTPException(404, {"code": "not_found", "message": "message not found"})
-    return _out(m)
+def get_message(
+    public_id: str, db: Session = Depends(get_db), p: Principal = Depends(require("messages:read"))
+):
+    return _out(_own_message(db, public_id, p))
 
 
 @router.get("/messages/{public_id}/events")
-def events(public_id: str, db: Session = Depends(get_db)):
-    m = db.scalar(select(Message).where(Message.public_id == public_id))
-    if m is None:
-        raise HTTPException(404, {"code": "not_found", "message": "message not found"})
+def events(
+    public_id: str, db: Session = Depends(get_db), p: Principal = Depends(require("messages:read"))
+):
+    m = _own_message(db, public_id, p)
     rows = db.scalars(
         select(MessageEvent).where(MessageEvent.message_id == m.id).order_by(MessageEvent.id)
     )

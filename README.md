@@ -20,7 +20,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 4 Sender IDs + templates me miratim, versione, validim | ✅ |
 | 5 Pipeline dërgimi (outbox, retries, DLR, provider fals) | ✅ |
 | 6 Adapter HTTP + webhook DLR i nënshkruar + sweeper (SMPP: pret vendorin) | ✅ |
-| 7 Admin, RBAC, audit, monitorim | – |
+| 7 RBAC + API keys, audit log, kill switch, rate limit, monitorim | ✅ |
 
 ## Nisja
 ```bash
@@ -29,4 +29,9 @@ docker compose up --build        # API në :8000, MariaDB në :3307
 ```
 Lokalisht: `pip install -r requirements-dev.txt && pytest && ruff check .`
 
-Auth i përkohshëm: header `X-Admin-Key` (zëvendësohet në Fazën 7 me RBAC + API keys me scope).
+## Auth dhe RBAC
+- `Authorization: Bearer sms_<prefix>_<secret>`. Ruhet vetëm SHA-256 i sekretit; çelësi i plotë shfaqet një herë.
+- Role: `superadmin`, `finance`, `pricing`, `approver`, `support`, `client` (i lidhur me një `owner_ref`; sheh vetëm të dhënat e veta).
+- Bootstrap: `X-Admin-Key` = `SMS_ADMIN_API_KEY` (superadmin). Përdore vetëm për të krijuar çelësat e parë (`POST /v1/admin/api-keys`), pastaj **hiqe variablën në prodhim**.
+- Çdo ndryshim administrativ shkruhet te `sms_audit_log` (vetëm-shtim) në të njëjtin transaksion.
+- Kill switch: `PUT /v1/admin/switches/{submit|dispatch}` (arsye e detyrueshme kur çaktivizohet).

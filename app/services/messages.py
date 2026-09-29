@@ -9,7 +9,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -24,7 +24,7 @@ from app.models.sending import (
 )
 from app.models.wallet import Wallet
 from app.providers import ProviderError, SendRequest, get_provider
-from app.services import rates, sender_ids, templates
+from app.services import rates, sender_ids, switches, templates
 from app.services import wallet as wallets
 from app.services.sms_text import count_segments
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -43,6 +43,17 @@ class AccountDisabled(WalletError):
 
 class NoRoute(WalletError):
     code = "no_route"
+
+
+class SendingPaused(WalletError):
+    code = "sending_paused"
+
+
+class RateLimited(WalletError):
+    code = "rate_limited"
+
+
+DEFAULT_RATE_LIMIT = 600  # mesazhe/minutë për llogari
 
 
 def _find(db: Session, owner_ref: str, key: str) -> Message | None:
@@ -99,9 +110,19 @@ def submit(
             raise Conflict("idempotency key reused with a different request")
         return existing
 
+    if not switches.is_enabled(db, switches.SUBMIT):
+        raise SendingPaused("sending is temporarily paused")
     plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner_ref))
     if plan is None or not plan.enabled:
         raise AccountDisabled("account has no active sending plan")
+    limit = plan.rate_limit_per_min or DEFAULT_RATE_LIMIT
+    recent = db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(Message.owner_ref == owner_ref, Message.created_at > now - timedelta(minutes=1))
+    )
+    if recent >= limit:
+        raise RateLimited(f"limit of {limit} messages per minute exceeded")
     if not rates.E164.match(destination):
         raise rates.InvalidNumber("destination must be E.164")
     destination = destination.lstrip("+")
@@ -182,6 +203,8 @@ def process_one(db: Session, now: datetime | None = None) -> Message | None:
     """Një cikël punonjësi. Commit para dhe pas thirrjes së provider-it, që një crash
     të mos rezultojë në dërgim të dyfishtë (mesazhi mbetet SENDING për shqyrtim)."""
     now = rates.as_utc(now or datetime.now(UTC))
+    if not switches.is_enabled(db, switches.DISPATCH):
+        return None
     m = claim_next(db, now)
     if m is None:
         return None

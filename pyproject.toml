@@ -30,6 +30,7 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*" = ["E501", "I", "UP"]
+"tests/*" = ["E501"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

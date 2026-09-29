@@ -3,13 +3,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.security import require_admin
-from app.models.messaging import ApprovalStatus, SenderId, TemplateVersion
+from app.core.security import Principal, require
+from app.models.messaging import ApprovalStatus, SenderId, Template, TemplateVersion
 from app.services import sender_ids as sid
 from app.services import templates as tpl
+from app.services.audit import audit
 from app.services.wallet import WalletError
 
-router = APIRouter(prefix="/v1", dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/v1")
 
 _STATUS = {"not_found": 404, "conflict": 409, "sender_not_allowed": 403, "template_not_usable": 403}
 
@@ -41,7 +42,6 @@ class SenderOut(BaseModel):
 
 
 class ReviewIn(BaseModel):
-    actor: str = Field(min_length=1, max_length=64)
     reason: str | None = Field(default=None, max_length=255)
 
 
@@ -75,6 +75,13 @@ class RenderOut(BaseModel):
     segments: int
 
 
+def _own_template(db: Session, template_id: int, p: Principal) -> None:
+    t = db.get(Template, template_id)
+    if t is None:
+        raise HTTPException(404, {"code": "not_found", "message": "template not found"})
+    p.check_owner(t.owner_ref)
+
+
 def _sender(s: SenderId) -> SenderOut:
     return SenderOut(
         id=s.id, owner_ref=s.owner_ref, country=s.country, value=s.value,
@@ -90,43 +97,110 @@ def _version(v: TemplateVersion) -> VersionOut:
 
 
 @router.post("/sender-ids", response_model=SenderOut, status_code=201)
-def request_sender(body: SenderIn, db: Session = Depends(get_db)):
-    return _sender(_run(db, lambda: sid.request(db, body.owner_ref, body.country, body.value)))
+def request_sender(
+    body: SenderIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("sender:request")),
+):
+    p.check_owner(body.owner_ref)
+
+    def go():
+        s = sid.request(db, body.owner_ref, body.country, body.value)
+        audit(db, p, "sender.request", "sender_id", s.id, body.model_dump())
+        return s
+
+    return _sender(_run(db, go))
 
 
-@router.post("/sender-ids/{sender_id}/approve", response_model=SenderOut)
-def approve_sender(sender_id: int, body: ReviewIn, db: Session = Depends(get_db)):
-    return _sender(_run(db, lambda: sid.approve(db, sender_id, body.actor)))
+def _sender_review(action: str, fn):
+    def endpoint(
+        sender_id: int,
+        body: ReviewIn,
+        db: Session = Depends(get_db),
+        p: Principal = Depends(require("sender:review")),
+    ):
+        def go():
+            s = (
+                fn(db, sender_id, p.actor, body.reason or "")
+                if action != "approve"
+                else fn(db, sender_id, p.actor)
+            )
+            audit(db, p, f"sender.{action}", "sender_id", sender_id, {"reason": body.reason})
+            return s
+
+        return _sender(_run(db, go))
+
+    return endpoint
 
 
-@router.post("/sender-ids/{sender_id}/reject", response_model=SenderOut)
-def reject_sender(sender_id: int, body: ReviewIn, db: Session = Depends(get_db)):
-    return _sender(_run(db, lambda: sid.reject(db, sender_id, body.actor, body.reason or "")))
-
-
-@router.post("/sender-ids/{sender_id}/revoke", response_model=SenderOut)
-def revoke_sender(sender_id: int, body: ReviewIn, db: Session = Depends(get_db)):
-    return _sender(_run(db, lambda: sid.revoke(db, sender_id, body.actor, body.reason or "")))
+for _action, _fn in (("approve", sid.approve), ("reject", sid.reject), ("revoke", sid.revoke)):
+    router.add_api_route(
+        f"/sender-ids/{{sender_id}}/{_action}",
+        _sender_review(_action, _fn),
+        methods=["POST"],
+        response_model=SenderOut,
+    )
 
 
 @router.post("/templates", response_model=VersionOut, status_code=201)
-def create_template(body: TemplateIn, db: Session = Depends(get_db)):
-    return _version(_run(db, lambda: tpl.create(db, body.owner_ref, body.name, body.body)))
+def create_template(
+    body: TemplateIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("template:write")),
+):
+    p.check_owner(body.owner_ref)
+
+    def go():
+        v = tpl.create(db, body.owner_ref, body.name, body.body)
+        audit(db, p, "template.create", "template", v.template_id, {"name": body.name})
+        return v
+
+    return _version(_run(db, go))
 
 
 @router.post("/templates/{template_id}/versions", response_model=VersionOut, status_code=201)
-def add_version(template_id: int, body: VersionBodyIn, db: Session = Depends(get_db)):
-    return _version(_run(db, lambda: tpl.new_version(db, template_id, body.body)))
+def add_version(
+    template_id: int,
+    body: VersionBodyIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("template:write")),
+):
+    _own_template(db, template_id, p)
+
+    def go():
+        v = tpl.new_version(db, template_id, body.body)
+        audit(db, p, "template.version", "template", template_id, {"version": v.version})
+        return v
+
+    return _version(_run(db, go))
 
 
 @router.post("/template-versions/{version_id}/{action}", response_model=VersionOut)
-def review_version(version_id: int, action: str, body: ReviewIn, db: Session = Depends(get_db)):
+def review_version(
+    version_id: int,
+    action: str,
+    body: ReviewIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("template:review")),
+):
     if action not in ("approve", "reject", "revoke"):
         raise HTTPException(404, "unknown action")
-    return _version(_run(db, lambda: tpl.review(db, version_id, action, body.actor, body.reason)))
+
+    def go():
+        v = tpl.review(db, version_id, action, p.actor, body.reason)
+        audit(db, p, f"template.{action}", "template_version", version_id, {"reason": body.reason})
+        return v
+
+    return _version(_run(db, go))
 
 
 @router.post("/templates/{template_id}/render", response_model=RenderOut)
-def render(template_id: int, body: RenderIn, db: Session = Depends(get_db)):
+def render(
+    template_id: int,
+    body: RenderIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("template:render")),
+):
+    p.check_owner(body.owner_ref)
     r = _run(db, lambda: tpl.render(db, body.owner_ref, template_id, body.values))
     return RenderOut(**r.__dict__)

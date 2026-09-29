@@ -33,6 +33,8 @@ class AccountPlan(Base):
     owner_ref: Mapped[str] = mapped_column(String(64), unique=True)
     rate_card_id: Mapped[int] = mapped_column(ForeignKey("sms_rate_cards.id"))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Mesazhe të pranuara për minutë; NULL = kufiri i paracaktuar (DEFAULT_RATE_LIMIT).
+    rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)
 
 
 class Route(Base):
@@ -104,6 +106,7 @@ class Message(Base):
         UniqueConstraint("owner_ref", "idempotency_key"),
         Index("ix_sms_messages_queue", "status", "next_attempt_at"),
         Index("ix_sms_messages_provider_msg", "provider", "provider_message_id"),
+        Index("ix_sms_messages_owner_created", "owner_ref", "created_at"),
     )
 
 

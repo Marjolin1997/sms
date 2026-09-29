@@ -1,0 +1,75 @@
+"""API keys (RBAC), audit log dhe switches."""
+
+import enum
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Enum, Index, String, Text, event
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.db import Base
+from app.models.rates import PK
+from app.models.wallet import utcnow
+
+
+class KeyStatus(enum.StrEnum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+
+
+class ApiKey(Base):
+    """Sekreti nuk ruhet kurrë; vetëm SHA-256 (sekreti ka 256 bit entropi, prandaj
+    hash i shpejtë mjafton). `prefix` është pjesa publike që gjen rreshtin."""
+
+    __tablename__ = "sms_api_keys"
+
+    id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
+    prefix: Mapped[str] = mapped_column(String(12), unique=True)
+    key_hash: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(64))
+    role: Mapped[str] = mapped_column(String(16))
+    owner_ref: Mapped[str | None] = mapped_column(String(64))  # e detyrueshme për role=client
+    status: Mapped[KeyStatus] = mapped_column(
+        Enum(KeyStatus, native_enum=False, length=16), default=KeyStatus.ACTIVE
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuditLog(Base):
+    __tablename__ = "sms_audit_log"
+
+    id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
+    actor: Mapped[str] = mapped_column(String(64))
+    role: Mapped[str] = mapped_column(String(16))
+    action: Mapped[str] = mapped_column(String(48))
+    target_type: Mapped[str] = mapped_column(String(32))
+    target_id: Mapped[str] = mapped_column(String(64))
+    detail: Mapped[str | None] = mapped_column(Text)  # JSON pa sekrete
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_sms_audit_target", "target_type", "target_id"),
+        Index("ix_sms_audit_actor", "actor"),
+    )
+
+
+class Switch(Base):
+    __tablename__ = "sms_switches"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    reason: Mapped[str | None] = mapped_column(String(255))
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuditImmutableError(RuntimeError):
+    pass
+
+
+@event.listens_for(AuditLog, "before_update")
+@event.listens_for(AuditLog, "before_delete")
+def _audit_append_only(*_):
+    raise AuditImmutableError("audit log is append-only")

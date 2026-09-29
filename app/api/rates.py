@@ -6,11 +6,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.security import require_admin
+from app.core.security import Principal, require
 from app.services import rates as svc
+from app.services.audit import audit
 from app.services.wallet import WalletError
 
-router = APIRouter(prefix="/v1", dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/v1")
 
 
 class CardIn(BaseModel):
@@ -69,22 +70,44 @@ def _run(db: Session, fn):
 
 
 @router.post("/rate-cards", status_code=201)
-def create_card(body: CardIn, db: Session = Depends(get_db)):
-    c = _run(db, lambda: svc.create_card(db, body.name, body.currency))
+def create_card(
+    body: CardIn, db: Session = Depends(get_db), p: Principal = Depends(require("rates:write"))
+):
+    def go():
+        c = svc.create_card(db, body.name, body.currency)
+        audit(db, p, "ratecard.create", "ratecard", c.id, body.model_dump())
+        return c
+
+    c = _run(db, go)
     return {"id": c.id, "name": c.name, "currency": c.currency}
 
 
 @router.post("/rate-cards/{card_id}/versions", status_code=201)
-def new_version(card_id: int, db: Session = Depends(get_db)):
-    v = _run(db, lambda: svc.new_draft(db, card_id))
+def new_version(
+    card_id: int, db: Session = Depends(get_db), p: Principal = Depends(require("rates:write"))
+):
+    def go():
+        v = svc.new_draft(db, card_id)
+        audit(db, p, "ratecard.draft", "ratecard", card_id, {"version": v.version})
+        return v
+
+    v = _run(db, go)
     return {"id": v.id, "version": v.version, "status": v.status.value}
 
 
 @router.put("/rate-card-versions/{version_id}/rates", response_model=RateOut)
-def put_rate(version_id: int, body: RateIn, db: Session = Depends(get_db)):
-    r = _run(
-        db, lambda: svc.set_rate(db, version_id, body.prefix, body.price_per_segment, body.operator)
-    )
+def put_rate(
+    version_id: int,
+    body: RateIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("rates:write")),
+):
+    def go():
+        r = svc.set_rate(db, version_id, body.prefix, body.price_per_segment, body.operator)
+        audit(db, p, "rate.set", "ratecard_version", version_id, body.model_dump())
+        return r
+
+    r = _run(db, go)
     return {
         "id": r.id,
         "prefix": r.prefix,
@@ -94,8 +117,25 @@ def put_rate(version_id: int, body: RateIn, db: Session = Depends(get_db)):
 
 
 @router.post("/rate-card-versions/{version_id}/publish")
-def publish(version_id: int, body: PublishIn, db: Session = Depends(get_db)):
-    v = _run(db, lambda: svc.publish(db, version_id, body.effective_from))
+def publish(
+    version_id: int,
+    body: PublishIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("rates:write")),
+):
+    def go():
+        v = svc.publish(db, version_id, body.effective_from)
+        audit(
+            db,
+            p,
+            "ratecard.publish",
+            "ratecard_version",
+            v.id,
+            {"effective_from": v.effective_from},
+        )
+        return v
+
+    v = _run(db, go)
     return {
         "id": v.id,
         "version": v.version,
@@ -105,6 +145,11 @@ def publish(version_id: int, body: PublishIn, db: Session = Depends(get_db)):
 
 
 @router.post("/rate-cards/{card_id}/quote", response_model=QuoteOut)
-def quote(card_id: int, body: QuoteIn, db: Session = Depends(get_db)):
+def quote(
+    card_id: int,
+    body: QuoteIn,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require("rates:read")),
+):
     q = _run(db, lambda: svc.quote(db, card_id, body.number, body.text, body.at, body.operator))
     return QuoteOut(**q.__dict__)
