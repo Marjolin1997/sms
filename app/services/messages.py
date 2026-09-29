@@ -236,3 +236,32 @@ def apply_dlr(
     else:
         _fail(db, m, code or "dlr_failed")
     return m
+
+
+def expire_stale(db: Session, older_than: timedelta, now: datetime | None = None) -> int:
+    """SENT pa DLR për më shumë se `older_than` → FAILED dhe rezervimi lirohet, që paratë
+    të mos mbeten të bllokuara pafundësisht. Politikë biznesi: klienti nuk paguan për
+    mesazh pa konfirmim. DLR i vonuar 'delivered' pas kësaj refuzohet si kontradiktor."""
+    now = rates.as_utc(now or datetime.now(UTC))
+    stale = db.scalars(
+        select(Message)
+        .where(Message.status == MessageStatus.SENT, Message.updated_at <= now - older_than)
+        .order_by(Message.id)
+        .limit(500)
+        .with_for_update(skip_locked=True)
+    ).all()
+    for m in stale:
+        _fail(db, m, "dlr_timeout")
+    return len(stale)
+
+
+def stuck_sending(db: Session, older_than: timedelta, now: datetime | None = None) -> list[Message]:
+    """Vetëm lexim: SENDING të vjetra (crash gjatë thirrjes së provider-it) për shqyrtim manual."""
+    now = rates.as_utc(now or datetime.now(UTC))
+    return list(
+        db.scalars(
+            select(Message).where(
+                Message.status == MessageStatus.SENDING, Message.updated_at <= now - older_than
+            )
+        )
+    )

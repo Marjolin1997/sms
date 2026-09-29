@@ -19,7 +19,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 3 Rate cards me versione, prefix/operator, segmente, quote | ✅ |
 | 4 Sender IDs + templates me miratim, versione, validim | ✅ |
 | 5 Pipeline dërgimi (outbox, retries, DLR, provider fals) | ✅ |
-| 6 Provider real + DLR | – |
+| 6 Adapter HTTP + webhook DLR i nënshkruar + sweeper (SMPP: pret vendorin) | ✅ |
 | 7 Admin, RBAC, audit, monitorim | – |
 
 ## Nisja

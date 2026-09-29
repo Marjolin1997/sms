@@ -128,3 +128,19 @@ class EventImmutableError(RuntimeError):
 @event.listens_for(MessageEvent, "before_delete")
 def _events_append_only(*_):
     raise EventImmutableError("message events are append-only")
+
+
+class DlrReceipt(Base):
+    """Çdo DLR i pranuar, edhe i refuzuari (p.sh. 'delivered' pas dlr_timeout), për audit."""
+
+    __tablename__ = "sms_dlr_receipts"
+
+    id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_message_id: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[str | None] = mapped_column(String(16))
+    outcome: Mapped[str] = mapped_column(String(24))  # applied | unknown_message | conflict
+    raw_body: Mapped[str] = mapped_column(Text)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_sms_dlr_receipts_pmid", "provider", "provider_message_id"),)
