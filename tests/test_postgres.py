@@ -66,6 +66,18 @@ def test_migrations_up_down_up_and_triggers_block_tampering(migrated_url):
                 " values ('a','r','x','t','1',now())"
             )
         )
+        c.execute(
+            text(
+                "insert into sms_dlr_receipts (provider, provider_message_id, status, outcome,"
+                " raw_body, received_at) values ('p','m','delivered','applied','{}',now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_consent_events (owner_ref, channel, address_hash, action, reason,"
+                " source, actor, created_at) values ('a','sms','h','OPT_IN','opt_in','s','a',now())"
+            )
+        )
     for stmt in (
         "update sms_ledger_entries set available_delta = 999",
         "delete from sms_ledger_entries",
@@ -73,8 +85,14 @@ def test_migrations_up_down_up_and_triggers_block_tampering(migrated_url):
         "update sms_audit_log set actor = 'evil'",
         "delete from sms_audit_log",
         "truncate sms_audit_log",
+        "truncate sms_message_events",
+        "update sms_dlr_receipts set outcome = 'x'",
+        "delete from sms_dlr_receipts",
+        "truncate sms_dlr_receipts",
+        "update sms_consent_events set evidence = 'forged'",
+        "truncate sms_consent_events",
     ):
-        with pytest.raises(DBAPIError, match="append-only"), eng.begin() as c:
+        with pytest.raises(DBAPIError, match="append-only|cannot truncate"), eng.begin() as c:
             c.execute(text(stmt))
     with eng.connect() as c:
         assert c.execute(text("select available_delta from sms_ledger_entries")).scalar() == 5

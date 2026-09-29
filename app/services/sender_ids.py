@@ -102,3 +102,17 @@ def assert_usable(db: Session, owner_ref: str, country: str, value: str) -> Send
     if s is None:
         raise SenderNotAllowed("sender id is not approved for this account and country")
     return s
+
+
+def owners_of_number(db: Session, number: str) -> set[str]:
+    """Kush ka të miratuar këtë numër si sender (për SMS hyrës → STOP/START)."""
+    norm = number.lstrip("+")
+    return set(
+        db.scalars(
+            select(SenderId.owner_ref).where(
+                SenderId.value == norm,
+                SenderId.kind == SenderKind.NUMERIC,
+                SenderId.status == ApprovalStatus.APPROVED,
+            )
+        )
+    )

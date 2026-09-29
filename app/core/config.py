@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     db_idle_tx_timeout_ms: int = 60000
     admin_api_key: str = ""  # bosh = të gjitha endpoint-et admin refuzohen
 
+    # Çelës HMAC për adresat në tabelat e consent-it (nuk ruhen në tekst të hapur).
+    # Bosh = konsumi i consent-it dështon (fail closed). Mos e ndrysho pasi ka të dhëna:
+    # hash-et ekzistuese nuk do të gjenden më.
+    pii_hmac_key: str = ""
+
     # Provider HTTP (bosh = i çaktivizuar). Emri duhet të përputhet me sms_routes.provider.
     http_provider_name: str = "http"
     http_provider_url: str = ""

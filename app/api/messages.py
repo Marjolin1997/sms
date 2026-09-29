@@ -16,7 +16,8 @@ router = APIRouter(prefix="/v1")
 _STATUS = {
     "not_found": 404, "conflict": 409, "insufficient_funds": 402, "no_rate": 422,
     "no_route": 422, "sender_not_allowed": 403, "account_disabled": 403,
-    "template_not_usable": 403, "sending_paused": 503, "rate_limited": 429,
+    "template_not_usable": 403, "sending_paused": 503, "recipient_suppressed": 422,
+    "rate_limited": 429,
 }  # fmt: skip
 
 
@@ -26,6 +27,7 @@ class SendIn(BaseModel):
     sender: str
     text: str | None = Field(default=None, max_length=1600)  # ≤ 10 segmente GSM-7
     template_id: int | None = None
+    category: str = Field(default="transactional", pattern="^(transactional|marketing)$")
     values: dict[str, str] = {}
 
 
@@ -71,6 +73,7 @@ def send(
         m = svc.submit(
             db, body.owner_ref, idempotency_key, body.to, body.sender,
             text=body.text, template_id=body.template_id, values=body.values,
+            category=body.category,
         )  # fmt: skip
         db.commit()
     except WalletError as e:

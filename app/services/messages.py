@@ -24,7 +24,7 @@ from app.models.sending import (
 )
 from app.models.wallet import Wallet
 from app.providers import ProviderError, SendRequest, get_provider
-from app.services import rates, sender_ids, switches, templates
+from app.services import consent, rates, sender_ids, switches, templates
 from app.services import wallet as wallets
 from app.services.sms_text import count_segments
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -93,6 +93,7 @@ def submit(
     template_id: int | None = None,
     values: dict[str, str] | None = None,
     now: datetime | None = None,
+    category: str = "transactional",
 ) -> Message:
     """Pranon mesazhin: idempotent sipas (owner_ref, key). Kthen mesazhin në QUEUED."""
     if bool(text) == bool(template_id):
@@ -101,7 +102,9 @@ def submit(
         raise InvalidMessage("idempotency key is required (max 128 chars)")
     now = rates.as_utc(now or datetime.now(UTC))
     digest = hashlib.sha256(
-        json.dumps([destination, sender, text, template_id, values or {}], sort_keys=True).encode()
+        json.dumps(
+            [destination, sender, text, template_id, values or {}, category], sort_keys=True
+        ).encode()
     ).hexdigest()
 
     existing = _find(db, owner_ref, key)
@@ -128,6 +131,7 @@ def submit(
     destination = destination.lstrip("+")
     route = find_route(db, destination)
     sender_ids.assert_usable(db, owner_ref, route.country, sender)
+    consent.assert_may_send(db, owner_ref, "sms", destination, category)
 
     template_version_id = None
     if template_id:
@@ -155,7 +159,8 @@ def submit(
             m = Message(
                 public_id=public_id, owner_ref=owner_ref, idempotency_key=key,
                 request_hash=digest, wallet_id=wallet.id, hold_id=hold.id,
-                sender=sender, destination=destination, country=route.country, text=text,
+                category=category, sender=sender, destination=destination,
+                country=route.country, text=text,
                 template_version_id=template_version_id, encoding=q.encoding,
                 segments=q.segments, currency=q.currency, unit_price=q.unit_price,
                 total_price=q.total, rate_version_id=q.version_id, rate_id=q.rate_id,

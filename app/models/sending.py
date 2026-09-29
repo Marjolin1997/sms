@@ -78,6 +78,9 @@ class Message(Base):
     request_hash: Mapped[str] = mapped_column(String(64))
     wallet_id: Mapped[int] = mapped_column(ForeignKey("sms_wallets.id"))
     hold_id: Mapped[int] = mapped_column(ForeignKey("sms_holds.id"))
+    category: Mapped[str] = mapped_column(
+        String(16), default="transactional", server_default="transactional"
+    )
     sender: Mapped[str] = mapped_column(String(16))
     destination: Mapped[str] = mapped_column(String(16))
     country: Mapped[str] = mapped_column(String(2))

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api import admin, messages, messaging, rates, wallets, webhooks
+from app.api import admin, contacts, messages, messaging, rates, wallets, webhooks
 from app.providers import register_configured
 
 MAX_BODY_BYTES = 256 * 1024
@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(messages.router)
     app.include_router(webhooks.router)
     app.include_router(admin.router)
+    app.include_router(contacts.router)
 
     @app.get("/healthz")
     def healthz():

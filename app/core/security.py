@@ -23,10 +23,13 @@ ROLE_PERMS: dict[str, set[str]] = {
     },
     "pricing": {"rates:read", "rates:write", "routes:write", "plans:write", "monitor:read"},
     "approver": {"sender:review", "template:review", "monitor:read"},
-    "support": {"wallet:read", "messages:read", "monitor:read", "audit:read", "switch:write"},
+    "support": {
+        "wallet:read", "messages:read", "monitor:read", "audit:read", "switch:write",
+        "contacts:read",
+    },
     "client": {
         "wallet:read", "messages:send", "messages:read", "sender:request",
-        "template:write", "template:render",
+        "template:write", "template:render", "contacts:read", "contacts:write", "consent:write",
     },
 }  # fmt: skip
 STAFF_ROLES = set(ROLE_PERMS) - {"client"}

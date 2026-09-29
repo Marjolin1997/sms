@@ -22,6 +22,11 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 5 Pipeline dërgimi (outbox, retries, DLR, provider fals) | ✅ |
 | 6 Adapter HTTP + webhook DLR i nënshkruar + sweeper (SMPP: pret vendorin) | ✅ |
 | 7 RBAC + API keys, audit log, kill switch, rate limit, monitorim | ✅ |
+| 8 Contacts, lista, consent me prova, opt-out (STOP/START), fshirje GDPR, audienca | ✅ |
+| 9 Campaigns SMS (planifikim, batch, statistika) | – |
+| 10 Email (SPF/DKIM, bounces, complaints, unsubscribe) | – |
+| 11 Webhooks për klientët, portal vetë-shërbyes | – |
+| 12 Billing: plane, fatura, pagesa | – |
 
 ## Nisja
 ```bash
@@ -31,6 +36,12 @@ docker compose up --build        # API në :8000, PostgreSQL në :5433
 Lokalisht: `pip install -r requirements-dev.txt && ruff check . && pytest`.
 Teste të plota mbi PostgreSQL (konkurrencë, triggers, migrime):
 `SMS_TEST_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_test pytest`
+
+## Consent dhe privatësi
+- Marketing kërkon **opt-in me provë** (`evidence`); transactional (OTP) nuk kërkon, por bllokohet nga opt-out i ashpër.
+- Opt-out i ashpër (`STOP`, bounce, complaint, erasure) bllokon çdo kategori dhe nuk zhbëhet me opt-in, përveç `STOP` të vetë personit (`START`). `unsubscribe` bllokon vetëm marketing.
+- Adresat në tabelat e consent-it ruhen vetëm si HMAC-SHA256 (`SMS_PII_HMAC_KEY`, mos e ndrysho pasi ka të dhëna). Fshirja GDPR heq PII nga contact-i dhe e lë adresën të bllokuar si hash.
+- `sms_consent_events` është vetëm-shtim (ORM + trigger).
 
 ## Auth dhe RBAC
 - `Authorization: Bearer sms_<prefix>_<secret>`. Ruhet vetëm SHA-256 i sekretit; çelësi i plotë shfaqet një herë.
