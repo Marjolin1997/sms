@@ -31,6 +31,16 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 
+## Nisje e shpejtë me panel (Docker + Node)
+```bash
+git clone https://github.com/Marjolin1997/sms.git && cd sms
+git checkout claude/sms-platform-architecture-lugdyz
+docker compose up --build -d                            # PostgreSQL + API + workers
+docker compose exec api python -m scripts.seed_demo      # një herë; printon CLIENT_KEY dhe ADMIN_KEY
+cd frontend && npm install && npm run dev                # hap http://localhost:5173 dhe ngjit një çelës
+```
+Rivendosje e plotë: `docker compose down -v`. Seed-i është vetëm për zhvillim.
+
 ## Nisja
 ```bash
 cp .env.example .env
