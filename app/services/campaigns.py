@@ -275,8 +275,8 @@ def _needed_vars(db: Session, c: Campaign) -> list[str]:
             for name in templates.VAR.findall(part or ""):
                 found[name] = None
         return list(found)
-    if not c.template_id:
-        return []
+    if not c.template_id:  # SMS me tekst të lirë: variabla {{emri}} direkt në tekst
+        return list(dict.fromkeys(templates.VAR.findall(c.text or "")))
     return templates.variables(templates.usable_version(db, c.owner_ref, c.template_id).body)
 
 
@@ -339,16 +339,18 @@ def _subst(template: str, values: dict[str, str], escape: bool = False) -> str:
 
 
 def _submit_sms(db, c, r, values, plan, reserved, now):
-    """→ (mesazhi, kostoja e tij) ose ngre përjashtim; kontrollon buxhetin para dërgimit."""
+    """→ kostoja e mesazhit ose ngre përjashtim; kontrollon buxhetin para dërgimit."""
+    text = _subst(c.text, values) if c.text else None  # tekst i lirë: personalizim {{emri}}
     if c.max_cost is not None and plan is not None:
-        text = c.text or templates.render(db, c.owner_ref, c.template_id, values).text
-        q = rates.quote(db, plan.rate_card_id, r.address, text, now)
+        quote_text = text or templates.render(db, c.owner_ref, c.template_id, values).text
+        q = rates.quote(db, plan.rate_card_id, r.address, quote_text, now)
         if reserved + q.total > c.max_cost:
             raise _BudgetExhausted
     with db.begin_nested():
         m = msg.submit(
             db, c.owner_ref, f"camp:{c.id}:{r.contact_id}", r.address, c.sender,
-            text=c.text, template_id=c.template_id, values=values or None,
+            text=text, template_id=c.template_id,
+            values=(values or None) if c.template_id else None,
             category=c.category, now=now,
         )  # fmt: skip
     r.status, r.message_id, r.queued_at = RecipientStatus.QUEUED, m.id, now
@@ -559,9 +561,11 @@ def estimate(
                 continue
             try:
                 contact = db.get(Contact, r.contact_id)
+                values = _values(contact, needed)
                 text = (
-                    c.text
-                    or templates.render(db, owner_ref, c.template_id, _values(contact, needed)).text
+                    _subst(c.text, values)
+                    if c.text
+                    else templates.render(db, owner_ref, c.template_id, values).text
                 )
                 q = rates.quote(db, plan.rate_card_id, r.address, text, now)
             except WalletError:

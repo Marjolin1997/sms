@@ -28,6 +28,9 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 11 Event log + webhooks për klientët (SSRF, retry, nënshkrim), çelësa API vetë-shërbyes, pasqyrë përdorimi (API; pa UI) | ✅ |
 | 12 Billing: plane, fatura, pagesa | – |
 
+## Paneli (frontend)
+React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
+
 ## Nisja
 ```bash
 cp .env.example .env
@@ -44,9 +47,13 @@ Teste të plota mbi PostgreSQL (konkurrencë, triggers, migrime):
 - Verifikimi te marrësi: header `X-SMS-Signature: t=<unix>,v1=<hex>` ku `v1 = HMAC_SHA256(secret, f"{t}.{trupi_i_papërpunuar}")`; refuzo nëse `|now - t| > 300s`.
 ```python
 import hmac, hashlib, time
+
+
 def verify(secret, header, body: bytes, tol=300):
     p = dict(x.split("=", 1) for x in header.split(","))
-    ok = hmac.compare_digest(p["v1"], hmac.new(secret.encode(), f"{p['t']}.".encode() + body, hashlib.sha256).hexdigest())
+    ok = hmac.compare_digest(
+        p["v1"], hmac.new(secret.encode(), f"{p['t']}.".encode() + body, hashlib.sha256).hexdigest()
+    )
     return ok and abs(time.time() - int(p["t"])) <= tol
 ```
 - Worker i ndarë: `python -m app.worker --role webhooks` (një endpoint i ngadaltë nuk bllokon SMS/email). Për mbrojtje të plotë nga DNS-rebinding, kufizo egress-in e këtij worker-i.

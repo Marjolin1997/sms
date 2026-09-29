@@ -350,3 +350,17 @@ def test_api_flow_and_isolation(db, world):  # noqa: F811
     assert c.get("/v1/campaigns", headers=h2).json() == []
     actions = {a["action"] for a in c.get("/v1/admin/audit", headers=BOOT).json()}
     assert {"campaign.create", "campaign.schedule"} <= actions
+
+
+def test_sms_free_text_personalization(db, world):  # noqa: F811
+    lst, ids = audience(db, 2)
+    nameless, _ = contacts_svc.upsert(db, "c1", phone="355691231777")
+    consent.record(db, "c1", "sms", nameless.phone, "opt_in", "x", "form", "u", "evidence")
+    contacts_svc.add_members(db, "c1", lst.id, [nameless.id])
+    c = campaign(db, lst, text="Hi {{first_name}}, 20% off!")
+    e = svc.estimate(db, "c1", c.id, now=NOW)
+    assert (e.recipients, e.excluded) == (2, 1)  # kontakti pa emër s'personalizohet
+    start(db, c)
+    drive(db)
+    assert sorted(m.text for m in db.query(Message)) == ["Hi N0, 20% off!", "Hi N1, 20% off!"]
+    assert svc.stats(db, c)["skipped_reasons"] == {"missing_variable:first_name": 1}

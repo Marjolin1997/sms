@@ -499,3 +499,17 @@ def test_portal_overview(db, world, raw_client):  # noqa: F811
         "failed_deliveries_24h": 0,
     }
     assert c.get("/v1/portal/overview", headers=_key(c, "c2")).json()["wallets"] == []
+
+
+def test_me_endpoint(raw_client):
+    c = raw_client
+    assert c.get("/v1/me").status_code == 401
+    me = c.get("/v1/me", headers=_key(c, "c1")).json()
+    assert (
+        me["role"] == "client" and me["owner_ref"] == "c1" and "messages:send" in me["permissions"]
+    )
+    assert "keys:manage" not in me["permissions"]
+    boot = c.get("/v1/me", headers=BOOT).json()
+    assert (
+        boot["role"] == "superadmin" and boot["owner_ref"] is None and boot["permissions"] == ["*"]
+    )

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.contacts import owner_for
 from app.core.db import get_db
-from app.core.security import Principal, require
+from app.core.security import ROLE_PERMS, Principal, current_principal, require
 from app.models.campaigns import Campaign
 from app.models.email import Email
 from app.models.events import (
@@ -38,6 +38,13 @@ def _run(db: Session, fn):
     except WalletError as e:
         db.rollback()
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
+
+
+@router.get("/me")
+def me(p: Principal = Depends(current_principal)):
+    """Identiteti i thirrësit: përdoret nga paneli për të treguar vetëm çka lejohet."""
+    return {"actor": p.actor, "role": p.role, "owner_ref": p.owner_ref,
+            "permissions": sorted(ROLE_PERMS.get(p.role, set()))}  # fmt: skip
 
 
 # --- Webhook endpoints ---------------------------------------------------------------
