@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.models.contacts import (
@@ -158,6 +159,21 @@ def erase(db: Session, owner_ref: str, contact_id: int, actor: str) -> Contact:
                 db, owner_ref, channel, addr, "opt_out", "erasure", "erasure_request", actor
             )
     db.execute(delete(ListMember).where(ListMember.contact_id == c.id))
+    from app.models.campaigns import CampaignRecipient, RecipientStatus
+
+    db.execute(  # kopja e adresës te marrësit e campaign-eve hiqet; të pa-dërguarit anulohen
+        sa_update(CampaignRecipient)
+        .where(CampaignRecipient.contact_id == c.id)
+        .values(address=None)
+    )
+    db.execute(
+        sa_update(CampaignRecipient)
+        .where(
+            CampaignRecipient.contact_id == c.id,
+            CampaignRecipient.status == RecipientStatus.PENDING,
+        )
+        .values(status=RecipientStatus.CANCELLED, reason="contact_erased")
+    )
     c.phone = c.email = c.first_name = c.last_name = c.attributes = c.external_id = None
     c.status = ContactStatus.ERASED
     c.updated_at = datetime.now(UTC)

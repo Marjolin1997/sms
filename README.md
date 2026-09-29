@@ -23,7 +23,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 6 Adapter HTTP + webhook DLR i nënshkruar + sweeper (SMPP: pret vendorin) | ✅ |
 | 7 RBAC + API keys, audit log, kill switch, rate limit, monitorim | ✅ |
 | 8 Contacts, lista, consent me prova, opt-out (STOP/START), fshirje GDPR, audienca | ✅ |
-| 9 Campaigns SMS (planifikim, batch, statistika) | – |
+| 9 Campaigns SMS: planifikim, personalizim, ritëm, buxhet, dritare orare, pauzë/anulim, statistika | ✅ |
 | 10 Email (SPF/DKIM, bounces, complaints, unsubscribe) | – |
 | 11 Webhooks për klientët, portal vetë-shërbyes | – |
 | 12 Billing: plane, fatura, pagesa | – |
@@ -36,6 +36,12 @@ docker compose up --build        # API në :8000, PostgreSQL në :5433
 Lokalisht: `pip install -r requirements-dev.txt && ruff check . && pytest`.
 Teste të plota mbi PostgreSQL (konkurrencë, triggers, migrime):
 `SMS_TEST_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_test pytest`
+
+## Campaigns
+- Rrjedha: `draft → scheduled → preparing → running → completed` (+ `paused`, `cancelled`). Worker-i e përgatit audiencën (snapshot) në pjesë të 500 dhe pastaj dërgon deri në 100 për cikël.
+- Çdo marrës dërgohet me idempotency key `camp:<id>:<contact>`; consent-i rikontrollohet në çastin e dërgimit; kufij: `rate_per_minute`, `max_cost` (pauzë `budget_exhausted`), dritare orare me offset, kill switch global.
+- Mbarimi i parave e pauzon campaign-in (`insufficient_funds`), s'dështon marrës pas marrësi; pas top-up `resume` vazhdon nga aty ku mbeti.
+- `GET /v1/campaigns/{id}/estimate` jep koston e saktë para nisjes; `GET /v1/campaigns/{id}` jep statistika (statuse, arsye përjashtimi, delivery rate, kosto e dorëzuar / në rrugë / e rimbursuar).
 
 ## Consent dhe privatësi
 - Marketing kërkon **opt-in me provë** (`evidence`); transactional (OTP) nuk kërkon, por bllokohet nga opt-out i ashpër.

@@ -293,3 +293,17 @@ def stuck_sending(db: Session, older_than: timedelta, now: datetime | None = Non
             )
         )
     )
+
+
+def cancel_if_queued(db: Session, message_id: int) -> bool:
+    """Anulon një mesazh që s'është marrë ende nga worker-i; rezervimi lirohet.
+    SKIP LOCKED: nëse worker-i e ka në dorë, nuk e prekim (do të dërgohet)."""
+    m = db.scalar(
+        select(Message)
+        .where(Message.id == message_id, Message.status == MessageStatus.QUEUED)
+        .with_for_update(skip_locked=True)
+    )
+    if m is None:
+        return False
+    _fail(db, m, "campaign_cancelled")
+    return True

@@ -256,3 +256,37 @@ def test_parallel_workers_send_each_message_exactly_once(db, world, fake):  # no
     _threads(4, worker)
     refs = [c.reference for c in fake.calls]
     assert len(refs) == 12 and len(set(refs)) == 12  # asnjë dërgim i dyfishtë, asnjë i humbur
+
+
+def test_parallel_workers_run_campaign_without_duplicates(db, world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from app.models.campaigns import CampaignRecipient, RecipientStatus
+    from app.models.sending import Message
+    from app.services import campaigns as camp
+    from app.services import consent
+    from app.services import contacts as contacts_svc
+
+    w, _ = world
+    lst = contacts_svc.create_list(db, "c1", "race")
+    ids = []
+    for i in range(40):
+        c, _ = contacts_svc.upsert(db, "c1", phone=str(355691232000 + i))
+        consent.record(db, "c1", "sms", c.phone, "opt_in", "x", "form", "u", "evidence")
+        ids.append(c.id)
+    contacts_svc.add_members(db, "c1", lst.id, ids)
+    c = camp.create(db, "c1", "race", lst.id, "ACME", "t", text="hello", rate_per_minute=10_000)
+    camp.schedule(db, "c1", c.id, None)
+    db.commit()
+
+    def worker(_):
+        with SessionLocal() as s:
+            for _ in range(12):
+                camp.run_due(s, datetime.now(UTC))
+
+    _threads(4, worker)
+    db.expire_all()
+    assert db.query(Message).count() == 40
+    assert db.query(CampaignRecipient).filter_by(status=RecipientStatus.QUEUED).count() == 40
+    assert wallets.balances(db, w.id) == (D("8"), D("2"))
+    assert wallets.verify_wallet(db, w.id)
