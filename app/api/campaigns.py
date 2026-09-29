@@ -32,9 +32,14 @@ class CampaignIn(BaseModel):
     owner_ref: str | None = None
     name: str = Field(min_length=1, max_length=80)
     list_id: int
-    sender: str = Field(min_length=1, max_length=16)
-    text: str | None = Field(default=None, max_length=1600)
+    sender: str = Field(default="", max_length=16)  # SMS: sender ID (i detyrueshëm)
+    text: str | None = Field(default=None, max_length=100_000)  # SMS ≤ 1600 (kontrollohet)
     template_id: int | None = None
+    channel: str = Field(default="sms", pattern="^(sms|email)$")
+    subject: str | None = Field(default=None, max_length=200)
+    html: str | None = Field(default=None, max_length=200_000)
+    from_email: str | None = Field(default=None, max_length=254)
+    from_name: str | None = Field(default=None, max_length=100)
     category: str = Field(default="marketing", pattern="^(marketing|transactional)$")
     max_cost: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=6)
     rate_per_minute: int = Field(default=300, ge=1, le=10_000)
@@ -49,7 +54,8 @@ class ScheduleIn(BaseModel):
 
 def _out(c: Campaign) -> dict:
     return {
-        "id": c.id, "name": c.name, "status": c.status.value, "list_id": c.list_id,
+        "id": c.id, "name": c.name, "channel": c.channel, "status": c.status.value,
+        "list_id": c.list_id,
         "sender": c.sender, "category": c.category, "template_id": c.template_id,
         "max_cost": None if c.max_cost is None else str(c.max_cost),
         "rate_per_minute": c.rate_per_minute,

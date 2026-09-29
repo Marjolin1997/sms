@@ -6,6 +6,7 @@ _db = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ["SMS_DATABASE_URL"] = os.environ.get("SMS_TEST_DATABASE_URL") or f"sqlite:///{_db}"
 os.environ["SMS_ADMIN_API_KEY"] = "test-key"
 os.environ["SMS_PII_HMAC_KEY"] = "test-pii-key"
+os.environ["SMS_SECRETS_KEY"] = "wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ="
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

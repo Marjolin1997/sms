@@ -17,6 +17,18 @@ class Settings(BaseSettings):
     # hash-et ekzistuese nuk do të gjenden më.
     pii_hmac_key: str = ""
 
+    # Email. secrets_key = çelës Fernet (32 bajt base64) për DKIM privat në DB.
+    # Gjenero me cryptography.fernet.Fernet.generate_key().decode()
+    secrets_key: str = ""
+    spf_include: str = "spf.sms-platform.example"  # kërkohet në SPF të domenit të klientit
+    public_base_url: str = "http://localhost:8000"  # për lidhjet e çregjistrimit
+    email_provider: str = "fake"  # "smtp" në prodhim
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+
     # Provider HTTP (bosh = i çaktivizuar). Emri duhet të përputhet me sms_routes.provider.
     http_provider_name: str = "http"
     http_provider_url: str = ""

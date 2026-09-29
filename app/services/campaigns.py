@@ -25,9 +25,10 @@ from app.models.campaigns import (
     RecipientStatus,
 )
 from app.models.contacts import Contact
+from app.models.email import Email
 from app.models.messaging import ApprovalStatus, SenderId
 from app.models.sending import AccountPlan, Message, MessageStatus
-from app.services import consent, contacts, rates, switches, templates
+from app.services import consent, contacts, email_domains, emails, rates, switches, templates
 from app.services import messages as msg
 from app.services import wallet as wallets
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -67,7 +68,30 @@ def create(
     window_start_hour: int | None = None,
     window_end_hour: int | None = None,
     utc_offset_minutes: int = 0,
+    channel: str = "sms",
+    subject: str | None = None,
+    html: str | None = None,
+    from_email: str | None = None,
+    from_name: str | None = None,
 ) -> Campaign:
+    if channel not in ("sms", "email"):
+        raise InvalidCampaign("channel must be 'sms' or 'email'")
+    if channel == "sms" and not sender:
+        raise InvalidCampaign("sender is required for SMS campaigns")
+    if channel == "email":
+        if template_id or not text or not subject or not from_email:
+            raise InvalidCampaign("email campaigns need from_email, subject and text (no template)")
+        if len(subject) > 200 or len(text) > 100_000 or (html and len(html) > 200_000):
+            raise InvalidCampaign("subject/text/html too long")
+        try:
+            from_email = consent.normalize("email", from_email)
+        except consent.InvalidAddress as ex:
+            raise InvalidCampaign(str(ex)) from ex
+        if max_cost is not None:
+            raise InvalidCampaign("max_cost applies to SMS only (email is not charged per message)")
+        sender = "email"
+    elif subject or html or from_email or from_name:
+        raise InvalidCampaign("subject/html/from_email are for email campaigns only")
     if bool(text) == bool(template_id):
         raise InvalidCampaign("provide exactly one of text or template_id")
     if category not in consent.CATEGORIES:
@@ -83,7 +107,7 @@ def create(
         raise InvalidCampaign("window start and end must differ")
     if not -840 <= utc_offset_minutes <= 840:
         raise InvalidCampaign("utc_offset_minutes out of range")
-    if text:
+    if text and channel == "sms":
         if len(text) > 1600:
             raise InvalidCampaign("text too long")
         try:
@@ -102,7 +126,9 @@ def create(
         raise Conflict("campaign name already exists")
     c = Campaign(
         owner_ref=owner_ref, name=name, list_id=list_id, category=category, sender=sender,
-        text=text, template_id=template_id, max_cost=max_cost, rate_per_minute=rate_per_minute,
+        channel=channel, subject=subject, html_body=html, from_email=from_email,
+        from_name=from_name, text=text, template_id=template_id, max_cost=max_cost,
+        rate_per_minute=rate_per_minute,
         window_start_hour=window_start_hour, window_end_hour=window_end_hour,
         utc_offset_minutes=utc_offset_minutes, created_by=created_by,
     )  # fmt: skip
@@ -127,18 +153,22 @@ def schedule(
     c = _get(db, owner_ref, campaign_id, lock=True)
     if c.status != CampaignStatus.DRAFT:
         raise Conflict(f"cannot schedule from status {c.status.value}")
-    approved = db.scalar(
-        select(func.count())
-        .select_from(SenderId)
-        .where(
-            SenderId.owner_ref == owner_ref,
-            SenderId.value
-            == (c.sender.lstrip("+") if c.sender.lstrip("+").isdigit() else c.sender),
-            SenderId.status == ApprovalStatus.APPROVED,
+    if c.channel == "email":
+        if email_domains.verified_domain_for(db, owner_ref, c.from_email) is None:
+            raise InvalidCampaign("from_email is not on a verified domain of this account")
+    else:
+        approved = db.scalar(
+            select(func.count())
+            .select_from(SenderId)
+            .where(
+                SenderId.owner_ref == owner_ref,
+                SenderId.value
+                == (c.sender.lstrip("+") if c.sender.lstrip("+").isdigit() else c.sender),
+                SenderId.status == ApprovalStatus.APPROVED,
+            )
         )
-    )
-    if not approved:
-        raise InvalidCampaign("sender id is not approved for this account")
+        if not approved:
+            raise InvalidCampaign("sender id is not approved for this account")
     now = as_utc(now or datetime.now(UTC))
     when = as_utc(when) if when else now
     if when < now - timedelta(minutes=5):
@@ -191,6 +221,14 @@ def cancel(db: Session, owner_ref: str, campaign_id: int) -> Campaign:
     ).all()
     for mid in ids:
         msg.cancel_if_queued(db, mid)
+    for eid in db.scalars(
+        select(CampaignRecipient.email_id).where(
+            CampaignRecipient.campaign_id == c.id,
+            CampaignRecipient.status == RecipientStatus.QUEUED,
+            CampaignRecipient.email_id.is_not(None),
+        )
+    ).all():
+        emails.cancel_if_queued(db, eid)
     _touch(c, CampaignStatus.CANCELLED)
     c.completed_at = datetime.now(UTC)
     db.flush()
@@ -215,6 +253,12 @@ def _values(contact: Contact, needed: list[str]) -> dict[str, str]:
 
 
 def _needed_vars(db: Session, c: Campaign) -> list[str]:
+    if c.channel == "email":
+        found: dict[str, None] = {}
+        for part in (c.subject, c.text, c.html_body):
+            for name in templates.VAR.findall(part or ""):
+                found[name] = None
+        return list(found)
     if not c.template_id:
         return []
     return templates.variables(templates.usable_version(db, c.owner_ref, c.template_id).body)
@@ -225,7 +269,7 @@ def _needed_vars(db: Session, c: Campaign) -> list[str]:
 
 def _prepare_step(db: Session, c: Campaign, now: datetime) -> None:
     rows = contacts.audience_batch(
-        db, c.owner_ref, c.list_id, "sms", c.category, after_id=c.prep_cursor, limit=PREP_BATCH
+        db, c.owner_ref, c.list_id, c.channel, c.category, after_id=c.prep_cursor, limit=PREP_BATCH
     )
     if not rows:
         _touch(c, CampaignStatus.RUNNING, now)
@@ -267,6 +311,50 @@ def _skip(r: CampaignRecipient, reason: str) -> None:
     r.status, r.reason = RecipientStatus.SKIPPED, reason[:48]
 
 
+def _subst(template: str, values: dict[str, str], escape: bool = False) -> str:
+    """Zëvendësim në një kalim (vlerat nuk rizgjerohen); HTML-escape për trupin html."""
+    import html as html_lib
+
+    def rep(m):
+        v = values[m.group(1)]
+        return html_lib.escape(v) if escape else v
+
+    return templates.VAR.sub(rep, template)
+
+
+def _submit_sms(db, c, r, values, plan, reserved, now):
+    """→ (mesazhi, kostoja e tij) ose ngre përjashtim; kontrollon buxhetin para dërgimit."""
+    if c.max_cost is not None and plan is not None:
+        text = c.text or templates.render(db, c.owner_ref, c.template_id, values).text
+        q = rates.quote(db, plan.rate_card_id, r.address, text, now)
+        if reserved + q.total > c.max_cost:
+            raise _BudgetExhausted
+    with db.begin_nested():
+        m = msg.submit(
+            db, c.owner_ref, f"camp:{c.id}:{r.contact_id}", r.address, c.sender,
+            text=c.text, template_id=c.template_id, values=values or None,
+            category=c.category, now=now,
+        )  # fmt: skip
+    r.status, r.message_id, r.queued_at = RecipientStatus.QUEUED, m.id, now
+    return m.total_price
+
+
+def _submit_email(db, c, r, values, now):
+    with db.begin_nested():
+        e = emails.submit(
+            db, c.owner_ref, f"camp:{c.id}:{r.contact_id}", c.from_email, r.address,
+            _subst(c.subject, values), _subst(c.text, values),
+            _subst(c.html_body, values, escape=True) if c.html_body else None,
+            c.from_name, c.category, now=now,
+        )  # fmt: skip
+    r.status, r.email_id, r.queued_at = RecipientStatus.QUEUED, e.id, now
+    return Decimal(0)
+
+
+class _BudgetExhausted(Exception):
+    pass
+
+
 def _dispatch_step(db: Session, c: Campaign, now: datetime) -> None:
     if not switches.is_enabled(db, switches.SUBMIT) or not _in_window(c, now):
         return
@@ -304,32 +392,21 @@ def _dispatch_step(db: Session, c: Campaign, now: datetime) -> None:
             continue
         try:
             values = _values(contact, needed)
-            if c.max_cost is not None and plan is not None:
-                text = (
-                    c.text
-                    if c.text
-                    else templates.render(db, c.owner_ref, c.template_id, values).text
-                )
-                q = rates.quote(db, plan.rate_card_id, r.address, text, now)
-                if reserved + q.total > c.max_cost:
-                    c.pause_reason = "budget_exhausted"
-                    _touch(c, CampaignStatus.PAUSED, now)
-                    return
-            with db.begin_nested():
-                m = msg.submit(
-                    db, c.owner_ref, f"camp:{c.id}:{r.contact_id}", r.address, c.sender,
-                    text=c.text, template_id=c.template_id, values=values or None,
-                    category=c.category, now=now,
-                )  # fmt: skip
-            r.status, r.message_id, r.queued_at = RecipientStatus.QUEUED, m.id, now
-            reserved += m.total_price
+            if c.channel == "email":
+                _submit_email(db, c, r, values, now)
+            else:
+                reserved += _submit_sms(db, c, r, values, plan, reserved, now)
+        except _BudgetExhausted:
+            c.pause_reason = "budget_exhausted"
+            _touch(c, CampaignStatus.PAUSED, now)
+            return
         except (wallets.InsufficientFunds, msg.AccountDisabled) as e:
             c.pause_reason = e.code
             _touch(c, CampaignStatus.PAUSED, now)
             return
         except (msg.RateLimited, msg.SendingPaused):
             return  # provo sërish në ciklin tjetër; marrësi mbetet PENDING
-        except WalletError as e:  # consent, route, sender, tarifë, variabël e munguar...
+        except WalletError as e:  # consent, route, sender, domen, tarifë, variabël e munguar...
             _skip(r, e.code if not str(e).startswith("missing_variable") else str(e))
     _touch(c, now=now)
 
@@ -387,28 +464,43 @@ def stats(db: Session, c: Campaign) -> dict:
             .group_by(CampaignRecipient.reason)
         ).all()
     )
-    by_msg = {}
+    by_msg: dict[str, int] = {}
     cost = {"delivered": Decimal(0), "in_flight": Decimal(0), "refunded": Decimal(0)}
-    q = (
-        select(Message.status, func.count(), func.coalesce(func.sum(Message.total_price), 0))
-        .join(CampaignRecipient, CampaignRecipient.message_id == Message.id)
-        .where(CampaignRecipient.campaign_id == c.id)
-        .group_by(Message.status)
-    )
-    for st, n, total in db.execute(q):
-        by_msg[st.value] = n
-        key = {"delivered": "delivered", "failed": "refunded"}.get(st.value, "in_flight")
-        cost[key] += Decimal(total)
-    delivered, failed = by_msg.get("delivered", 0), by_msg.get("failed", 0)
-    finished = delivered + failed
+    if c.channel == "email":
+        q = (
+            select(Email.status, func.count())
+            .join(CampaignRecipient, CampaignRecipient.email_id == Email.id)
+            .where(CampaignRecipient.campaign_id == c.id)
+            .group_by(Email.status)
+        )
+        for st, n in db.execute(q):
+            by_msg[st.value] = n
+        good = by_msg.get("delivered", 0) + by_msg.get("complained", 0)  # complaint = u dorëzua
+        bad = by_msg.get("bounced", 0) + by_msg.get("failed", 0)
+        cost = {k: "0" for k in cost}
+    else:
+        q = (
+            select(Message.status, func.count(), func.coalesce(func.sum(Message.total_price), 0))
+            .join(CampaignRecipient, CampaignRecipient.message_id == Message.id)
+            .where(CampaignRecipient.campaign_id == c.id)
+            .group_by(Message.status)
+        )
+        for st, n, total in db.execute(q):
+            by_msg[st.value] = n
+            key = {"delivered": "delivered", "failed": "refunded"}.get(st.value, "in_flight")
+            cost[key] += Decimal(total)
+        good, bad = by_msg.get("delivered", 0), by_msg.get("failed", 0)
+        cost = {k: str(v) for k, v in cost.items()}
+    finished = good + bad
     return {
         "status": c.status.value,
         "pause_reason": c.pause_reason,
         "recipients": {k.value: v for k, v in rec.items()},
         "skipped_reasons": {k or "": v for k, v in skipped.items()},
+        "channel": c.channel,
         "messages": by_msg,
-        "delivery_rate": round(delivered / finished, 4) if finished else None,
-        "cost": {k: str(v) for k, v in cost.items()},
+        "delivery_rate": round(good / finished, 4) if finished else None,
+        "cost": cost,
     }
 
 
@@ -426,6 +518,10 @@ def estimate(
 ) -> Estimate:
     """Vlerësim i saktë i kostos (pa shkruar asgjë): kuotë për secilin marrës të lejuar."""
     c = _get(db, owner_ref, campaign_id)
+    if c.channel == "email":  # pa kosto për mesazh: numërojmë vetëm audiencën e lejuar
+        counts = contacts.audience_counts(db, owner_ref, c.list_id, "email", c.category)
+        ok = counts.get("ok", 0)
+        return Estimate(ok, sum(counts.values()) - ok, 0, Decimal(0), None)
     plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner_ref))
     if plan is None:
         raise msg.AccountDisabled("account has no sending plan")

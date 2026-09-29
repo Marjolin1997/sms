@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -42,9 +43,15 @@ class Campaign(Base):
     owner_ref: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(80))
     list_id: Mapped[int] = mapped_column(ForeignKey("sms_contact_lists.id"))
+    channel: Mapped[str] = mapped_column(String(8), default="sms", server_default="sms")
     category: Mapped[str] = mapped_column(String(16), default="marketing")
-    sender: Mapped[str] = mapped_column(String(16))
-    text: Mapped[str | None] = mapped_column(String(1600))
+    sender: Mapped[str] = mapped_column(String(16))  # SMS: sender ID; email: "email"
+    text: Mapped[str | None] = mapped_column(Text)  # SMS ≤ 1600; email plain-text ≤ 100000
+    # Vetëm për email:
+    subject: Mapped[str | None] = mapped_column(String(200))
+    html_body: Mapped[str | None] = mapped_column(Text)
+    from_email: Mapped[str | None] = mapped_column(String(254))
+    from_name: Mapped[str | None] = mapped_column(String(100))
     template_id: Mapped[int | None] = mapped_column(ForeignKey("sms_templates.id"))
     status: Mapped[CampaignStatus] = mapped_column(
         Enum(CampaignStatus, native_enum=False, length=16), default=CampaignStatus.DRAFT
@@ -87,17 +94,19 @@ class CampaignRecipient(Base):
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("sms_campaigns.id"))
     contact_id: Mapped[int] = mapped_column(ForeignKey("sms_contacts.id"))
-    address: Mapped[str | None] = mapped_column(String(16))  # hiqet kur kontakti fshihet (GDPR)
+    address: Mapped[str | None] = mapped_column(String(254))  # hiqet kur kontakti fshihet (GDPR)
     status: Mapped[RecipientStatus] = mapped_column(
         Enum(RecipientStatus, native_enum=False, length=16), default=RecipientStatus.PENDING
     )
     reason: Mapped[str | None] = mapped_column(String(48))
-    message_id: Mapped[int | None] = mapped_column(ForeignKey("sms_messages.id"))
+    message_id: Mapped[int | None] = mapped_column(ForeignKey("sms_messages.id"))  # SMS
+    email_id: Mapped[int | None] = mapped_column(ForeignKey("sms_emails.id"))  # email
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint("campaign_id", "contact_id", name="uq_sms_camp_recipient"),
         Index("ix_sms_camp_recipients_status", "campaign_id", "status", "id"),
         Index("ix_sms_camp_recipients_message", "message_id"),
+        Index("ix_sms_camp_recipients_email", "email_id"),
         Index("ix_sms_camp_recipients_contact", "contact_id"),
     )

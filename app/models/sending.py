@@ -35,6 +35,7 @@ class AccountPlan(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # Mesazhe të pranuara për minutë; NULL = kufiri i paracaktuar (DEFAULT_RATE_LIMIT).
     rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)
+    email_rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)  # NULL = 600
 
 
 class Route(Base):

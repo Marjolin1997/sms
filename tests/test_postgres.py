@@ -86,6 +86,7 @@ def test_migrations_up_down_up_and_triggers_block_tampering(migrated_url):
         "delete from sms_audit_log",
         "truncate sms_audit_log",
         "truncate sms_message_events",
+        "truncate sms_email_events",
         "update sms_dlr_receipts set outcome = 'x'",
         "delete from sms_dlr_receipts",
         "truncate sms_dlr_receipts",
@@ -290,3 +291,38 @@ def test_parallel_workers_run_campaign_without_duplicates(db, world):  # noqa: F
     assert db.query(CampaignRecipient).filter_by(status=RecipientStatus.QUEUED).count() == 40
     assert wallets.balances(db, w.id) == (D("8"), D("2"))
     assert wallets.verify_wallet(db, w.id)
+
+
+def test_parallel_workers_send_each_email_exactly_once(db, world):  # noqa: F811
+    from datetime import UTC, datetime, timedelta
+
+    import app.providers as providers
+    from app.providers.email import FakeEmailProvider
+    from app.services import dns_check as dns
+    from app.services import email_domains, emails
+    from tests.test_email import FakeDns, verified  # noqa: F401
+
+    fake_dns = FakeDns()
+    old = dns.get_resolver()
+    dns.set_resolver(fake_dns)
+    provider = FakeEmailProvider()
+    providers._email_registry["fake"] = provider
+    try:
+        d = email_domains.create(db, "c1", "example.com")
+        fake_dns.publish(d)
+        email_domains.verify(db, "c1", d.id)
+        for i in range(12):
+            emails.submit(db, "c1", f"e{i}", "news@example.com", f"u{i}@customer.org", "s", "t")
+        db.commit()
+        later = datetime.now(UTC) + timedelta(seconds=5)
+
+        def worker(_):
+            with SessionLocal() as s:
+                while emails.process_one(s, later):
+                    pass
+
+        _threads(4, worker)
+        refs = [c.reference for c in provider.calls]
+        assert len(refs) == 12 and len(set(refs)) == 12
+    finally:
+        dns.set_resolver(old)
