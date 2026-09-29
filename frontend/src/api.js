@@ -4,11 +4,29 @@ const STORE = "sms_api_key";
 export const getKey = () => sessionStorage.getItem(STORE) || "";
 export const setKey = (k) => (k ? sessionStorage.setItem(STORE, k) : sessionStorage.removeItem(STORE));
 
+// Mesazhe në gjuhë të thjeshtë për kodet e gabimit që i shohin përdoruesit.
+const FRIENDLY = {
+  insufficient_funds: "Your wallet balance is too low for this. Top up on the Wallet page and try again.",
+  sender_not_allowed: "That sender ID isn't approved for the destination country yet. Request it on the Sender IDs page.",
+  recipient_suppressed: "This person can't be contacted: they opted out, or there is no recorded consent for marketing messages.",
+  no_route: "We can't deliver to that country yet. Contact support if you need it enabled.",
+  no_rate: "There is no price for that destination yet. Contact support.",
+  invalid_number: "Enter the number in international format, for example +355691234567.",
+  account_disabled: "Your account can't send yet. Contact support to activate sending.",
+  rate_limited: "You're sending too fast. Wait a moment and try again.",
+  sending_paused: "Sending is temporarily paused by the platform. Please try again shortly.",
+  template_not_usable: "That template has no approved version yet.",
+  sender_domain_not_verified: "The from address must be on a domain you have verified under Email domains.",
+  unauthorized: "Your session is no longer valid. Please sign in again.",
+  forbidden: "Your role doesn't allow this action.",
+};
+
 export class ApiError extends Error {
   constructor(status, code, message) {
-    super(message);
+    super(FRIENDLY[code] || message);
     this.status = status;
     this.code = code;
+    this.raw = message;
   }
 }
 
@@ -22,20 +40,21 @@ async function request(method, path, { params = {}, body, headers = {} } = {}) {
     if (v !== undefined && v !== null && v !== "") qs.set(k, v);
   const url = qs.toString() ? `${path}?${qs}` : path;
   const payload = body && owner && !Array.isArray(body) ? { owner_ref: owner, ...body } : body;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${getKey()}`,
-      ...(payload ? { "Content-Type": "application/json" } : {}),
-      ...headers,
-    },
-    body: payload ? JSON.stringify(payload) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${getKey()}`, ...(payload ? { "Content-Type": "application/json" } : {}), ...headers },
+      body: payload ? JSON.stringify(payload) : undefined,
+    });
+  } catch {
+    throw new ApiError(0, "network", "Can't reach the server. Check your connection and try again.");
+  }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const d = data && data.detail;
-    const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : `HTTP ${res.status}`;
+    const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("; ") : `Request failed (HTTP ${res.status})`;
     throw new ApiError(res.status, d && d.code, msg);
   }
   return data;
@@ -50,10 +69,10 @@ export const api = {
   owner: () => owner,
 };
 
-// Faqe HTML e mbrojtur (faturë): merret me Authorization dhe hapet si blob (linku i thjeshtë s'ka header).
+// Faqe HTML e mbrojtur (faturë): merret me Authorization dhe hapet si blob.
 export async function openHtml(path) {
   const res = await fetch(owner ? `${path}?owner_ref=${encodeURIComponent(owner)}` : path, { headers: { Authorization: `Bearer ${getKey()}` } });
-  if (!res.ok) throw new ApiError(res.status, "error", `HTTP ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, "error", `Couldn't open the document (HTTP ${res.status})`);
   const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
   window.open(url, "_blank", "noopener");
 }

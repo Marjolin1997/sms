@@ -190,6 +190,11 @@ def test_accounts_and_vat(db, world, raw_client):  # noqa: F811
     accs = c.get("/v1/admin/accounts", headers=support).json()
     assert accs[0]["owner_ref"] == "c1" and accs[0]["wallets"][0]["available"] == "10.000000"
     assert accs[0]["sending_enabled"] is True and accs[0]["has_rate_card"] is True
+    assert (
+        accs[0]["rate_card_id"]
+        and accs[0]["wallets"][0]["id"]
+        and accs[0]["rate_limit_per_min"] is None
+    )
     assert c.get("/v1/admin/accounts", headers=key(c, "client", "c1")).status_code == 403
     r = c.put("/v1/admin/billing/c1/vat", json={"vat_rate": "0.2"}, headers=fin)
     assert r.status_code == 422 and "billing details" in r.json()["detail"]["message"]

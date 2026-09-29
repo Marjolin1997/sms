@@ -322,13 +322,16 @@ def accounts(db: Session = Depends(get_db), _: Principal = Depends(require("moni
         owners.update(db.scalars(select(model.owner_ref)))
     out = []
     for o in sorted(owners)[:300]:
-        w = [{"currency": x.currency, "available": str(wallets.balances(db, x.id)[0])}
+        w = [{"id": x.id, "currency": x.currency,
+              "available": str(wallets.balances(db, x.id)[0])}
              for x in db.scalars(select(Wallet).where(Wallet.owner_ref == o))]  # fmt: skip
         plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == o))
         sub = db.scalar(select(Subscription).where(Subscription.owner_ref == o))
         out.append({
             "owner_ref": o, "wallets": w, "sending_enabled": plan.enabled if plan else False,
             "has_rate_card": plan is not None, "subscription": sub.status.value if sub else None,
+            "rate_card_id": plan.rate_card_id if plan else None,
+            "rate_limit_per_min": plan.rate_limit_per_min if plan else None,
             "sms_last_24h": db.scalar(
                 select(func.count()).select_from(Message).where(Message.owner_ref == o)
             ),

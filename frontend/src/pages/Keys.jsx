@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { api } from "../api.js";
-import { Badge, Button, Card, Field, Notice, Table, useAction, useLoad, when } from "../ui.jsx";
+import { Badge, Button, Card, ErrorBox, Field, SecretBanner, Table, Time, useAction, useLoad, useUi } from "../ui.jsx";
 
 export default function Keys({ me }) {
+  const { confirm } = useUi();
   const staff = !me.owner_ref;
   const base = staff ? "/v1/admin/api-keys" : "/v1/portal/api-keys";
   const keys = useLoad(() => api.get(base), [base]);
@@ -12,25 +13,21 @@ export default function Keys({ me }) {
   const a = useAction(), b = useAction();
   return (
     <>
-      {created && <div className="alert good"><b>New key (shown once):</b> <code>{created}</code> <Button onClick={() => setCreated(null)}>Hide</Button></div>}
-      <Card title="Create API key">
+      {created && <SecretBanner title="Copy your new key now" note="This is the only time it's shown. We store just a fingerprint, so it can't be recovered. If you lose it, create a new one." value={created} onClose={() => setCreated(null)} />}
+      <div className="help"><b>Use a separate key for each system</b> (website, backend, staging). If one leaks, you can revoke it without touching the others. Never put a key in a web page or mobile app.</div>
+      <Card title="Create an API key">
         <div className="row wrap">
-          <input placeholder="Key name, e.g. production server" value={name} onChange={(e) => setName(e.target.value)} />
-          {staff && <select value={role} onChange={(e) => setRole(e.target.value)}>{["client", "finance", "pricing", "approver", "support", "superadmin"].map((r) => <option key={r}>{r}</option>)}</select>}
-          <Button variant="primary" busy={a.busy} disabled={!name} onClick={async () => {
-            const body = staff ? { name, role, owner_ref: role === "client" ? undefined : null } : { name };
-            const r = await a.run(() => api.post(base, body), "Key created");
-            if (r) { setCreated(r.key); setName(""); keys.reload(); }
-          }}>Create</Button>
+          <Field label="Name" hint="So you remember where it's used"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Production server" /></Field>
+          {staff && <Field label="Role"><select value={role} onChange={(e) => setRole(e.target.value)}>{["client", "finance", "pricing", "approver", "support", "superadmin"].map((r) => <option key={r}>{r}</option>)}</select></Field>}
+          <Button variant="primary" busy={a.busy} disabled={!name.trim()} onClick={async () => { const r = await a.run(() => api.post(base, staff ? { name, role, owner_ref: role === "client" ? undefined : null } : { name }), "Key created"); if (r && r.key) { setCreated(r.key); setName(""); keys.reload(); } }}>Create key</Button>
         </div>
-        <Notice error={a.error} ok={a.ok} />
-        <small className="muted">The full key is shown only once. We store just a hash.</small>
+        <ErrorBox error={a.error} />
       </Card>
-      <Card title="Keys">
-        <Notice error={b.error || keys.error} ok={b.ok} />
-        <Table rows={keys.data || []} empty="No keys." cols={[{ label: "Name", key: "name" }, { label: "Prefix", render: (r) => <code>sms_{r.prefix}…</code> }, ...(staff ? [{ label: "Role", key: "role" }, { label: "Account", render: (r) => r.owner_ref || "-" }] : []),
-          { label: "Status", render: (r) => <Badge>{r.status}</Badge> }, { label: "Last used", render: (r) => when(r.last_used_at) },
-          { label: "", render: (r) => r.status === "active" && <Button variant="danger" busy={b.busy} onClick={async () => { if (confirm("Revoke this key? Anything using it will stop working.")) { await b.run(() => api.post(`${base}/${r.id}/revoke`), "Revoked"); keys.reload(); } }}>Revoke</Button> }]} />
+      <Card title="Your keys">
+        <ErrorBox error={b.error || keys.error} retry={keys.reload} />
+        <Table rows={keys.data || []} loading={keys.loading} empty="No keys yet." cols={[{ label: "Name", render: (r) => <b>{r.name}</b> }, { label: "Starts with", render: (r) => <code>sms_{r.prefix}…</code> }, ...(staff ? [{ label: "Role", key: "role" }, { label: "Account", render: (r) => r.owner_ref || "-" }] : []),
+          { label: "Status", render: (r) => <Badge>{r.status}</Badge> }, { label: "Last used", render: (r) => (r.last_used_at ? <Time value={r.last_used_at} /> : "never") },
+          { label: "", render: (r) => r.status === "active" && <Button variant="danger" className="small" busy={b.busy} onClick={async () => { if (await confirm({ title: `Revoke “${r.name}”?`, body: "Anything using this key stops working immediately. This can't be undone.", danger: true, confirmLabel: "Revoke key" })) { await b.run(() => api.post(`${base}/${r.id}/revoke`), "Key revoked"); keys.reload(); } }}>Revoke</Button> }]} />
       </Card>
     </>
   );

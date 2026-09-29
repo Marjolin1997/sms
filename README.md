@@ -31,6 +31,12 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 
+**Klienti:** Overview me listë hapash nisjeje; Send (SMS me çmim live, numërues karakteresh/pjesësh, zgjedhje sender-i të miratuar, template me variabla, paralajmërim për balancë të pamjaftueshme; email); Historik mesazhesh (kërkim, filtra, kronologji); Campaigns (draft → konfirmim → pauzë/anulim, vlerësim kostoje); Kontakte (kërkim, import CSV me parapamje, lista, consent me provë, fshirje GDPR); Sender ID dhe template (kërkesë, statuse, versione); Wallet (balancë, rezervime, ledger, top-up online); Billing; Webhooks dhe event log; Domene email (udhëzime DNS me kopjim); Çelësa API.
+
+**Stafi:** Miratime (radha e sender ID-ve/template-ve, refuzim me arsye), Llogari (lista, aktivizim/ndalim dërgimi, tarifa, wallet, plan, TVSH, çelës për klientin, "hape si këtë llogari"), Tarifa dhe routes (versione, publikim me datë, "provo një çmim"), Finance (top-up në pritje, regjistrim, korrigjim me paralajmërim), Admin (kill switches me arsye, audit me filtër).
+
+**Përdorshmëria:** gabimet e API-së përkthehen në gjuhë të thjeshtë me hapin tjetër; njoftime (toast) dhe dialogë konfirmimi të aksesueshëm (Esc, fokus) në vend të `alert/confirm`; gjendje bosh me udhëzim, skeleton gjatë ngarkimit, "Load more"; navigim me grupe dhe menu celulari, tabela që kthehen në karta në ekran të vogël; kontrolle me tastierë dhe `aria-*`. Test end-to-end me shfletues të vërtetë: `e2e/test_console.py`.
+
 ## Nisje e shpejtë me panel (Docker + Node)
 ```bash
 git clone https://github.com/Marjolin1997/sms.git && cd sms

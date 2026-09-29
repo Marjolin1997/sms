@@ -26,6 +26,7 @@ from app.services import (
     rates,
     sender_ids,
     switches,
+    templates,
     webhooks,
 )
 from app.services import contacts as contacts_svc
@@ -252,6 +253,25 @@ def main() -> None:
         pay_ok = payments.start_payment(db, OWNER, "topup", "100", wallet_id=w.id)
         payments.complete(db, "fake", pay_ok.external_id, "succeeded", "100", "EUR")
         payments.start_payment(db, OWNER, "topup", "50", wallet_id=w.id)  # një në pritje
+        db.commit()
+
+        # --- llogari e dytë me punë në pritje për stafin (miratime + top-up)
+        g = wallets.create_wallet(db, "globex", "EUR")
+        wallets.create_topup(db, g.id, "75", wallets.TopupMethod.CASH, created_by="seed-cashier")
+        db.add(AccountPlan(owner_ref="globex", rate_card_id=card.id))
+        sender_ids.request(db, "globex", "AL", "GLOBEX")
+        tv = templates.create(
+            db,
+            "globex",
+            "Order shipped",
+            "Hi {{first_name}}, your order {{order_id}} is on its way.",
+        )
+        del tv
+        tv2 = templates.create(
+            db, OWNER, "Login code", "Your ACME code is {{code}}. It expires in 10 minutes."
+        )
+        templates.review(db, tv2.id, "approve", "demo-approver")
+        templates.new_version(db, tv2.template_id, "Your ACME code: {{code}} (valid 10 min)")
         db.commit()
 
         client_key = apikeys.create_key(db, "Acme console", "client", OWNER, "demo-seed")[1]
