@@ -1,0 +1,27 @@
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: sms_dev
+      MARIADB_USER: sms
+      MARIADB_PASSWORD: sms
+      MARIADB_ROOT_PASSWORD: root
+    ports: ["3307:3306"]
+    volumes: [dbdata:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+  api:
+    build: .
+    environment:
+      SMS_DATABASE_URL: mysql+pymysql://sms:sms@db:3306/sms_dev?charset=utf8mb4
+      SMS_ADMIN_API_KEY: dev-admin-key
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["8000:8000"]
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+volumes:
+  dbdata:

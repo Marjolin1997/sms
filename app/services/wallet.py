@@ -1,0 +1,289 @@
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.models.wallet import (
+    EntryType,
+    Hold,
+    HoldStatus,
+    LedgerEntry,
+    Topup,
+    TopupMethod,
+    TopupStatus,
+    Wallet,
+)
+
+ZERO = Decimal("0")
+QUANT = Decimal("0.000001")
+
+
+class WalletError(Exception):
+    code = "wallet_error"
+
+
+class InsufficientFunds(WalletError):
+    code = "insufficient_funds"
+
+
+class InvalidAmount(WalletError):
+    code = "invalid_amount"
+
+
+class NotFound(WalletError):
+    code = "not_found"
+
+
+class Conflict(WalletError):
+    code = "conflict"
+
+
+def money(value: Decimal | str | int) -> Decimal:
+    """Pranon vetëm Decimal/str/int (kurrë float), maksimumi 6 shifra pas presjes."""
+    if isinstance(value, float):
+        raise InvalidAmount("float is not allowed for money")
+    d = Decimal(value)
+    if not d.is_finite() or d != d.quantize(QUANT):
+        raise InvalidAmount("amount has more than 6 decimal places or is not finite")
+    return d.quantize(QUANT)
+
+
+def positive(value) -> Decimal:
+    d = money(value)
+    if d <= 0:
+        raise InvalidAmount("amount must be > 0")
+    return d
+
+
+def create_wallet(db: Session, owner_ref: str, currency: str) -> Wallet:
+    currency = currency.upper()
+    existing = db.scalar(
+        select(Wallet).where(Wallet.owner_ref == owner_ref, Wallet.currency == currency)
+    )
+    if existing:
+        return existing
+    w = Wallet(owner_ref=owner_ref, currency=currency)
+    db.add(w)
+    db.flush()
+    return w
+
+
+def lock_wallet(db: Session, wallet_id: int) -> Wallet:
+    w = db.scalar(select(Wallet).where(Wallet.id == wallet_id).with_for_update())
+    if w is None:
+        raise NotFound("wallet not found")
+    return w
+
+
+def _last_entry(db: Session, wallet_id: int) -> LedgerEntry | None:
+    return db.scalar(
+        select(LedgerEntry)
+        .where(LedgerEntry.wallet_id == wallet_id)
+        .order_by(LedgerEntry.id.desc())
+        .limit(1)
+    )
+
+
+def balances(db: Session, wallet_id: int) -> tuple[Decimal, Decimal]:
+    last = _last_entry(db, wallet_id)
+    return (last.available_after, last.held_after) if last else (ZERO, ZERO)
+
+
+def _post(
+    db: Session,
+    wallet_id: int,
+    entry_type: EntryType,
+    available_delta: Decimal,
+    held_delta: Decimal,
+    key: str,
+    ref_type: str | None = None,
+    ref_id: str | None = None,
+    note: str | None = None,
+) -> LedgerEntry:
+    """Shton një rresht në ledger. Thirret vetëm me wallet-in të kyçur."""
+    dup = db.scalar(
+        select(LedgerEntry).where(
+            LedgerEntry.wallet_id == wallet_id, LedgerEntry.idempotency_key == key
+        )
+    )
+    if dup is not None:
+        if (dup.entry_type, dup.available_delta, dup.held_delta) != (
+            entry_type,
+            available_delta,
+            held_delta,
+        ):
+            raise Conflict("idempotency key reused with different parameters")
+        return dup
+    avail, held = balances(db, wallet_id)
+    if avail + available_delta < 0 or held + held_delta < 0:
+        raise InsufficientFunds("insufficient available funds")
+    entry = LedgerEntry(
+        wallet_id=wallet_id,
+        entry_type=entry_type,
+        available_delta=available_delta,
+        held_delta=held_delta,
+        available_after=avail + available_delta,
+        held_after=held + held_delta,
+        idempotency_key=key,
+        ref_type=ref_type,
+        ref_id=ref_id,
+        note=note,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+# --- Top-up -----------------------------------------------------------------
+
+
+def create_topup(
+    db: Session,
+    wallet_id: int,
+    amount,
+    method: TopupMethod,
+    external_ref: str | None = None,
+    created_by: str | None = None,
+) -> Topup:
+    amount = positive(amount)
+    lock_wallet(db, wallet_id)
+    if external_ref:
+        dup = db.scalar(select(Topup).where(Topup.external_ref == external_ref))
+        if dup:
+            if dup.wallet_id != wallet_id or dup.amount != amount:
+                raise Conflict("external_ref already used for a different top-up")
+            return dup
+    t = Topup(
+        wallet_id=wallet_id,
+        amount=amount,
+        method=method,
+        external_ref=external_ref,
+        created_by=created_by,
+    )
+    db.add(t)
+    db.flush()
+    return t
+
+
+def confirm_topup(db: Session, topup_id: int) -> Topup:
+    t = db.get(Topup, topup_id)
+    if t is None:
+        raise NotFound("top-up not found")
+    lock_wallet(db, t.wallet_id)
+    db.refresh(t)  # gjendja e re pasi u mor kyçi
+    if t.status == TopupStatus.CONFIRMED:
+        return t
+    if t.status == TopupStatus.FAILED:
+        raise Conflict("top-up already failed")
+    _post(db, t.wallet_id, EntryType.TOPUP, t.amount, ZERO, f"topup:{t.id}", "topup", str(t.id))
+    t.status = TopupStatus.CONFIRMED
+    t.confirmed_at = datetime.now(UTC)
+    return t
+
+
+def fail_topup(db: Session, topup_id: int) -> Topup:
+    t = db.get(Topup, topup_id)
+    if t is None:
+        raise NotFound("top-up not found")
+    lock_wallet(db, t.wallet_id)
+    db.refresh(t)
+    if t.status == TopupStatus.CONFIRMED:
+        raise Conflict("top-up already confirmed")
+    t.status = TopupStatus.FAILED
+    return t
+
+
+# --- Hold / capture / release / refund -------------------------------------
+
+
+def reserve(db: Session, wallet_id: int, amount, reference: str) -> Hold:
+    amount = positive(amount)
+    lock_wallet(db, wallet_id)
+    hold = db.scalar(select(Hold).where(Hold.wallet_id == wallet_id, Hold.reference == reference))
+    if hold:
+        if hold.amount != amount:
+            raise Conflict("reference reused with a different amount")
+        return hold
+    _post(db, wallet_id, EntryType.HOLD, -amount, amount, f"hold:{reference}", "hold", reference)
+    hold = Hold(wallet_id=wallet_id, amount=amount, reference=reference)
+    db.add(hold)
+    db.flush()
+    return hold
+
+
+def _locked_hold(db: Session, hold_id: int) -> Hold:
+    hold = db.get(Hold, hold_id)
+    if hold is None:
+        raise NotFound("hold not found")
+    lock_wallet(db, hold.wallet_id)
+    db.refresh(hold)
+    return hold
+
+
+def capture(db: Session, hold_id: int, amount=None) -> Hold:
+    """Kap shumën përfundimtare (<= rezervimit); ndryshimi lirohet automatikisht."""
+    hold = _locked_hold(db, hold_id)
+    if hold.status == HoldStatus.CAPTURED:
+        if amount is not None and money(amount) != hold.captured_amount:
+            raise Conflict("hold already captured with a different amount")
+        return hold
+    if hold.status == HoldStatus.RELEASED:
+        raise Conflict("hold already released")
+    final = hold.amount if amount is None else positive(amount)
+    if final > hold.amount:
+        raise InvalidAmount("capture exceeds held amount")
+    ref = str(hold.id)
+    _post(db, hold.wallet_id, EntryType.CAPTURE, ZERO, -final, f"capture:{ref}", "hold", ref)
+    if final < hold.amount:
+        rest = hold.amount - final
+        _post(db, hold.wallet_id, EntryType.RELEASE, rest, -rest, f"release:{ref}", "hold", ref)
+    hold.status = HoldStatus.CAPTURED
+    hold.captured_amount = final
+    return hold
+
+
+def release(db: Session, hold_id: int) -> Hold:
+    hold = _locked_hold(db, hold_id)
+    if hold.status == HoldStatus.RELEASED:
+        return hold
+    if hold.status == HoldStatus.CAPTURED:
+        raise Conflict("hold already captured; use refund")
+    ref = str(hold.id)
+    _post(
+        db, hold.wallet_id, EntryType.RELEASE, hold.amount, -hold.amount,
+        f"release:{ref}", "hold", ref,
+    )  # fmt: skip
+    hold.status = HoldStatus.RELEASED
+    return hold
+
+
+def refund(db: Session, wallet_id: int, amount, key: str, note: str | None = None) -> LedgerEntry:
+    """Rimbursim pas capture (p.sh. DLR 'failed' i vonuar). Idempotent sipas key."""
+    amount = positive(amount)
+    lock_wallet(db, wallet_id)
+    return _post(
+        db, wallet_id, EntryType.REFUND, amount, ZERO, f"refund:{key}", "refund", key, note
+    )
+
+
+def adjustment(db: Session, wallet_id: int, delta, key: str, note: str) -> LedgerEntry:
+    """Korrigjim manual nga admin (audit-uar): delta mund të jetë negative."""
+    delta = money(delta)
+    if delta == 0:
+        raise InvalidAmount("adjustment must be non-zero")
+    lock_wallet(db, wallet_id)
+    return _post(
+        db, wallet_id, EntryType.ADJUSTMENT, delta, ZERO, f"adj:{key}", "adjustment", key, note
+    )
+
+
+def verify_wallet(db: Session, wallet_id: int) -> bool:
+    """Kontroll integriteti: balanca e ruajtur në rreshtin e fundit = SUM(delta)."""
+    sums = db.execute(
+        select(
+            func.coalesce(func.sum(LedgerEntry.available_delta), 0),
+            func.coalesce(func.sum(LedgerEntry.held_delta), 0),
+        ).where(LedgerEntry.wallet_id == wallet_id)
+    ).one()
+    return balances(db, wallet_id) == (Decimal(sums[0]), Decimal(sums[1]))

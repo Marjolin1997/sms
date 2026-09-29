@@ -1,0 +1,8 @@
+fastapi>=0.110
+pydantic>=2
+pydantic-settings>=2
+sqlalchemy>=2
+alembic>=1.13
+pymysql>=1.1
+cryptography>=42
+uvicorn[standard]>=0.29
