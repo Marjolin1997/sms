@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import Principal, require
+from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, AuditLog, Switch
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageStatus, Route
 from app.services import apikeys, switches
@@ -233,7 +234,7 @@ def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor
     return {
         "messages_by_status": by_status,
         "oldest_queued_age_seconds": (
-            max(0, int((now - oldest.replace(tzinfo=UTC)).total_seconds())) if oldest else None
+            max(0, int((now - as_utc(oldest)).total_seconds())) if oldest else None
         ),
         "stuck_sending": len(stuck),
         "dlr_problems_24h": {o: n for o, n in bad_dlr},

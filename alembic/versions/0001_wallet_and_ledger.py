@@ -15,18 +15,27 @@ depends_on = None
 
 
 def _ledger_triggers(create: bool) -> None:
-    """Në MySQL/MariaDB ledger-i refuzon UPDATE/DELETE edhe nga SQL i drejtpërdrejtë."""
-    if op.get_bind().dialect.name not in ("mysql", "mariadb"):
+    """Ledger-i refuzon UPDATE/DELETE/TRUNCATE edhe nga SQL i drejtpërdrejtë (PostgreSQL)."""
+    if op.get_bind().dialect.name != "postgresql":
         return
-    for action in ("UPDATE", "DELETE"):
-        name = f"trg_sms_ledger_no_{action.lower()}"
-        if create:
-            op.execute(
-                f"CREATE TRIGGER {name} BEFORE {action} ON sms_ledger_entries "
-                "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'ledger is append-only'"
-            )
-        else:
-            op.execute(f"DROP TRIGGER IF EXISTS {name}")
+    if not create:
+        op.execute("DROP TRIGGER IF EXISTS trg_sms_ledger_immutable ON sms_ledger_entries")
+        op.execute("DROP TRIGGER IF EXISTS trg_sms_ledger_no_truncate ON sms_ledger_entries")
+        op.execute("DROP FUNCTION IF EXISTS sms_forbid_mutation()")
+        return
+    op.execute(
+        "CREATE OR REPLACE FUNCTION sms_forbid_mutation() RETURNS trigger AS $$ "
+        "BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME USING ERRCODE = '55000'; "
+        "END; $$ LANGUAGE plpgsql"
+    )
+    op.execute(
+        "CREATE TRIGGER trg_sms_ledger_immutable BEFORE UPDATE OR DELETE ON sms_ledger_entries "
+        "FOR EACH ROW EXECUTE FUNCTION sms_forbid_mutation()"
+    )
+    op.execute(
+        "CREATE TRIGGER trg_sms_ledger_no_truncate BEFORE TRUNCATE ON sms_ledger_entries "
+        "FOR EACH STATEMENT EXECUTE FUNCTION sms_forbid_mutation()"
+    )
 
 
 def upgrade() -> None:

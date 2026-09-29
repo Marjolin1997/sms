@@ -20,7 +20,23 @@ class Base(DeclarativeBase):
 
 
 def make_engine(url: str | None = None):
-    return create_engine(url or settings.database_url, pool_pre_ping=True)
+    url = url or settings.database_url
+    if url.startswith("sqlite"):
+        return create_engine(url, pool_pre_ping=True)
+    # Parametra të sigurisë transaksionale: READ COMMITTED (çdo SELECT ... FOR UPDATE sheh
+    # gjendjen e fundit të commit-uar), UTC, dhe afate që mos lëshojnë transaksione të varura.
+    options = (
+        f"-c timezone=utc -c lock_timeout={settings.db_lock_timeout_ms} "
+        f"-c statement_timeout={settings.db_statement_timeout_ms} "
+        f"-c idle_in_transaction_session_timeout={settings.db_idle_tx_timeout_ms}"
+    )
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        isolation_level="READ COMMITTED",
+        connect_args={"options": options},
+    )
 
 
 engine = make_engine()

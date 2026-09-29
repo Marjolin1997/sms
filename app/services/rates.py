@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import as_utc  # noqa: F401  (ri-eksportuar)
 from app.models.rates import Rate, RateCard, RateCardVersion, VersionStatus
 from app.services.sms_text import count_segments
 from app.services.wallet import Conflict, InvalidAmount, NotFound, WalletError, money
@@ -19,10 +20,6 @@ class NoRate(WalletError):
 
 class InvalidNumber(WalletError):
     code = "invalid_number"
-
-
-def as_utc(dt: datetime) -> datetime:
-    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
 def create_card(db: Session, name: str, currency: str) -> RateCard:

@@ -24,7 +24,7 @@ class SendIn(BaseModel):
     owner_ref: str = Field(min_length=1, max_length=64)
     to: str
     sender: str
-    text: str | None = None
+    text: str | None = Field(default=None, max_length=1600)  # ≤ 10 segmente GSM-7
     template_id: int | None = None
     values: dict[str, str] = {}
 

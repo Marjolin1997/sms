@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, KeyStatus
 
 ROLE_PERMS: dict[str, set[str]] = {
@@ -78,9 +79,9 @@ def _from_key(db: Session, token: str) -> Principal:
     now = datetime.now(UTC)
     if not (key and ok and key.status == KeyStatus.ACTIVE):
         raise _unauthorized()
-    if key.expires_at is not None and key.expires_at.replace(tzinfo=UTC) <= now:
+    if key.expires_at is not None and as_utc(key.expires_at) <= now:
         raise _unauthorized()
-    last = key.last_used_at.replace(tzinfo=UTC) if key.last_used_at else None
+    last = as_utc(key.last_used_at) if key.last_used_at else None
     if last is None or now - last > timedelta(minutes=5):
         key.last_used_at = now
         db.commit()

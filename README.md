@@ -7,13 +7,14 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - Ledger **append-only**: ORM guard + triggers MySQL/MariaDB (`UPDATE`/`DELETE` refuzohen). Bilanci = `balance_after` i rreshtit të fundit; `verify_wallet` e kontrollon me `SUM(delta)`.
 - Çdo lëvizje parash është idempotente (`wallet_id + idempotency_key` unik); retry nuk faturon dy herë.
 - Lëvizjet serializohen me `SELECT ... FOR UPDATE` mbi rreshtin e wallet-it.
-- Tabelat e reja kanë prefiks `sms_`; Alembic ignoron çdo tabelë tjetër dhe përdor `sms_alembic_version`.
-- Migrimet e para vetëm në **kopje** të databazës së omnichannel, kurrë direkt në prodhim.
+- **PostgreSQL 16** (izolim `READ COMMITTED`, `SELECT ... FOR UPDATE` mbi wallet, `SKIP LOCKED` për radhën, afate për lock/statement/idle-in-transaction).
+- Append-only edhe në nivel databaze: triggers PL/pgSQL bllokojnë `UPDATE/DELETE/TRUNCATE` mbi ledger, audit log, historikun e statuseve dhe DLR receipts.
+- Tabelat kanë prefiks `sms_`; Alembic ignoron çdo tabelë tjetër dhe përdor `sms_alembic_version`. Migrimet e para vetëm në një databazë kopje, kurrë direkt në prodhim.
 
 ## Fazat
 | Faza | Status |
 |---|---|
-| 0 Analizë e DB ekzistuese | pret `schema.sql` (`mysqldump --no-data`) |
+| 0 Integrimi me DB/përdoruesit e omnichannel | pezull (platforma tani ka DB PostgreSQL të vetën) |
 | 1 Skeleti (FastAPI, Docker, Alembic, teste, CI) | ✅ |
 | 2 Wallet + ledger + top-up (hold/capture/release/refund) | ✅ |
 | 3 Rate cards me versione, prefix/operator, segmente, quote | ✅ |
@@ -25,9 +26,11 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 ## Nisja
 ```bash
 cp .env.example .env
-docker compose up --build        # API në :8000, MariaDB në :3307
+docker compose up --build        # API në :8000, PostgreSQL në :5433
 ```
-Lokalisht: `pip install -r requirements-dev.txt && pytest && ruff check .`
+Lokalisht: `pip install -r requirements-dev.txt && ruff check . && pytest`.
+Teste të plota mbi PostgreSQL (konkurrencë, triggers, migrime):
+`SMS_TEST_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_test pytest`
 
 ## Auth dhe RBAC
 - `Authorization: Bearer sms_<prefix>_<secret>`. Ruhet vetëm SHA-256 i sekretit; çelësi i plotë shfaqet një herë.

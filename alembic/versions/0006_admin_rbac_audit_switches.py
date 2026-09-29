@@ -15,18 +15,26 @@ depends_on = None
 
 
 def _audit_triggers(create: bool) -> None:
-    """Audit log-u është vetëm-shtim edhe nga SQL i drejtpërdrejtë (MySQL/MariaDB)."""
-    if op.get_bind().dialect.name not in ("mysql", "mariadb"):
+    """Audit log-u është vetëm-shtim edhe nga SQL i drejtpërdrejtë (PostgreSQL)."""
+    if op.get_bind().dialect.name != "postgresql":
         return
-    for action in ("UPDATE", "DELETE"):
-        name = f"trg_sms_audit_no_{action.lower()}"
-        if create:
-            op.execute(
-                f"CREATE TRIGGER {name} BEFORE {action} ON sms_audit_log "
-                "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit log is append-only'"
-            )
-        else:
-            op.execute(f"DROP TRIGGER IF EXISTS {name}")
+    if not create:
+        op.execute("DROP TRIGGER IF EXISTS trg_sms_audit_immutable ON sms_audit_log")
+        op.execute("DROP TRIGGER IF EXISTS trg_sms_audit_no_truncate ON sms_audit_log")
+        return
+    op.execute(
+        "CREATE OR REPLACE FUNCTION sms_forbid_mutation() RETURNS trigger AS $$ "
+        "BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME USING ERRCODE = '55000'; "
+        "END; $$ LANGUAGE plpgsql"
+    )
+    op.execute(
+        "CREATE TRIGGER trg_sms_audit_immutable BEFORE UPDATE OR DELETE ON sms_audit_log "
+        "FOR EACH ROW EXECUTE FUNCTION sms_forbid_mutation()"
+    )
+    op.execute(
+        "CREATE TRIGGER trg_sms_audit_no_truncate BEFORE TRUNCATE ON sms_audit_log "
+        "FOR EACH STATEMENT EXECUTE FUNCTION sms_forbid_mutation()"
+    )
 
 
 def upgrade() -> None:
