@@ -18,7 +18,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 2 Wallet + ledger + top-up (hold/capture/release/refund) | ✅ |
 | 3 Rate cards me versione, prefix/operator, segmente, quote | ✅ |
 | 4 Sender IDs + templates me miratim, versione, validim | ✅ |
-| 5 Pipeline dërgimi + provider fals | – |
+| 5 Pipeline dërgimi (outbox, retries, DLR, provider fals) | ✅ |
 | 6 Provider real + DLR | – |
 | 7 Admin, RBAC, audit, monitorim | – |
 

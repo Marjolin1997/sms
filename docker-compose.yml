@@ -23,5 +23,12 @@ services:
       db: {condition: service_healthy}
     ports: ["8000:8000"]
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  worker:
+    build: .
+    environment:
+      SMS_DATABASE_URL: mysql+pymysql://sms:sms@db:3306/sms_dev?charset=utf8mb4
+    depends_on:
+      db: {condition: service_healthy}
+    command: python -m app.worker
 volumes:
   dbdata:

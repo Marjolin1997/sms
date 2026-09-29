@@ -1,0 +1,84 @@
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.db import get_db
+from app.core.security import require_admin
+from app.models.sending import Message, MessageEvent
+from app.services import messages as svc
+from app.services.wallet import WalletError
+
+router = APIRouter(prefix="/v1", dependencies=[Depends(require_admin)])
+
+_STATUS = {
+    "not_found": 404, "conflict": 409, "insufficient_funds": 402, "no_rate": 422,
+    "no_route": 422, "sender_not_allowed": 403, "account_disabled": 403,
+    "template_not_usable": 403,
+}  # fmt: skip
+
+
+class SendIn(BaseModel):
+    owner_ref: str = Field(min_length=1, max_length=64)
+    to: str
+    sender: str
+    text: str | None = None
+    template_id: int | None = None
+    values: dict[str, str] = {}
+
+
+class MessageOut(BaseModel):
+    id: str
+    status: str
+    to: str
+    sender: str
+    segments: int
+    currency: str
+    unit_price: Decimal
+    total_price: Decimal
+    provider_message_id: str | None
+    error_code: str | None
+
+
+def _out(m: Message) -> MessageOut:
+    return MessageOut(
+        id=m.public_id, status=m.status.value, to=m.destination, sender=m.sender,
+        segments=m.segments, currency=m.currency, unit_price=m.unit_price,
+        total_price=m.total_price, provider_message_id=m.provider_message_id,
+        error_code=m.error_code,
+    )  # fmt: skip
+
+
+@router.post("/messages", response_model=MessageOut, status_code=202)
+def send(body: SendIn, idempotency_key: str = Header(default=""), db: Session = Depends(get_db)):
+    try:
+        m = svc.submit(
+            db, body.owner_ref, idempotency_key, body.to, body.sender,
+            text=body.text, template_id=body.template_id, values=body.values,
+        )  # fmt: skip
+        db.commit()
+    except WalletError as e:
+        db.rollback()
+        raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
+    return _out(m)
+
+
+@router.get("/messages/{public_id}", response_model=MessageOut)
+def get_message(public_id: str, db: Session = Depends(get_db)):
+    m = db.scalar(select(Message).where(Message.public_id == public_id))
+    if m is None:
+        raise HTTPException(404, {"code": "not_found", "message": "message not found"})
+    return _out(m)
+
+
+@router.get("/messages/{public_id}/events")
+def events(public_id: str, db: Session = Depends(get_db)):
+    m = db.scalar(select(Message).where(Message.public_id == public_id))
+    if m is None:
+        raise HTTPException(404, {"code": "not_found", "message": "message not found"})
+    rows = db.scalars(
+        select(MessageEvent).where(MessageEvent.message_id == m.id).order_by(MessageEvent.id)
+    )
+    return [{"from": e.from_status, "to": e.to_status, "detail": e.detail} for e in rows]
