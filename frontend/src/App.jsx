@@ -7,6 +7,7 @@ import Campaigns from "./pages/Campaigns.jsx";
 import Contacts from "./pages/Contacts.jsx";
 import EmailDomains from "./pages/EmailDomains.jsx";
 import Webhooks from "./pages/Webhooks.jsx";
+import Billing from "./pages/Billing.jsx";
 import Keys from "./pages/Keys.jsx";
 import Admin from "./pages/Admin.jsx";
 
@@ -17,6 +18,7 @@ const NAV = [
   { id: "contacts", label: "Contacts", icon: "☰", perm: "contacts:read", el: Contacts },
   { id: "email", label: "Email domains", icon: "@", perm: "email:read", el: EmailDomains },
   { id: "webhooks", label: "Webhooks & events", icon: "↯", perm: "events:read", el: Webhooks },
+  { id: "billing", label: "Billing", icon: "€", perm: "billing:read", el: Billing },
   { id: "keys", label: "API keys", icon: "⚿", perm: "any-keys", el: Keys },
   { id: "admin", label: "Admin", icon: "⚙", perm: "keys:manage", el: Admin },
 ];

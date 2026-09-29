@@ -287,3 +287,20 @@ def verify_wallet(db: Session, wallet_id: int) -> bool:
         ).where(LedgerEntry.wallet_id == wallet_id)
     ).one()
     return balances(db, wallet_id) == (Decimal(sums[0]), Decimal(sums[1]))
+
+
+def charge(
+    db: Session,
+    wallet_id: int,
+    amount,
+    key: str,
+    ref_type: str,
+    ref_id: str,
+    note: str | None = None,
+) -> LedgerEntry:
+    """Debit i drejtpërdrejtë (pagesë fature). Idempotent sipas key; ngre InsufficientFunds."""
+    amount = positive(amount)
+    lock_wallet(db, wallet_id)
+    return _post(
+        db, wallet_id, EntryType.INVOICE, -amount, ZERO, f"charge:{key}", ref_type, ref_id, note
+    )

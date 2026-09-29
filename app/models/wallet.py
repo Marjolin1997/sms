@@ -59,6 +59,7 @@ class EntryType(str, enum.Enum):
     RELEASE = "release"
     REFUND = "refund"
     ADJUSTMENT = "adjustment"
+    INVOICE = "invoice"  # pagesë fature nga wallet (debit)
 
 
 class LedgerEntry(Base):

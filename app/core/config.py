@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     webhook_timeout: float = 10.0
     event_retention_days: int = 30
 
+    # Faturim
+    invoice_due_days: int = 14
+    issuer_name: str = "Your Company Ltd"  # shfaqet në faturë (kompania që shet platformën)
+    issuer_address: str = "Street 1, City, Country"
+    issuer_tax_id: str = ""
+    payment_provider: str = "fake"
+    payment_min: str = "1"
+    payment_max: str = "10000"
+
     # Provider HTTP (bosh = i çaktivizuar). Emri duhet të përputhet me sms_routes.provider.
     http_provider_name: str = "http"
     http_provider_url: str = ""

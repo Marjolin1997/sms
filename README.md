@@ -26,7 +26,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 9 Campaigns SMS: planifikim, personalizim, ritëm, buxhet, dritare orare, pauzë/anulim, statistika | ✅ |
 | 10 Email: domene SPF/DKIM, dërgim i nënshkruar, bounces/complaints, unsubscribe me një klik, campaigns email | ✅ |
 | 11 Event log + webhooks për klientët (SSRF, retry, nënshkrim), çelësa API vetë-shërbyes, pasqyrë përdorimi (API; pa UI) | ✅ |
-| 12 Billing: plane, fatura, pagesa | – |
+| 12 Billing: plane, abonime, fatura të pandryshueshme me TVSH, pagesë nga wallet, pagesa online (adapter + webhook) | ✅ |
 
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
@@ -68,6 +68,15 @@ def verify(secret, header, body: bytes, tol=300):
 ```
 - Worker i ndarë: `python -m app.worker --role webhooks` (një endpoint i ngadaltë nuk bllokon SMS/email). Për mbrojtje të plotë nga DNS-rebinding, kufizo egress-in e këtij worker-i.
 - Portal (API): `/v1/portal/api-keys` (çelësa vetë-shërbyes, role `client` gjithmonë, max 20), `/v1/portal/overview` (balanca, SMS/email 30 ditë, campaigns, webhooks).
+
+## Faturimi
+- **Plane** (të pandryshueshme; ndryshimi = plan i ri): tarifë mujore + email të përfshira + çmim për email mbi kuotë. SMS mbetet parapagim nga wallet (top-up); faturat janë për abonimin dhe tepricat e email-it.
+- **Abonim**: periudha kalendarike nga data e nisjes (pa zhvendosje: 31 jan → 28 shk → 31 mar). Fatura lëshohet në **fund** të periudhës nga worker-i (çdo 10 min); plani i ri hyn në fuqi nga periudha tjetër, anulimi në fund të periudhës, pa proporcion.
+- **Fatura**: numër pa boshllëqe (`INV-2026-000001`, kyçje e rreshtit të numëruesit), TVSH nga profili (vendoset vetëm nga stafi), rrumbullakim HALF_UP në cent, fotografi e të dhënave të klientit. E pandryshueshme: ORM + trigger PostgreSQL (fushat financiare, statusi final, pa fshirje). Unike për (abonim, periudhë).
+- **Pagesa nga wallet**: hyrje ledger `invoice` idempotente; nëse s'ka para, fatura mbetet e hapur.
+- **Pagesa online**: `POST /v1/billing/payments` (shuma e faturës vendoset nga serveri); rezultati vjen me `POST /webhooks/payments/{provider}` (HMAC). Shuma/monedha verifikohen kundrejt regjistrimit; mospërputhje → `failed/amount_mismatch` pa kredit, për rakordim. Nëse fatura u pagua ose u anulua ndërkohë, paraja kreditohet në wallet (nuk humbet).
+- **Gateway**: adapter `PaymentGateway` (`SMS_PAYMENT_PROVIDER`); këtu vetëm një gateway fals. Vendori real (Stripe, Paddle, bankë lokale) zbatohet në `app/providers/payments.py`.
+- Faturë e printueshme: `GET /v1/billing/invoices/{id}/html` (me `Authorization`; paneli e hap si blob).
 
 ## Email
 - Klienti shton një domen (`POST /v1/email/domains`), publikon rekordet DNS të kthyera (DKIM, SPF `include:`, DMARC opsional) dhe thërret `verify`. Dërgimi lejohet **vetëm nga domene të verifikuara të vetë klientit**; një domen s'mund të verifikohet nga dy klientë; nëse DNS hiqet, verifikimi anulohet.

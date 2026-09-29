@@ -16,11 +16,13 @@ from app.models.sending import AccountPlan, Route
 from app.providers import FakeEmailProvider  # noqa: F401
 from app.services import (
     apikeys,
+    billing,
     campaigns,
     consent,
     email_domains,
     emails,
     net_guard,
+    payments,
     rates,
     sender_ids,
     switches,
@@ -233,6 +235,23 @@ def main() -> None:
         for kind, tid in (("apikey.create", 1), ("sender.approve", 1), ("wallet.adjust", w.id)):
             audit(db, boss, kind, "demo", tid, {"seed": True})
         switches.set_switch(db, switches.SUBMIT, True, "demo-seed", None)
+        db.commit()
+
+        # --- faturim: plan, profil me TVSH, abonim 75 ditë më parë → dy fatura (njëra e paguar)
+        plan = billing.create_plan(db, "growth", "Growth", "EUR", "29.00", 5000, "0.001")
+        billing.set_profile(db, OWNER, "Acme Sh.p.k.", "Rr. Myslym Shyri 12, Tirane", "AL",
+                            "billing@acme-demo.example", "L12345678A", vat_rate="0.2")  # fmt: skip
+        billing.assign_plan(
+            db, OWNER, plan.id, auto_pay=False, now=datetime.now(UTC) - timedelta(days=75)
+        )
+        db.commit()
+        billing.run_billing(db, datetime.now(UTC))
+        db.commit()
+        first = db.query(billing.Invoice).order_by(billing.Invoice.id).first()
+        billing.pay_from_wallet(db, OWNER, first.id)
+        pay_ok = payments.start_payment(db, OWNER, "topup", "100", wallet_id=w.id)
+        payments.complete(db, "fake", pay_ok.external_id, "succeeded", "100", "EUR")
+        payments.start_payment(db, OWNER, "topup", "50", wallet_id=w.id)  # një në pritje
         db.commit()
 
         client_key = apikeys.create_key(db, "Acme console", "client", OWNER, "demo-seed")[1]

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api import (
     admin,
+    billing,
     campaigns,
     contacts,
     email,
@@ -44,6 +45,7 @@ class SecurityMiddleware:
 
         async def send_hardened(msg):
             if msg["type"] == "http.response.start":
+                have = {k.lower() for k, _ in msg.get("headers", [])}
                 extra = [
                     (b"x-content-type-options", b"nosniff"),
                     (b"cache-control", b"no-store"),
@@ -51,6 +53,7 @@ class SecurityMiddleware:
                     (b"strict-transport-security", b"max-age=63072000; includeSubDomains"),
                     (b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'"),
                 ]
+                extra = [(k, v) for k, v in extra if k not in have]  # endpoint-i mund ta ketë vetë
                 msg = {**msg, "headers": [*msg.get("headers", []), *extra]}
             await send(msg)
 
@@ -78,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(email.router)
     app.include_router(public.router)
     app.include_router(portal.router)
+    app.include_router(billing.router)
 
     @app.get("/healthz")
     def healthz():

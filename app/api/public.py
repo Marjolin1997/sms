@@ -82,3 +82,44 @@ async def email_events(
     if code != 200:
         raise HTTPException(code, outcome)
     return {"outcome": outcome}
+
+
+class PaymentEventIn(BaseModel):
+    external_id: str = Field(min_length=1, max_length=128)
+    status: str = Field(pattern="^(succeeded|failed)$")
+    amount: str | None = Field(default=None, max_length=32)
+    currency: str | None = Field(default=None, max_length=3)
+
+
+def _handle_payment(provider: str, ev: PaymentEventIn) -> tuple[int, str]:
+    from app.services import payments
+
+    with SessionLocal() as db:
+        try:
+            payments.complete(db, provider, ev.external_id, ev.status, ev.amount, ev.currency)
+            db.commit()
+            return 200, "applied"
+        except NotFound:
+            db.rollback()
+            return 404, "unknown_payment"
+        except Conflict:
+            db.commit()  # ruaj shënimin amount_mismatch/failed për rakordim
+            return 409, "conflict"
+
+
+@router.post("/webhooks/payments/{provider}")
+async def payment_events(
+    provider: str, request: Request, x_signature: str = Header(default="")
+) -> dict:
+    raw = await request.body()
+    secret = settings.dlr_secrets.get(provider)
+    if not secret or not verify_signature(secret, raw, x_signature):
+        raise HTTPException(401, "invalid signature")
+    try:
+        ev = PaymentEventIn.model_validate(json.loads(raw))
+    except (ValueError, ValidationError) as e:
+        raise HTTPException(422, "invalid payment payload") from e
+    code, outcome = await run_in_threadpool(_handle_payment, provider, ev)
+    if code != 200:
+        raise HTTPException(code, outcome)
+    return {"outcome": outcome}

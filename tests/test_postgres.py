@@ -359,3 +359,115 @@ def test_parallel_webhook_workers_deliver_each_event_exactly_once(db):
         assert len(seen) == 20 and len(set(seen)) == 20  # asnjë dërgim i dyfishtë
     finally:
         webhooks.set_client(None)
+
+
+def test_invoice_triggers_block_tampering(migrated_url):
+    alembic(migrated_url, "upgrade", "head")
+    eng = create_engine(migrated_url)
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "insert into sms_invoices (number, owner_ref, period_start, period_end, currency,"
+                " subtotal, vat_rate, tax, total, status, bill_to, issued_at, due_at)"
+                " values ('INV-2030-000001','a',now(),now(),'EUR',10,0.2,2,12,'OPEN','{}',now(),now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_invoice_lines (invoice_id, description, quantity, unit_price, amount)"
+                " values (1,'fee',1,10,10)"
+            )
+        )
+    for stmt in (
+        "update sms_invoices set total = 1 where id = 1",
+        "update sms_invoices set number = 'INV-X' where id = 1",
+        "update sms_invoices set bill_to = 'changed' where id = 1",
+        "delete from sms_invoices",
+        "truncate sms_invoices",
+        "update sms_invoice_lines set amount = 0",
+        "delete from sms_invoice_lines",
+        "truncate sms_invoice_lines",
+    ):
+        with (
+            pytest.raises(DBAPIError, match="immutable|append-only|cannot truncate"),
+            eng.begin() as c,
+        ):
+            c.execute(text(stmt))
+    with eng.begin() as c:  # tranzicioni i lejuar: OPEN → PAID
+        c.execute(text("update sms_invoices set status = 'PAID', paid_via = 'wallet' where id = 1"))
+    with pytest.raises(DBAPIError, match="final"), eng.begin() as c:  # PAID është përfundimtar
+        c.execute(text("update sms_invoices set status = 'OPEN' where id = 1"))
+    with pytest.raises(DBAPIError, match="final"), eng.begin() as c:
+        c.execute(text("update sms_invoices set status = 'VOID' where id = 1"))
+    with eng.connect() as c:
+        assert c.execute(text("select total, status from sms_invoices")).one() == (12, "PAID")
+    eng.dispose()
+    alembic(migrated_url, "downgrade", "0012")
+    alembic(migrated_url, "upgrade", "head")
+
+
+def test_concurrent_billing_run_issues_each_period_once(db, world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from app.models.billing import Invoice
+    from app.services import billing
+
+    plan = billing.create_plan(db, "conc", "Conc", "EUR", "1.00")
+    billing.set_profile(db, "c1", "Acme Ltd", "Main 1", "AL", "a@acme.example")
+    billing.assign_plan(db, "c1", plan.id, auto_pay=False, now=datetime(2030, 1, 15, tzinfo=UTC))
+    db.commit()
+    now = datetime(2030, 4, 20, tzinfo=UTC)  # 3 periudha të afatuara
+
+    def worker(_):
+        with SessionLocal() as s:
+            billing.run_billing(s, now)
+
+    _threads(4, worker)
+    db.expire_all()
+    nums = sorted(i.number for i in db.query(Invoice))
+    assert nums == [
+        "INV-2030-000001",
+        "INV-2030-000002",
+        "INV-2030-000003",
+    ]  # pa boshllëqe, pa dyfishe
+
+
+def test_concurrent_invoice_payments_debit_once_and_webhook_credits_once(db, world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from app.models.billing import Invoice, Payment
+    from app.services import billing, payments
+
+    w, _ = world
+    plan = billing.create_plan(db, "c2", "C2", "EUR", "3.00")
+    billing.set_profile(db, "c1", "Acme Ltd", "Main 1", "AL", "a@acme.example")
+    sub = billing.assign_plan(
+        db, "c1", plan.id, auto_pay=False, now=datetime(2030, 1, 15, tzinfo=UTC)
+    )
+    inv = billing.generate_invoice(db, sub.id, datetime(2030, 2, 16, tzinfo=UTC))
+    top = payments.start_payment(db, "c1", "topup", "5", wallet_id=w.id)
+    db.commit()
+    inv_id, ext = inv.id, top.external_id
+    errors = []
+    barrier = threading.Barrier(8)
+
+    def worker(i):
+        with SessionLocal() as s:
+            try:
+                barrier.wait()
+                if i % 2 == 0:
+                    billing.pay_from_wallet(s, "c1", inv_id)
+                else:
+                    payments.complete(s, "fake", ext, "succeeded", "5", "EUR")
+                s.commit()
+            except Exception as e:  # noqa: BLE001
+                s.rollback()
+                errors.append(repr(e))
+
+    _threads(8, worker)
+    assert not errors, errors
+    db.expire_all()
+    assert db.get(Invoice, inv_id).status.value == "paid"
+    assert db.query(Payment).one().status.value == "succeeded"
+    assert wallets.balances(db, w.id) == (D("12"), D("0"))  # 10 + 5 - 3, jo më shumë e jo më pak
+    assert wallets.verify_wallet(db, w.id)

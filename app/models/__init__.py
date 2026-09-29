@@ -1,4 +1,13 @@
 from app.models.admin import ApiKey, AuditLog, Switch  # noqa: F401
+from app.models.billing import (  # noqa: F401
+    BillingProfile,
+    Invoice,
+    InvoiceCounter,
+    InvoiceLine,
+    Payment,
+    Plan,
+    Subscription,
+)
 from app.models.campaigns import Campaign, CampaignRecipient  # noqa: F401
 from app.models.contacts import (  # noqa: F401
     ConsentEvent,

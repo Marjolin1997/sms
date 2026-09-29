@@ -18,6 +18,7 @@ KNOWN_TYPES = {
     "email.sent", "email.delivered", "email.bounced", "email.complained", "email.failed",
     "campaign.running", "campaign.paused", "campaign.completed", "campaign.cancelled",
     "consent.opted_out", "consent.opted_in", "webhook.ping",
+    "invoice.issued", "invoice.paid", "payment.succeeded", "payment.failed",
 }  # fmt: skip
 
 
