@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_starttls: bool = True
 
+    # Webhook-et e klientëve
+    webhook_allow_http: bool = False  # vetëm dev; prodhim = vetëm https
+    webhook_timeout: float = 10.0
+    event_retention_days: int = 30
+
     # Provider HTTP (bosh = i çaktivizuar). Emri duhet të përputhet me sms_routes.provider.
     http_provider_name: str = "http"
     http_provider_url: str = ""

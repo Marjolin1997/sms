@@ -2,13 +2,13 @@ import base64
 import re
 from datetime import UTC, datetime
 
-from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import crypto
 from app.core.config import settings
 from app.models.email import DomainStatus, EmailDomain
 from app.services.dns_check import DnsError, get_resolver
@@ -22,21 +22,12 @@ class InvalidDomain(WalletError):
     code = "invalid_domain"
 
 
-def _fernet() -> Fernet:
-    if not settings.secrets_key:
-        raise RuntimeError("SMS_SECRETS_KEY is not configured")  # fail closed
-    return Fernet(settings.secrets_key.encode())
-
-
 def encrypt(pem: bytes) -> str:
-    return _fernet().encrypt(pem).decode()
+    return crypto.encrypt(pem)
 
 
 def decrypt_private_key(d: EmailDomain) -> bytes:
-    try:
-        return _fernet().decrypt(d.dkim_private_key_enc.encode())
-    except InvalidToken as e:
-        raise RuntimeError("cannot decrypt DKIM key (wrong SMS_SECRETS_KEY?)") from e
+    return crypto.decrypt(d.dkim_private_key_enc)
 
 
 def create(db: Session, owner_ref: str, domain: str) -> EmailDomain:

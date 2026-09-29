@@ -25,7 +25,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 8 Contacts, lista, consent me prova, opt-out (STOP/START), fshirje GDPR, audienca | ✅ |
 | 9 Campaigns SMS: planifikim, personalizim, ritëm, buxhet, dritare orare, pauzë/anulim, statistika | ✅ |
 | 10 Email: domene SPF/DKIM, dërgim i nënshkruar, bounces/complaints, unsubscribe me një klik, campaigns email | ✅ |
-| 11 Webhooks për klientët, portal vetë-shërbyes | – |
+| 11 Event log + webhooks për klientët (SSRF, retry, nënshkrim), çelësa API vetë-shërbyes, pasqyrë përdorimi (API; pa UI) | ✅ |
 | 12 Billing: plane, fatura, pagesa | – |
 
 ## Nisja
@@ -36,6 +36,21 @@ docker compose up --build        # API në :8000, PostgreSQL në :5433
 Lokalisht: `pip install -r requirements-dev.txt && ruff check . && pytest`.
 Teste të plota mbi PostgreSQL (konkurrencë, triggers, migrime):
 `SMS_TEST_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_test pytest`
+
+## Webhooks dhe event log
+- Eventet (`message.sent|delivered|failed`, `email.sent|delivered|bounced|complained|failed`, `campaign.running|paused|completed|cancelled`, `consent.opted_in|opted_out`) shkruhen në të njëjtin transaksion me ndryshimin. Të dhënat përmbajnë vetëm id dhe statuse (pa numër/tekst/email); përjashtim `consent.*` që mban adresën për sinkronizim CRM. Ruhen `SMS_EVENT_RETENTION_DAYS` (30) dhe pastrohen.
+- Alternativë pull: `GET /v1/events?after_id=` (kursor). Push: `POST /v1/webhooks/endpoints` (vetëm `https`, IP publike; SSRF kontrollohet në krijim dhe para çdo dërgimi; pa redirect). Sekreti `whsec_…` shfaqet një herë, ruhet i enkriptuar.
+- Dërgimi: të paktën një herë, pa garanci renditjeje (përdor `id`/`created_at`). Retry me backoff (30s, 2m, 10m, 30m, 2h, 6h, 12h; 8 përpjekje), 410 ose 5 delivery të shterura radhazi çaktivizojnë endpoint-in. `redeliver`, `test` (ping) dhe `rotate-secret` në API.
+- Verifikimi te marrësi: header `X-SMS-Signature: t=<unix>,v1=<hex>` ku `v1 = HMAC_SHA256(secret, f"{t}.{trupi_i_papërpunuar}")`; refuzo nëse `|now - t| > 300s`.
+```python
+import hmac, hashlib, time
+def verify(secret, header, body: bytes, tol=300):
+    p = dict(x.split("=", 1) for x in header.split(","))
+    ok = hmac.compare_digest(p["v1"], hmac.new(secret.encode(), f"{p['t']}.".encode() + body, hashlib.sha256).hexdigest())
+    return ok and abs(time.time() - int(p["t"])) <= tol
+```
+- Worker i ndarë: `python -m app.worker --role webhooks` (një endpoint i ngadaltë nuk bllokon SMS/email). Për mbrojtje të plotë nga DNS-rebinding, kufizo egress-in e këtij worker-i.
+- Portal (API): `/v1/portal/api-keys` (çelësa vetë-shërbyes, role `client` gjithmonë, max 20), `/v1/portal/overview` (balanca, SMS/email 30 ditë, campaigns, webhooks).
 
 ## Email
 - Klienti shton një domen (`POST /v1/email/domains`), publikon rekordet DNS të kthyera (DKIM, SPF `include:`, DMARC opsional) dhe thërret `verify`. Dërgimi lejohet **vetëm nga domene të verifikuara të vetë klientit**; një domen s'mund të verifikohet nga dy klientë; nëse DNS hiqet, verifikimi anulohet.

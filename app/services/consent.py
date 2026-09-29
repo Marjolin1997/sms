@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.contacts import ConsentAction, ConsentEvent, ConsentState
+from app.services import events
 from app.services.wallet import Conflict, WalletError
 
 CHANNELS = {"sms", "email"}
@@ -64,7 +65,7 @@ def _state(db: Session, owner_ref: str, channel: str, h: str, lock: bool = False
     return db.scalar(q.with_for_update() if lock else q)
 
 
-def record(
+def _record(
     db: Session,
     owner_ref: str,
     channel: str,
@@ -118,6 +119,28 @@ def record(
         hard, reason = True, st.reason
     st.opted_in, st.hard, st.reason, st.last_event_id = opted_in, hard, reason, ev.id
     db.flush()
+    return st
+
+
+def record(
+    db: Session,
+    owner_ref: str,
+    channel: str,
+    address: str,
+    action: str,
+    reason: str,
+    source: str,
+    actor: str,
+    evidence: str | None = None,
+) -> ConsentState:
+    st = _record(db, owner_ref, channel, address, action, reason, source, actor, evidence)
+    kind = "opted_in" if action == "opt_in" else "opted_out"
+    # adresa futet qëllimisht: klienti e përdor për të sinkronizuar CRM-në (retention e eventeve)
+    events.emit(
+        db, owner_ref, f"consent.{kind}", "consent", st.id,
+        {"channel": channel, "address": normalize(channel, address), "reason": st.reason,
+         "hard": st.hard},
+    )  # fmt: skip
     return st
 
 

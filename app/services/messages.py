@@ -24,7 +24,7 @@ from app.models.sending import (
 )
 from app.models.wallet import Wallet
 from app.providers import ProviderError, SendRequest, get_provider
-from app.services import consent, rates, sender_ids, switches, templates
+from app.services import consent, events, rates, sender_ids, switches, templates
 from app.services import wallet as wallets
 from app.services.sms_text import count_segments
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -81,6 +81,11 @@ def _move(db: Session, m: Message, to: MessageStatus, detail: str | None = None)
     )
     m.status = to
     m.updated_at = datetime.now(UTC)
+    if to in (MessageStatus.SENT, MessageStatus.DELIVERED, MessageStatus.FAILED):
+        data = {"message_id": m.public_id, "status": to.value, "segments": m.segments}
+        if to == MessageStatus.FAILED:
+            data["error_code"] = detail
+        events.emit(db, m.owner_ref, f"message.{to.value}", "message", m.public_id, data)
 
 
 def submit(

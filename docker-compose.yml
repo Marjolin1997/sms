@@ -31,5 +31,13 @@ services:
     depends_on:
       db: {condition: service_healthy}
     command: python -m app.worker
+  webhook-worker:
+    build: .
+    environment:
+      SMS_DATABASE_URL: postgresql+psycopg://sms:sms@db:5432/sms_dev
+      SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=  # vetëm për dev
+    depends_on:
+      db: {condition: service_healthy}
+    command: python -m app.worker --role webhooks
 volumes:
   dbdata:

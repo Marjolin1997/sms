@@ -21,7 +21,7 @@ from app.models.email import (
 )
 from app.providers import ProviderError, get_email_provider
 from app.providers.email import EmailRequest
-from app.services import consent, email_domains, email_mime, switches
+from app.services import consent, email_domains, email_mime, events, switches
 from app.services.wallet import Conflict, NotFound, WalletError
 
 MAX_ATTEMPTS = 5
@@ -50,6 +50,11 @@ def _move(db: Session, e: Email, to: EmailStatus, detail: str | None = None) -> 
     db.add(EmailEvent(email_id=e.id, from_status=e.status.value, to_status=to.value, detail=detail))
     e.status = to
     e.updated_at = datetime.now(UTC)
+    if to != EmailStatus.QUEUED and to != EmailStatus.SENDING:
+        data = {"email_id": e.public_id, "status": to.value}
+        if to in (EmailStatus.FAILED, EmailStatus.BOUNCED, EmailStatus.COMPLAINED):
+            data["reason"] = detail
+        events.emit(db, e.owner_ref, f"email.{to.value}", "email", e.public_id, data)
 
 
 def submit(

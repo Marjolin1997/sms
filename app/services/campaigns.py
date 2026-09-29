@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.timeutil import as_utc
 from app.models.campaigns import (
@@ -28,7 +28,16 @@ from app.models.contacts import Contact
 from app.models.email import Email
 from app.models.messaging import ApprovalStatus, SenderId
 from app.models.sending import AccountPlan, Message, MessageStatus
-from app.services import consent, contacts, email_domains, emails, rates, switches, templates
+from app.services import (
+    consent,
+    contacts,
+    email_domains,
+    emails,
+    events,
+    rates,
+    switches,
+    templates,
+)
 from app.services import messages as msg
 from app.services import wallet as wallets
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -141,6 +150,13 @@ def _touch(c: Campaign, status: CampaignStatus | None = None, now: datetime | No
     if status is not None:
         c.status = status
     c.updated_at = now or datetime.now(UTC)
+    if status in (CampaignStatus.RUNNING, CampaignStatus.PAUSED, CampaignStatus.COMPLETED,
+                  CampaignStatus.CANCELLED):  # fmt: skip
+        db = object_session(c)
+        if db is not None:
+            events.emit(db, c.owner_ref, f"campaign.{status.value}", "campaign", c.id,
+                        {"campaign_id": c.id, "name": c.name, "status": status.value,
+                         "pause_reason": c.pause_reason})  # fmt: skip
 
 
 def schedule(

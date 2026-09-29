@@ -326,3 +326,36 @@ def test_parallel_workers_send_each_email_exactly_once(db, world):  # noqa: F811
         assert len(refs) == 12 and len(set(refs)) == 12
     finally:
         dns.set_resolver(old)
+
+
+def test_parallel_webhook_workers_deliver_each_event_exactly_once(db):
+    from datetime import UTC, datetime, timedelta
+
+    import httpx
+
+    from app.services import events, net_guard, webhooks
+
+    net_guard.set_resolver(lambda host: ["93.184.216.34"])
+    seen: list[str] = []
+
+    def handler(request: httpx.Request):
+        seen.append(request.headers["x-sms-delivery-id"])
+        return httpx.Response(200)
+
+    webhooks.set_client(httpx.Client(transport=httpx.MockTransport(handler)))
+    try:
+        webhooks.create_endpoint(db, "c1", "https://hooks.example.com/x")
+        for i in range(20):
+            events.emit(db, "c1", "message.sent", "message", f"m{i}")
+        db.commit()
+        later = datetime.now(UTC) + timedelta(seconds=5)
+
+        def worker(_):
+            with SessionLocal() as s:
+                while webhooks.deliver_next(s, later):
+                    pass
+
+        _threads(4, worker)
+        assert len(seen) == 20 and len(set(seen)) == 20  # asnjë dërgim i dyfishtë
+    finally:
+        webhooks.set_client(None)

@@ -7,6 +7,7 @@ from app.api import (
     email,
     messages,
     messaging,
+    portal,
     public,
     rates,
     wallets,
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(campaigns.router)
     app.include_router(email.router)
     app.include_router(public.router)
+    app.include_router(portal.router)
 
     @app.get("/healthz")
     def healthz():

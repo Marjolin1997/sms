@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import ROLE_PERMS, STAFF_ROLES, generate_key
@@ -52,3 +52,36 @@ def revoke_key(db: Session, key_id: int) -> ApiKey:
 
 def list_keys(db: Session) -> list[ApiKey]:
     return list(db.scalars(select(ApiKey).order_by(ApiKey.id)))
+
+
+MAX_SELF_SERVICE_KEYS = 20
+
+
+def create_own_key(
+    db: Session, owner_ref: str, name: str, created_by: str, expires_at: datetime | None = None
+) -> tuple[ApiKey, str]:
+    """Çelës vetë-shërbyes: gjithmonë role=client i lidhur me llogarinë e krijuesit
+    (asnjë ngritje privilegjesh) dhe me kufi numri."""
+    active = db.scalar(
+        select(func.count())
+        .select_from(ApiKey)
+        .where(
+            ApiKey.owner_ref == owner_ref,
+            ApiKey.role == "client",
+            ApiKey.status == KeyStatus.ACTIVE,
+        )
+    )
+    if active >= MAX_SELF_SERVICE_KEYS:
+        raise Conflict(f"at most {MAX_SELF_SERVICE_KEYS} active keys per account")
+    return create_key(db, name, "client", owner_ref, created_by, expires_at)
+
+
+def list_own_keys(db: Session, owner_ref: str) -> list[ApiKey]:
+    return list(db.scalars(select(ApiKey).where(ApiKey.owner_ref == owner_ref).order_by(ApiKey.id)))
+
+
+def revoke_own_key(db: Session, owner_ref: str, key_id: int) -> ApiKey:
+    key = db.get(ApiKey, key_id)
+    if key is None or key.owner_ref != owner_ref:
+        raise NotFound("api key not found")
+    return revoke_key(db, key_id)
