@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -98,20 +98,30 @@ def import_contacts(
 def list_contacts(
     owner_ref: str | None = None,
     list_id: int | None = None,
+    q: str | None = None,
     after_id: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:read")),
 ):
     owner = owner_for(p, owner_ref)
-    q = select(Contact).where(
+    stmt = select(Contact).where(
         Contact.owner_ref == owner, Contact.id > after_id, Contact.status == ContactStatus.ACTIVE
     )
     if list_id is not None:
-        q = q.join(ListMember, ListMember.contact_id == Contact.id).where(
+        stmt = stmt.join(ListMember, ListMember.contact_id == Contact.id).where(
             ListMember.list_id == list_id
         )
-    return db.scalars(q.order_by(Contact.id).limit(max(1, min(limit, 500)))).all()
+    if q:  # kërkim nënvarg në emër, telefon, email (pa wildcards nga përdoruesi)
+        esc = q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pat = f"%{esc}%"
+        stmt = stmt.where(
+            func.lower(func.coalesce(Contact.first_name, "")).like(pat, escape="\\")
+            | func.lower(func.coalesce(Contact.last_name, "")).like(pat, escape="\\")
+            | func.coalesce(Contact.phone, "").like(f"%{esc.lstrip('+')}%", escape="\\")
+            | func.coalesce(Contact.email, "").like(pat, escape="\\")
+        )
+    return db.scalars(stmt.order_by(Contact.id).limit(max(1, min(limit, 500)))).all()
 
 
 @router.get("/contacts/{contact_id}", response_model=ContactOut)

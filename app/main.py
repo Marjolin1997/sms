@@ -4,6 +4,7 @@ from app.api import (
     admin,
     billing,
     campaigns,
+    console,
     contacts,
     email,
     messages,
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(public.router)
     app.include_router(portal.router)
     app.include_router(billing.router)
+    app.include_router(console.router)
 
     @app.get("/healthz")
     def healthz():

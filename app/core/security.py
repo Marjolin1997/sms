@@ -116,3 +116,16 @@ def require(perm: str):
         return p
 
     return dep
+
+
+def require_any(*perms: str):
+    """Mjafton një nga lejet (p.sh. kush kërkon ose kush miraton sender ID)."""
+
+    def dep(p: Principal = Depends(current_principal)) -> Principal:
+        if not any(p.has(x) for x in perms):
+            raise HTTPException(
+                403, {"code": "forbidden", "message": f"missing one of: {', '.join(perms)}"}
+            )
+        return p
+
+    return dep
