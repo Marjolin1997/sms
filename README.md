@@ -16,7 +16,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 0 Analizë e DB ekzistuese | pret `schema.sql` (`mysqldump --no-data`) |
 | 1 Skeleti (FastAPI, Docker, Alembic, teste, CI) | ✅ |
 | 2 Wallet + ledger + top-up (hold/capture/release/refund) | ✅ |
-| 3 Rate cards | – |
+| 3 Rate cards me versione, prefix/operator, segmente, quote | ✅ |
 | 4 Sender IDs, templates | – |
 | 5 Pipeline dërgimi + provider fals | – |
 | 6 Provider real + DLR | – |
