@@ -9,6 +9,22 @@ Rekomandimi: **mos rishkruaj**. Kodi ekzistues bëhet themeli i **Enterprise + G
 
 ---
 
+## Vendimet e fiksuara (të miratuara nga pronari i projektit)
+| # | Vendimi | Pasoja |
+|---|---|---|
+| 1 | **Central = autoriteti tregtar** (pagesa, top-up, miratim pagese, kredi komerciale, konfigurim çmimesh/produktesh). **Enterprise = ledger/balancë operacionale lokale** për dërgimin. **Pa hold HTTP te Central për çdo SMS.** Një SMS nuk dështon sepse Central është përkohësisht i padisponueshëm. | Rrjedha: `Payment/Top-up → Central → approval → credit.granted → Enterprise Ledger → konsum SMS`; periodikisht `Enterprise → usage/balance snapshot → Central → reconciliation`. Ledger i pandryshueshëm, çelësa idempotence, kufij transaksioni, audit. |
+| 2 | **Enterprise hostohet te ne**, multi-tenant; Central është platformë administrative e veçantë. Klienti përdor frontend/API të Enterprise. | Kredencialet e provider-ave nuk ekspozohen te klientët; s'ka deployment për klient tani. |
+| 3 | **Një DB multi-tenant për Enterprise**, me **`enterprise_id` UUID real** (FK te `enterprises`) në vend të `owner_ref` të lirë. Izolimi zbatohet në backend/domain, jo në frontend; harrimi i `enterprise_id` në një query duhet të jetë i vështirë/i pamundur. | Arkitektura nuk lidhet aq fort sa të pamundësojë më vonë një DB/deployment të dedikuar për një tenant. |
+| 4 | **Queue: mbetet outbox PostgreSQL (`SKIP LOCKED`)**, por pas një kontrate `MessageQueue` (`publish/reserve/acknowledge/retry`). Domain/service layer nuk di nëse pas saj është PostgreSQL, Redis, RabbitMQ, SQS ose Kafka. | Pa migrim brokeri tani. |
+| 5 | **Python + FastAPI + React + PostgreSQL.** Kopjojmë kufijtë e domain-it, ndarjen Central/Enterprise, caktimin e produkteve, rrjedhat e miratimit, konceptet e sinkronizimit; jo framework-un. | Ripërdoret ~80% e kodit. |
+| 6 | **Regjistrimi drejtohet nga produkti**: flamuj `self_registration_enabled`, `auto_approval_enabled`, `requires_manual_approval`, `requires_payment`, `requires_sender_registration`, `requires_external_account`. Auto-miratim për demo/sandbox/trial pa rrezik tregtar; miratim manual për produkte SMS reale me pagesë, top-up, kontratë, SID, llogari të jashtme ose kur produkti e deklaron. | Rrjedha e regjistrimit shih F. |
+| + | **Gateway nuk bëhet mikroshërbim fizik tani**: mbetet **modul/proces i kufizuar brenda deployment-it ekzistues**; ndarja është logjike/kod-nivel, dhe nxjerrja fizike bëhet vetëm me arsye reale (shkallë, izolim sigurie/kredencialesh, deploy të pavarur). | Central është aplikacion i ri me DB të vet; Enterprise dhe Gateway mbeten në kodin ekzistues. |
+| + | **Migrim pa big-bang**, çdo hap prapavajtës-kompatibil, me migrim, teste, pa prishur dërgimin ekzistues, dhe pa prekur më shumë module sesa duhet. Ndryshimi strukturor i parë: **`owner_ref` → entitet `Enterprise` + `enterprise_id`.** | Shih `docs/MIGRATION_PLAN.md`. |
+
+Ndryshimet ndaj tekstit më poshtë: kudo ku shkruan "Gateway" lexo "modul logjik i kufizuar (proces workers) me kredencialet e provider-ave"; kudo ku shkruan "DB e ndarë për Enterprise" lexo "DB multi-tenant me `enterprise_id`"; struktura G është **synim përfundimtar**, jo hapi i parë.
+
+---
+
 ## A. Çfarë ekziston tashmë (dhe përputhet me arkitekturën)
 | Plani | Ekziston |
 |---|---|
@@ -73,13 +89,13 @@ Kod ekzistues (workers, `SmsProvider`, `sms_routes`, DLR/inbound). **Endpoint:**
 1. **Public:** `GET /api/public/catalog/products` → SPA e regjistrimit liston produktet (asgjë e hardcode-uar).
 2. **Formulari (hapa):** Kompania → Admin → Produkt/shërbim → Shteti/informacion operativ → Kushte (ruhet versioni i kushteve dhe koha) → dërgim.
 3. `POST /api/public/registrations` (idempotent, captcha, rate limit, verifikim email i adminit **para** rishikimit) → `registration_requests(status=pending_review)` + audit. Produkti kërkon `product_country_rules`.
-4. **Rishikim në Central** (nëse produkti/shteti `requires_approval`; përndryshe auto-miratim me rregulla): stafi miraton/refuzon me arsye (audit, 2FA për veprime të ndjeshme) → `enterprises(status=approved)`.
+4. **Vendimi i miratimit sipas produktit:** `auto_approval_enabled` dhe asnjë nga `requires_manual_approval`, `requires_payment`, `requires_sender_registration`, `requires_external_account` (demo/sandbox/trial) → auto-miratim; përndryshe **rishikim në Central**: stafi miraton/refuzon me arsye (audit, 2FA për veprime të ndjeshme) → `enterprises(status=approved)`.
 5. **Provisioning (orkestrues me hapa idempotentë, i rifillueshëm):** krijon `enterprise_id`; krijon/instancon Enterprise (DB, migrime, konfigurim); krijon kredenciale shërbimi; **krijon `enterprise_products`** (çmim/limite/mapping); dërgon **snapshot** të plotë konfigurimi (`config_version=1`); dërgon `credit.granted` fillestar nëse ka trial; krijon **përdoruesin admin** (jo aktiv) me lidhje ftese të njëpërdorshme.
 6. **Aktivizim:** admini hap lidhjen → vendos fjalëkalim → aktivizon 2FA → `user.status=active`; Enterprise raporton `enterprise.ready` te Central → `status=active`.
 7. **Login i parë në Enterprise:** sheh checklistën (sender ID i kërkuar, kontakte, mesazhi i parë); kërkesa e sender ID kalon te Central për miratim; miratimi kthehet si event `sender_id.approved` dhe hap dërgimin drejt atij shteti.
 Çdo hap shkruan audit; çdo tranzicion është idempotent, dhe dështimi lë gjendje të rikuperueshme (`provisioning_failed` me retry manual).
 
-## G. Struktura finale e propozuar (monorepo, DB të ndara)
+## G. Struktura synim (monorepo). Central ka DB të vet; Enterprise dhe Gateway ndajnë DB multi-tenant; Gateway fillimisht modul logjik
 ```
 sms-platform/
 ├── packages/
@@ -99,15 +115,10 @@ Rregulla të kufirit: asnjë app nuk importon modele të tjetrit; vetëm `kernel
 
 ---
 
-## Vendime që duhen nga ti para implementimit
-1. **Autoriteti i parave (më i rëndësishmi).** Rekomandoj: **Central zotëron paratë** (pagesat, top-up, faturat); ai jep **kredi (`credit_grants`)** te Enterprise; Enterprise shpenzon nga ledger-i i tij lokal (validim balance i shpejtë, offline-tolerant) dhe raporton përdorimin, Central rikonsilion. Alternativa (Central mban wallet-in dhe Enterprise kërkon hold për çdo mesazh) është më e thjeshtë por e ngadaltë dhe e varur nga disponueshmëria e Central.
-2. **Ku hostohet Enterprise:** te ne (një instancë për klient, ose një app multi-tenant me DB/skema për klient) apo te serveri i klientit? Nëse është te klienti, kredencialet e provider-ave **duhet** të qëndrojnë te Gateway, jo te Enterprise (parimi C.4).
-3. **Një DB për Enterprise:** DB e ndarë për çdo Enterprise (izolim maksimal, kosto operative më e lartë) apo një DB e brendshme multi-tenant e Enterprise (më e lirë, izolim me `enterprise_id`)?
-4. **Queue:** mbetemi me outbox në PostgreSQL (`SKIP LOCKED`, e provuar: ~250 mesazhe/s me 2 workers) me kontratë që lejon RabbitMQ/Redis Streams më vonë kur vëllimi ta kërkojë; apo broker që tani?
-5. **Stack-u i Enterprise:** vazhdojmë Python/FastAPI + React (ripërdorim ~80%) — rekomandimi. Nëse sistemi yt aktual është në Laravel dhe do ta mbash atë për Enterprise, kjo e ndryshon plotësisht planin (ndërtojmë vetëm Central + Gateway + kontratat).
-6. **Kur kërkohet miratim regjistrimi** dhe cilat produkte lejojnë auto-miratim.
+## Vendimet e mbetura
+Të gjashtë pyetjet e hapura u mbyllën (tabela "Vendimet e fiksuara" më sipër). Plani konkret, i ndarë në faza me kritere pranimi: **`docs/MIGRATION_PLAN.md`** (zëvendëson listën orientuese më poshtë).
 
-## Plani i propozuar (hap pas hapi, secili i testuar dhe i shkurtër)
+## Plani orientues fillestar (i zëvendësuar nga MIGRATION_PLAN.md)
 1. **Kontratat + kernel:** nxjerr `kernel`, përcakto `contracts` (envelope, nënshkrim, idempotencë, versionim) me testet e kontratës.
 2. **Central bazë:** `enterprises`, `products`, `product_country_rules`, `enterprise_products`, katalogu publik, audit; migrime + DTO + teste.
 3. **Registration:** kërkesa, verifikim email, rishikim/miratim, auto-rregulla.
