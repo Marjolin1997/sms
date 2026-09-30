@@ -103,7 +103,7 @@ Varësi të ngurta: **M1 → M6, M7, M9**; **M3 → M4 → M5 → M7 → (M8, M9
 - **Backwards compat:** çelësat dhe konsola e sotme punojnë pa ndryshim.
 - **Tests:** login/2FA/ftesa/çaktivizim, matrica e lejeve për role të reja, izolim tenant-esh për sesionet, throttling i provave (ripërdor `AuthFailure`).
 - **Rollback:** flag `USER_LOGIN=off`; tabelat mbeten të pa përdorura.
-- **Acceptance:** përdorues me role kufizuar ssipas modulit; audit për person; asnjë regres i çelësave API.
+- **Acceptance:** përdorues me role kufizuar sipas modulit; audit për person; asnjë regres i çelësave API.
 
 ## M7 · Sinkronizimi Central → Enterprise
 - **Objective:** Enterprise mban read models lokale të konfigurimit të Central; ndryshimet vijnë me evente të nënshkruara dhe të versionuara.
@@ -163,7 +163,7 @@ Varësi të ngurta: **M1 → M6, M7, M9**; **M3 → M4 → M5 → M7 → (M8, M9
 
 ## M13 · Pastrimi
 - **Objective:** hiq `owner_ref`, alias-et e përkohshme, flamujt e migrimit, kodin e vjetër të admin-it në Enterprise.
-- **Backwards compat:** njoftim i vjetrimit për API `owner_ref`; heqja vetëm me version të ri API (`/v2`) ose pas ddritares së dakorduar.
+- **Backwards compat:** njoftim i vjetrimit për API `owner_ref`; heqja vetëm me version të ri API (`/v2`) ose pas dritares së dakorduar.
 - **Acceptance:** asnjë referencë `owner_ref` përveç `enterprises.external_id`.
 
 ---
