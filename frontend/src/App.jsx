@@ -19,6 +19,7 @@ import Rates from "./pages/Rates.jsx";
 import Finance from "./pages/Finance.jsx";
 import Admin from "./pages/Admin.jsx";
 import Security from "./pages/Security.jsx";
+import Providers from "./pages/Providers.jsx";
 import Reports from "./pages/Reports.jsx";
 import Inbox from "./pages/Inbox.jsx";
 import Developers from "./pages/Developers.jsx";
@@ -54,6 +55,7 @@ const NAV = [
     { id: "accounts", label: T("Accounts"), icon: "☖", perm: "monitor:read", el: Accounts, global: true, desc: T("Every customer account at a glance.") },
     { id: "rates", label: T("Rates & routes"), icon: "%", perm: "rates:read", el: Rates, global: true, desc: T("Price lists, effective dates and which provider carries which country.") },
     { id: "finance", label: T("Finance"), icon: "⊕", perm: "topup:confirm", el: Finance, global: true, desc: T("Confirm top-ups and make audited balance corrections.") },
+    { id: "providers", label: T("Provider health"), icon: "♥", perm: "monitor:read", el: Providers, global: true, desc: T("Delivery rate, errors and stuck messages for each SMS provider.") },
     { id: "security", label: T("Security"), icon: "⛨", perm: "monitor:read", el: Security, global: true, desc: T("Two-factor authentication for your staff key.") },
     { id: "admin", label: T("Admin"), icon: "⚙", perm: "keys:manage", el: Admin, global: true, desc: T("Kill switches and the audit log.") },
   ] },

@@ -375,6 +375,8 @@ def staff_flow(b):
     )
     go(p, "messages", 500)
     check(has("Choose an account", p.inner_text("main")), "account-required message for staff")
+    go(p, "providers", 1200)
+    check(has("Messages with unknown outcome", p.inner_text("main")), "provider health page loads")
     # miratim sender ID i sapo-kërkuar nga klienti
     go(p, "approvals", 1500)
     check(has(f"NB{UNIQ}", p.inner_text("main")), "pending sender IDs listed")

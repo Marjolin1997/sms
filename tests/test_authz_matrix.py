@@ -15,7 +15,9 @@ BOOT = {"X-Admin-Key": "test-key"}
 # Pa autentikim me çelës API, me qëllim: probat, faqet publike dhe callback-et e provider-ave
 # (këto verifikojnë nënshkrimin HMAC ose token-in vetë).
 PUBLIC = {"/healthz", "/readyz", "/u/{token}"}
-SIGNED = re.compile(r"^/webhooks/(dlr|email|inbound|payments)/\{provider\}$")
+SIGNED = re.compile(
+    r"^/webhooks/((dlr|email|inbound|payments)/\{provider\}|twilio/(status|inbound))$"
+)
 
 
 def _deps(dependant):

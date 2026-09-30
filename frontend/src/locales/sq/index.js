@@ -12,5 +12,6 @@ import security from "./security.js";
 import reports from "./reports.js";
 import inbox from "./inbox.js";
 import developers from "./developers.js";
+import providers from "./providers.js";
 
-export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports, ...inbox, ...developers };
+export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports, ...inbox, ...developers, ...providers };

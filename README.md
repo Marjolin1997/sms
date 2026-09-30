@@ -88,6 +88,11 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 ## Twilio (provider SMS)
 `app/providers/twilio.py` + `app/api/twilio.py`: dërgim, statusi i dorëzimit (`/webhooks/twilio/status`) dhe SMS hyrës (`/webhooks/twilio/inbound`) me verifikim `X-Twilio-Signature`; pa dyfishim mesazhesh pas gabimesh rrjeti me rezultat të paqartë. Aktivizohet me `SMS_TWILIO_ACCOUNT_SID` + `SMS_TWILIO_AUTH_TOKEN`. **Ende e pa provuar kundër Twilio të vërtetë**: udhëzuesi, `scripts/twilio_smoke.py` dhe lista e kontrollit janë te **`docs/TWILIO.md`**.
 
+## Shëndeti i provider-ave (Faza 21)
+- `GET /v1/admin/providers?hours=24` (stafi, `monitor:read`): për çdo provider SMS: mesazhe, dorëzuar/dështuar/në rrugë, **shkalla e dorëzimit** (vetëm mesazhe të përfunduara), gabimet kryesore, mesazhe me rezultat të paqartë, dorëzimi i fundit dhe mosha e më të vjetrit në rrugë.
+- `GET /v1/admin/messages/unresolved`: mesazhet që dështuan me `*_outcome_unknown` (p.sh. timeout pasi kërkesa mund të kishte mbërritur te Twilio; nuk riprovohen që të mos dërgohen dy herë). Numri maskohet, pa tekst mesazhi; krahasohen me panelin e provider-it.
+- **Konsola:** faqja “Shëndeti i provider-ave” (staf) me alarm kur shkalla është nën 80% (të paktën 20 mesazhe të përfunduara), mesazhe të ngecura dhe radha e rakordimit; rifreskohet çdo 10 s. Udhëzon të ndalet `dispatch` ose të kalohet rruga te provider tjetër.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

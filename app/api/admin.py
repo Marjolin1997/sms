@@ -248,6 +248,100 @@ def audit_log(
     ]  # fmt: skip
 
 
+UNKNOWN_OUTCOME = "%outcome_unknown"
+IN_FLIGHT = (MessageStatus.QUEUED, MessageStatus.SENDING, MessageStatus.SENT)
+
+
+@router.get("/providers")
+def provider_health(
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require("monitor:read")),
+):
+    """Shëndeti i çdo provider-i SMS në `hours` orët e fundit: dorëzim, dështime, kodet kryesore
+    të gabimit, mesazhe me rezultat të paqartë dhe mosha e më të vjetrit në rrugë."""
+    hours = max(1, min(hours, 24 * 30))
+    now = datetime.now(UTC)
+    since = now - timedelta(hours=hours)
+    out: dict[str, dict] = {}
+
+    def slot(name: str) -> dict:
+        return out.setdefault(
+            name,
+            {"provider": name, "total": 0, "delivered": 0, "failed": 0, "in_flight": 0,
+             "delivery_rate": None, "unknown_outcome": 0, "top_errors": [],
+             "last_delivered_at": None, "oldest_in_flight_seconds": None},
+        )  # fmt: skip
+
+    for name, st, n in db.execute(
+        select(Message.provider, Message.status, func.count())
+        .where(Message.created_at >= since)
+        .group_by(Message.provider, Message.status)
+    ):
+        s = slot(name)
+        s["total"] += n
+        if st == MessageStatus.DELIVERED:
+            s["delivered"] += n
+        elif st == MessageStatus.FAILED:
+            s["failed"] += n
+        else:
+            s["in_flight"] += n
+    for name, code, n in db.execute(
+        select(Message.provider, Message.error_code, func.count())
+        .where(
+            Message.created_at >= since,
+            Message.status == MessageStatus.FAILED,
+            Message.error_code.is_not(None),
+        )
+        .group_by(Message.provider, Message.error_code)
+        .order_by(func.count().desc())
+    ):
+        s = slot(name)
+        if len(s["top_errors"]) < 5:
+            s["top_errors"].append({"code": code, "count": n})
+        if code.endswith("outcome_unknown"):
+            s["unknown_outcome"] += n
+    for name, last in db.execute(
+        select(Message.provider, func.max(Message.updated_at))
+        .where(Message.status == MessageStatus.DELIVERED)
+        .group_by(Message.provider)
+    ):
+        slot(name)["last_delivered_at"] = last
+    for name, oldest in db.execute(
+        select(Message.provider, func.min(Message.created_at))
+        .where(Message.status.in_(IN_FLIGHT))
+        .group_by(Message.provider)
+    ):
+        slot(name)["oldest_in_flight_seconds"] = max(0, int((now - as_utc(oldest)).total_seconds()))
+    for s in out.values():
+        done = s["delivered"] + s["failed"]
+        s["delivery_rate"] = round(s["delivered"] / done, 4) if done else None
+    return {"hours": hours, "providers": sorted(out.values(), key=lambda s: -s["total"])}
+
+
+@router.get("/messages/unresolved")
+def unresolved_messages(
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require("monitor:read")),
+):
+    """Mesazhe që dështuan me rezultat të paqartë (p.sh. timeout pasi kërkesa mund të kishte
+    mbërritur): duhen krahasuar me panelin e provider-it. Numri maskohet pjesërisht."""
+    rows = db.scalars(
+        select(Message)
+        .where(Message.status == MessageStatus.FAILED, Message.error_code.like(UNKNOWN_OUTCOME))
+        .order_by(Message.id.desc())
+        .limit(max(1, min(limit, 500)))
+    ).all()
+    return [
+        {"id": m.public_id, "owner_ref": m.owner_ref, "provider": m.provider,
+         "to": f"+{m.destination[:5]}…{m.destination[-2:]}", "sender": m.sender,
+         "error_code": m.error_code, "total_price": str(m.total_price), "currency": m.currency,
+         "created_at": m.created_at}
+        for m in rows
+    ]  # fmt: skip
+
+
 @router.get("/stats")
 def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor:read"))):
     now = datetime.now(UTC)
