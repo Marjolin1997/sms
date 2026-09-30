@@ -1,8 +1,13 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SMS_", env_file=".env", extra="ignore")
+
+    # Gjuha e teksteve për përdoruesit fundorë (faturë, faqja e çregjistrimit, fundi i emailit).
+    default_language: Literal["sq", "en"] = "sq"
 
     # PostgreSQL në prodhim; SQLite vetëm për zhvillim të shpejtë lokal.
     database_url: str = "sqlite:///./sms_dev.db"

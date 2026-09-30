@@ -10,6 +10,7 @@ from email.utils import format_datetime, formataddr
 import dkim
 
 from app.core.config import settings
+from app.core.texts import tr
 
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 SIGNED_HEADERS = [
@@ -38,7 +39,8 @@ def unsubscribe_url(token: str) -> str:
 
 def _footer_html(url: str) -> str:
     u = html_lib.escape(url, quote=True)
-    return f'<p style="font-size:12px;color:#666;margin-top:24px"><a href="{u}">Unsubscribe</a></p>'
+    style = "font-size:12px;color:#666;margin-top:24px"
+    return f'<p style="{style}"><a href="{u}">{tr("Unsubscribe")}</a></p>'
 
 
 def build(
@@ -72,7 +74,7 @@ def build(
         url = unsubscribe_url(unsubscribe_token)
         msg["List-Unsubscribe"] = f"<{url}>"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-        text = f"{text_body}\n\n--\nUnsubscribe: {url}\n"
+        text = f"{text_body}\n\n--\n{tr('Unsubscribe')}: {url}\n"
         if html:
             footer = _footer_html(url)
             idx = html.lower().rfind("</body>")

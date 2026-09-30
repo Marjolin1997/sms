@@ -11,27 +11,33 @@ from sqlalchemy.orm import Session
 from app.api.webhooks import verify_signature
 from app.core.config import settings
 from app.core.db import SessionLocal, get_db
+from app.core.texts import html_lang, tr
 from app.services import emails as svc
 from app.services.wallet import Conflict, NotFound
 
 router = APIRouter()
 
-_PAGE = (
-    "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
-    "<title>Unsubscribe</title><body>{body}</body>"
-)
+
+def _page(body: str) -> str:
+    return (
+        f"<!doctype html><html lang={html_lang()}><meta charset=utf-8>"
+        "<meta name=viewport content='width=device-width'>"
+        f"<title>{tr('Unsubscribe')}</title><body>{body}</body></html>"
+    )
 
 
 @router.get("/u/{token}", response_class=HTMLResponse)
 def unsubscribe_page(token: str):
     """GET nuk çregjistron (skanerët e email-it e hapin lidhjen): vetëm konfirmim me POST."""
     if not svc.valid_unsubscribe_token(token):
-        return HTMLResponse(_PAGE.format(body="<p>This link is not valid.</p>"), status_code=404)
+        return HTMLResponse(_page(f"<p>{tr('This link is not valid.')}</p>"), status_code=404)
     body = (
-        "<h1>Unsubscribe</h1><p>Confirm that you no longer want to receive these emails.</p>"
-        f"<form method=post action=/u/{token}><button type=submit>Unsubscribe</button></form>"
+        f"<h1>{tr('Unsubscribe')}</h1>"
+        f"<p>{tr('Confirm that you no longer want to receive these emails.')}</p>"
+        f"<form method=post action=/u/{token}>"
+        f"<button type=submit>{tr('Unsubscribe')}</button></form>"
     )
-    return HTMLResponse(_PAGE.format(body=body))
+    return HTMLResponse(_page(body))
 
 
 @router.post("/u/{token}", response_class=HTMLResponse)
@@ -42,8 +48,8 @@ def unsubscribe_confirm(token: str, db: Session = Depends(get_db)):
         db.commit()
     except NotFound:
         db.rollback()
-        return HTMLResponse(_PAGE.format(body="<p>This link is not valid.</p>"), status_code=404)
-    return HTMLResponse(_PAGE.format(body="<h1>You are unsubscribed.</h1>"))
+        return HTMLResponse(_page(f"<p>{tr('This link is not valid.')}</p>"), status_code=404)
+    return HTMLResponse(_page(f"<h1>{tr('You are unsubscribed.')}</h1>"))
 
 
 class EmailEventIn(BaseModel):

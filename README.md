@@ -35,6 +35,8 @@ React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screen
 
 **Stafi:** Miratime (radha e sender ID-ve/template-ve, refuzim me arsye), Llogari (lista, aktivizim/ndalim dërgimi, tarifa, wallet, plan, TVSH, çelës për klientin, "hape si këtë llogari"), Tarifa dhe routes (versione, publikim me datë, "provo një çmim"), Finance (top-up në pritje, regjistrim, korrigjim me paralajmërim), Admin (kill switches me arsye, audit me filtër).
 
+**Gjuha:** ndërfaqja është **shqip** si parazgjedhje, me ndërrues Shqip/English (te hyrja dhe te menyja anash; zgjedhja ruhet në shfletues). Teksti anglisht në kod është çelësi; fjalori shqip është te `frontend/src/locales/sq/`. `npm run i18n:check` (ekzekutohet edhe para `npm run build`) dështon nëse ka tekst pa përkthim, çelës të papërdorur, `{variabla}` që s'përputhen ose tekst të shkruar direkt në JSX. Për tekstet që prodhon serveri (faturë e printueshme, faqja publike e çregjistrimit, fundi i emailit) përdoret `SMS_DEFAULT_LANGUAGE` (`sq` parazgjedhje, ose `en`).
+
 **Përdorshmëria:** gabimet e API-së përkthehen në gjuhë të thjeshtë me hapin tjetër; njoftime (toast) dhe dialogë konfirmimi të aksesueshëm (Esc, fokus) në vend të `alert/confirm`; gjendje bosh me udhëzim, skeleton gjatë ngarkimit, "Load more"; navigim me grupe dhe menu celulari, tabela që kthehen në karta në ekran të vogël; kontrolle me tastierë dhe `aria-*`. Test end-to-end me shfletues të vërtetë: `e2e/test_console.py`.
 
 ## Nisje e shpejtë me panel (Docker + Node)

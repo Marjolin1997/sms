@@ -58,8 +58,62 @@ def toast(page, text):
     page.wait_for_selector(f".toast:has-text('{text}')", timeout=6000)
 
 
+def new_ctx(b, viewport, lang="en", **kw):
+    """Konsola hapet shqip; skenarët e vjetër ekzekutohen në anglisht (localStorage)."""
+    ctx = b.new_context(viewport=viewport, **kw)
+    if lang:
+        ctx.add_init_script(f"try{{localStorage.setItem('sms_lang','{lang}')}}catch(e){{}}")
+    return ctx
+
+
+def albanian_flow(b):
+    ctx = new_ctx(b, {"width": 1360, "height": 900}, lang=None)  # pa preferencë: shqip
+    p = ctx.new_page()
+    p.on("pageerror", lambda e: errors.append(f"sq pageerror: {e}"))
+    p.goto(BASE)
+    p.wait_for_selector("input[type=password]")
+    check(
+        has("Hyni", p.inner_text("body")) or has("Kyçu", p.inner_text("body")),
+        "login page in Albanian",
+    )
+    p.fill("input[type=password]", "sms_bad_key")
+    p.click("button.primary")
+    p.wait_for_selector(".alert.bad")
+    check(has("nuk është i vlefshëm", p.inner_text(".alert.bad")), "invalid key error in Albanian")
+    p.fill("input[type=password]", CLIENT)
+    p.click("button.primary")
+    p.wait_for_selector("nav")
+    nav = p.inner_text("nav")
+    check(all(x in nav for x in ["Portofoli", "Fushatat", "Kontaktet"]), "client menu in Albanian")
+    for page_hash in [
+        "messages",
+        "campaigns",
+        "contacts",
+        "senders",
+        "email",
+        "webhooks",
+        "wallet",
+        "billing",
+        "keys",
+    ]:
+        go(p, page_hash, 600)
+        body = p.inner_text("main")
+        check(
+            not re.search(r"\b(Your|Nothing|Create|Sender IDs)\b", body),
+            f"{page_hash}: no English left",
+        )
+    shot(p, "u13-sq-wallet")
+    p.click(".side-f .langsw button:has-text('English')")
+    p.wait_for_timeout(500)
+    check("Wallet" in p.inner_text("nav"), "language switch to English works")
+    p.click(".side-f .langsw button:has-text('Shqip')")
+    p.wait_for_timeout(500)
+    check("Portofoli" in p.inner_text("nav"), "language switch back to Albanian works")
+    ctx.close()
+
+
 def client_flow(b):
-    ctx = b.new_context(viewport={"width": 1360, "height": 900})
+    ctx = new_ctx(b, {"width": 1360, "height": 900})
     p = ctx.new_page()
     p.on("pageerror", lambda e: errors.append(f"client pageerror: {e}"))
     p.on("console", lambda m: m.type == "error" and errors.append(f"client console: {m.text}"))
@@ -116,7 +170,7 @@ def client_flow(b):
 
     # ---- historia
     go(p, "messages", 1200)
-    check(has("355691230777", p.inner_text("main")), "new message appears in history")
+    check(has(UNIQ, p.inner_text("main")), "new message appears in history")
     p.fill("input[aria-label='Search']", UNIQ)
     p.wait_for_timeout(900)
     check(p.locator("tbody tr").count() == 1, "search narrows history")
@@ -200,7 +254,7 @@ def client_flow(b):
 
 def new_client_checklist(b):
     """Llogari e re (globex): checklist i plotë me hapa të pa-bërë."""
-    ctx = b.new_context(viewport={"width": 1360, "height": 900})
+    ctx = new_ctx(b, {"width": 1360, "height": 900})
     r = ctx.request.post(
         f"{BASE}/v1/admin/api-keys",
         headers={"Authorization": f"Bearer {ADMIN}"},
@@ -223,7 +277,7 @@ def new_client_checklist(b):
 
 
 def staff_flow(b):
-    ctx = b.new_context(viewport={"width": 1360, "height": 900})
+    ctx = new_ctx(b, {"width": 1360, "height": 900})
     p = ctx.new_page()
     p.on("pageerror", lambda e: errors.append(f"staff pageerror: {e}"))
     p.on("console", lambda m: m.type == "error" and errors.append(f"staff console: {m.text}"))
@@ -253,7 +307,7 @@ def staff_flow(b):
     toast(p, "Approved")
     p.click("[role=tab]:has-text('Templates')")
     p.wait_for_timeout(500)
-    check(has("Order shipped", p.inner_text("main")), "pending template listed")
+    check(has("Porosia u nis", p.inner_text("main")), "pending template listed")
     # finance
     go(p, "finance", 1300)
     check(has("globex", p.inner_text("main")), "pending top-up listed")
@@ -302,7 +356,7 @@ def staff_flow(b):
 
 
 def mobile_flow(b):
-    ctx = b.new_context(viewport={"width": 390, "height": 800}, is_mobile=True)
+    ctx = new_ctx(b, {"width": 390, "height": 800}, is_mobile=True)
     p = ctx.new_page()
     p.on("pageerror", lambda e: errors.append(f"mobile pageerror: {e}"))
     login(p, CLIENT)
@@ -324,6 +378,7 @@ with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=CHROME, args=["--no-sandbox"])
     t0 = time.time()
     try:
+        albanian_flow(b)
         client_flow(b)
         new_client_checklist(b)
         staff_flow(b)

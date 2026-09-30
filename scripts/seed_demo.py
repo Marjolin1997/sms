@@ -103,7 +103,7 @@ def main() -> None:
         db.commit()
 
         # --- kontakte, lista, consent
-        lst = contacts_svc.create_list(db, OWNER, "Newsletter")
+        lst = contacts_svc.create_list(db, OWNER, "Buletini")
         vip = contacts_svc.create_list(db, OWNER, "VIP customers")
         ids = []
         for i, (first, last, phone) in enumerate(PEOPLE):
@@ -148,7 +148,9 @@ def main() -> None:
         # --- mesazhe SMS transaksionale (një pjesë e dorëzuar, një e dështuar)
         for i, (_, _, phone) in enumerate(PEOPLE):
             try:
-                msg.submit(db, OWNER, f"tx-{i}", phone, "ACME", text=f"Your code is {481200 + i}")
+                msg.submit(
+                    db, OWNER, f"tx-{i}", phone, "ACME", text=f"Kodi juaj është {481200 + i}"
+                )
             except consent.RecipientSuppressed:
                 pass  # kontakti që dërgoi STOP
         db.commit()
@@ -169,11 +171,11 @@ def main() -> None:
         c1 = campaigns.create(
             db,
             OWNER,
-            "Autumn sale",
+            "Ulje vjeshte",
             lst.id,
             "ACME",
             "demo",
-            text="Hi {{first_name}}, 20% off this week only. Reply STOP to opt out.",
+            text="Përshëndetje {{first_name}}, 20% ulje këtë javë. Shkruani STOP për çregjistrim.",
             max_cost="25",
         )
         db.commit()
@@ -189,11 +191,11 @@ def main() -> None:
         campaigns.create(
             db,
             OWNER,
-            "Black Friday teaser",
+            "Paralajmërim Black Friday",
             vip.id,
             "ACME",
             "demo",
-            text="Something big is coming, {{first_name}}...",
+            text="Po vjen diçka e madhe, {{first_name}}...",
         )
         db.commit()
 
@@ -263,15 +265,15 @@ def main() -> None:
         tv = templates.create(
             db,
             "globex",
-            "Order shipped",
-            "Hi {{first_name}}, your order {{order_id}} is on its way.",
+            "Porosia u nis",
+            "Përshëndetje {{first_name}}, porosia juaj {{order_id}} është nisur.",
         )
         del tv
         tv2 = templates.create(
-            db, OWNER, "Login code", "Your ACME code is {{code}}. It expires in 10 minutes."
+            db, OWNER, "Kodi i hyrjes", "Kodi juaj ACME është {{code}}. Skadon pas 10 minutash."
         )
         templates.review(db, tv2.id, "approve", "demo-approver")
-        templates.new_version(db, tv2.template_id, "Your ACME code: {{code}} (valid 10 min)")
+        templates.new_version(db, tv2.template_id, "Kodi juaj ACME: {{code}} (i vlefshëm 10 min)")
         db.commit()
 
         client_key = apikeys.create_key(db, "Acme console", "client", OWNER, "demo-seed")[1]

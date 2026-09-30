@@ -13,3 +13,10 @@ Për të parë të dhëna demo: `python -m scripts.seed_demo` (vetëm zhvillim) 
 - Çelësi ruhet vetëm në `sessionStorage` (fshihet me mbylljen e skedës) — kurrë në localStorage.
 - Stafi zgjedh llogarinë (`owner_ref`) lart; klienti sheh vetëm të vetën (serveri e detyron, jo UI).
 - Faqe: Overview, Send (SMS/email), Campaigns (krijim, vlerësim, pauzë/rifillim/anulim, statistika), Contacts (import, lista, consent), Email domains (rekordet DNS, verifikim), Webhooks & events, API keys, Admin (kill switches, audit).
+
+## Gjuha (shqip / English)
+- Parazgjedhja është shqip; ndërrimi bëhet nga `LangSwitch` (ruhet në `localStorage`, çelësi `sms_lang`).
+- Në kod shkruani tekstin anglisht me `t("Text")`, `t("Hi {name}", { name })`, `tn(n, "1 item", "{n} items")`; për konstante në nivel moduli përdorni `T("Text")` dhe përktheni kur shfaqet me `t(...)`.
+- Shtoni përkthimin te një skedar në `src/locales/sq/` (regjistrohet te `index.js`). Statuset e API-së janë çelësa me shkronja të vogla (`delivered`, `opted_out`…), të përkthyer nga `Badge`.
+- `npm run i18n:check` gjen çdo mungesë (përdoret edhe nga `npm run build`). `I18N_FULL=1` printon çelësat e plotë që mungojnë.
+- Data, numra dhe monedha formatohen sipas gjuhës (`sq-AL` / `en-GB`) nga `money`, `when`, `dateOnly`, `ago`.
