@@ -40,7 +40,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - Hyrja bëhet në dy hapa: fjalëkalimi jep vetëm një token 5-minutësh (jo sesion), pastaj `POST /v1/auth/login/mfa` me kodin ose një kod rikuperimi. Numëruesi i dështimeve është i përbashkët me fjalëkalimin dhe nuk zerohet me fjalëkalim të saktë (5 gabime → bllokim 15 min); një kod TOTP nuk pranohet dy herë; kodet e rikuperimit përdoren një herë.
 - Rivendosja e fjalëkalimit me email nuk anashkalon 2FA. Aktivizimi mbyll sesionet e tjera; çaktivizimi dhe kodet e reja kërkojnë fjalëkalimin dhe një kod; përdoruesi njoftohet me email.
 - Pajisje e humbur pa kode: Staff → People → "Reset 2FA" (heq 2FA, mbyll sesionet, njofton përdoruesin, hyn në audit).
-- Nuk ka ende detyrim për stafin: 2FA është zgjedhje e përdoruesit.
+- **Detyrim:** `SMS_REQUIRE_2FA=staff` (parazgjedhje; ose `all`, `none`). Një përdorues me rol të detyruar hyn, por sesioni i lejon vetëm `/v1/me` dhe `/v1/auth/*`; çdo rrugë tjetër kthen 403 `mfa_setup_required`, dhe paneli tregon një ekran të vetëm "konfiguro 2FA" (me kode rikuperimi) para se të hapet. Përdoruesit e detyruar nuk mund ta çaktivizojnë; pas "Reset 2FA" nga stafi kërkohet prapë konfigurimi. Detyrimi vlen vetëm kur `SMS_SECRETS_KEY` është vendosur (pa të 2FA s'mund të konfigurohet, që të mos mbyllet stafi jashtë). Çelësat API dhe `SMS_ADMIN_API_KEY` nuk preken: mbroji si sekrete dhe hiqe çelësin bootstrap në prodhim.
 
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.

@@ -17,7 +17,7 @@ import Accounts from "./pages/Accounts.jsx";
 import Rates from "./pages/Rates.jsx";
 import Finance from "./pages/Finance.jsx";
 import Inbox from "./pages/Inbox.jsx";
-import Account from "./pages/Account.jsx";
+import Account, { TwoFactor } from "./pages/Account.jsx";
 import Users from "./pages/Users.jsx";
 import { Accept, Login } from "./Auth.jsx";
 import Reports from "./pages/Reports.jsx";
@@ -139,6 +139,20 @@ function Shell({ me, onLogout }) {
   );
 }
 
+// Roli kërkon 2FA: para çdo gjëje tjetër përdoruesi e konfiguron këtu.
+function ForcedSetup({ me, onDone, onLogout }) {
+  return (
+    <div className="login" style={{ alignItems: "start", paddingTop: 48 }}>
+      <div style={{ width: "100%", maxWidth: 760 }}>
+        <div className="brand big" style={{ marginBottom: 16 }}>SMS<span>Platform</span></div>
+        <div className="help"><b>One more step, {me.email}.</b> Your role requires two-factor sign-in, which protects the platform if a password leaks. It takes about a minute with an authenticator app on your phone.</div>
+        <TwoFactor onEnabled={onDone} />
+        <Button onClick={onLogout}>Sign out</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [me, setMe] = useState(null);
   const [checking, setChecking] = useState(!!getKey());
@@ -159,10 +173,16 @@ export default function App() {
     if (me?.via === "password") await api.post("/v1/auth/logout").catch(() => {});
     clear(); setNotice(""); location.hash = "";
   };
+  useEffect(() => {
+    const h = () => api.get("/v1/me").then(setMe).catch(() => {}); // rolli tani kërkon 2FA
+    addEventListener("sms:mfa-setup", h);
+    return () => removeEventListener("sms:mfa-setup", h);
+  }, []);
   const signedIn = (m) => { setNotice(""); setAccept(""); setMe(m); };
   return (
     <UiProvider>
       {checking ? <div className="center muted">Loading…</div>
+        : me?.mfa_setup_required ? <ForcedSetup me={me} onLogout={logout} onDone={() => api.get("/v1/me").then(setMe)} />
         : me ? <Shell me={me} onLogout={logout} />
         : accept ? <Accept token={accept} onLogin={signedIn} />
         : <Login onLogin={signedIn} notice={notice} />}

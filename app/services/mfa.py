@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core import crypto
 from app.core.config import settings
-from app.core.security import hash_secret
+from app.core.security import hash_secret, mfa_required_for
 from app.models.users import User, UserRecoveryCode, UserToken
 from app.services import auth
 from app.services.wallet import Conflict, WalletError
@@ -153,6 +153,7 @@ def complete_login(
 def status(db: Session, u: User) -> dict:
     return {
         "enabled": u.totp_enabled_at is not None,
+        "required": mfa_required_for(u.role),
         "recovery_left": recovery_left(db, u.id) if u.totp_enabled_at else 0,
     }
 
@@ -199,6 +200,8 @@ def disable(db: Session, user_id: int, password: str, code: str, keep_session: i
     u = auth.get_user(db, user_id)
     if u.totp_enabled_at is None:
         raise Conflict("Two-factor is not on.")
+    if mfa_required_for(u.role):
+        raise Conflict("Two-factor is required for your role, so it can't be turned off.")
     _confirm(db, u, password, code)
     _clear(db, u)
     auth.revoke_all(db, u.id, except_id=keep_session)

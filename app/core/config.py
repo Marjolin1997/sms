@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     db_lock_timeout_ms: int = 5000  # mos prit pafundësisht kyçjen e një wallet-i
     db_statement_timeout_ms: int = 30000
     db_idle_tx_timeout_ms: int = 60000
+    # Kush duhet të ketë 2FA: "staff" (parazgjedhje), "all" ose "none". Vlen vetëm kur
+    # SMS_SECRETS_KEY është vendosur (pa të 2FA s'mund të konfigurohet, prandaj s'detyrohet).
+    require_2fa: str = "staff"
     admin_api_key: str = ""  # bosh = të gjitha endpoint-et admin refuzohen
 
     # Çelës HMAC për adresat në tabelat e consent-it (nuk ruhen në tekst të hapur).

@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,7 @@ class Principal:
     owner_ref: str | None = None  # i vendosur vetëm për role=client
     key_id: int | None = None
     session_id: int | None = None  # i vendosur kur hyrja është me email + fjalëkalim
+    mfa_setup_required: bool = False  # roli kërkon 2FA por përdoruesi s'e ka ende
 
     def has(self, perm: str) -> bool:
         perms = ROLE_PERMS.get(self.role, set())
@@ -97,6 +98,17 @@ def _from_key(db: Session, token: str) -> Principal:
     return Principal(f"key:{key.prefix}", key.role, key.owner_ref, key.id)
 
 
+# Sa kohë 2FA s'është konfiguruar, sesioni i lejon vetëm këto rrugë (identiteti, dalja, vetë 2FA).
+MFA_SETUP_ALLOWED = ("/v1/me", "/v1/auth/")
+
+
+def mfa_required_for(role: str) -> bool:
+    mode = settings.require_2fa
+    if not settings.secrets_key or mode == "none":
+        return False
+    return mode == "all" or (mode == "staff" and role in STAFF_ROLES)
+
+
 def _from_session(db: Session, token: str) -> Principal:
     parts = token.split("_", 2)
     if len(parts) != 3:
@@ -113,10 +125,14 @@ def _from_session(db: Session, token: str) -> Principal:
     if now - as_utc(sess.last_seen_at) > timedelta(minutes=5):
         sess.last_seen_at = now
         db.commit()
-    return Principal(f"user:{user.id}", user.role, user.owner_ref, session_id=sess.id)
+    return Principal(
+        f"user:{user.id}", user.role, user.owner_ref, session_id=sess.id,
+        mfa_setup_required=user.totp_enabled_at is None and mfa_required_for(user.role),
+    )  # fmt: skip
 
 
 def current_principal(
+    request: Request,
     authorization: str = Header(default=""),
     x_admin_key: str = Header(default=""),
     db: Session = Depends(get_db),
@@ -124,7 +140,16 @@ def current_principal(
     if authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
         if token.startswith("sess_"):
-            return _from_session(db, token)
+            p = _from_session(db, token)
+            if p.mfa_setup_required and not request.url.path.startswith(MFA_SETUP_ALLOWED):
+                raise HTTPException(
+                    403,
+                    {
+                        "code": "mfa_setup_required",
+                        "message": "Set up two-factor sign-in to continue.",
+                    },
+                )
+            return p
         return _from_key(db, token)
     # Bootstrap: vetëm për të krijuar çelësat e parë; hiqe SMS_ADMIN_API_KEY në prodhim.
     if x_admin_key and settings.admin_api_key:

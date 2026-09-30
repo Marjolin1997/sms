@@ -48,7 +48,11 @@ def test_enable_then_login_needs_code(raw_client, db):  # noqa: F811
     assert len(codes) == 10 and all(len(x) == 19 for x in codes)
     assert c.get("/v1/me", headers=hdr(tok)).json()["mfa_enabled"] is True
     assert c.get("/v1/me", headers=hdr(other)).status_code == 401  # sesionet e tjera mbyllen
-    assert c.get("/v1/auth/2fa", headers=hdr(tok)).json() == {"enabled": True, "recovery_left": 10}
+    assert c.get("/v1/auth/2fa", headers=hdr(tok)).json() == {
+        "enabled": True,
+        "required": False,
+        "recovery_left": 10,
+    }
 
     r = login(c)
     assert r.status_code == 200 and r.json()["mfa_required"] is True and "token" not in r.json()
@@ -136,7 +140,11 @@ def test_disable_regenerate_and_password_required(raw_client, db):  # noqa: F811
     off = c.post("/v1/auth/2fa/disable", json={"password": PW, "code": rc}, headers=hdr(tok))
     assert off.status_code == 204
     assert login(c).json().get("mfa_required") is None
-    assert c.get("/v1/auth/2fa", headers=hdr(tok)).json() == {"enabled": False, "recovery_left": 0}
+    assert c.get("/v1/auth/2fa", headers=hdr(tok)).json() == {
+        "enabled": False,
+        "required": False,
+        "recovery_left": 0,
+    }
 
 
 def test_password_reset_does_not_bypass_2fa(raw_client, db):  # noqa: F811
@@ -191,3 +199,76 @@ def test_setup_unavailable_without_secrets_key(raw_client, monkeypatch):  # noqa
     r = c.post("/v1/auth/2fa/setup", json={"password": PW}, headers=hdr(tok))
     assert r.status_code == 503
     pytest.importorskip("cryptography")
+
+
+# --- Detyrimi për stafin -------------------------------------------------------------------
+
+
+def staff(c, db, email="sam@example.com"):
+    tok = onboard(c, email, role="support", owner=None)["token"]
+    return tok
+
+
+def enable_for(c, db, token, email):
+    c.post("/v1/auth/2fa/setup", json={"password": PW}, headers=hdr(token))
+    db.expire_all()
+    sec = mfa._secret(db.query(User).filter_by(email=email).one())
+    r = c.post("/v1/auth/2fa/enable", json={"code": code_now(sec)}, headers=hdr(token))
+    assert r.status_code == 200, r.text
+    return sec
+
+
+def test_staff_must_set_up_2fa_before_anything_else(raw_client, db):  # noqa: F811
+    c = raw_client
+    tok = staff(c, db)
+    me = c.get("/v1/me", headers=hdr(tok)).json()
+    assert me["mfa_setup_required"] is True and me["mfa_enabled"] is False
+    blocked = c.get("/v1/admin/stats", headers=hdr(tok))
+    assert blocked.status_code == 403 and blocked.json()["detail"]["code"] == "mfa_setup_required"
+    assert c.get("/v1/auth/2fa", headers=hdr(tok)).json()["required"] is True  # rrugët e 2FA hapen
+    assert c.get("/v1/auth/sessions", headers=hdr(tok)).status_code == 200
+    enable_for(c, db, tok, "sam@example.com")
+    assert c.get("/v1/admin/stats", headers=hdr(tok)).status_code == 200
+    assert c.get("/v1/me", headers=hdr(tok)).json()["mfa_setup_required"] is False
+
+
+def test_staff_cannot_turn_2fa_off_but_client_can(raw_client, db):  # noqa: F811
+    c = raw_client
+    tok = staff(c, db)
+    sec = enable_for(c, db, tok, "sam@example.com")
+    step = mfa.totp_at(sec, int(time.time() // 30) + 1)
+    r = c.post("/v1/auth/2fa/disable", json={"password": PW, "code": step}, headers=hdr(tok))
+    assert r.status_code == 409 and "required" in r.json()["detail"]["message"]
+    assert c.get("/v1/auth/2fa", headers=hdr(tok)).json()["enabled"] is True
+
+
+def test_admin_reset_puts_staff_back_into_setup(raw_client, db):  # noqa: F811
+    c = raw_client
+    tok = staff(c, db)
+    enable_for(c, db, tok, "sam@example.com")
+    uid = db.query(User).filter_by(email="sam@example.com").one().id
+    assert c.post(f"/v1/admin/users/{uid}/reset-2fa", headers=BOOT).status_code == 200
+    again = login(c, "sam@example.com").json()["token"]
+    assert c.get("/v1/admin/stats", headers=hdr(again)).status_code == 403
+
+
+def test_enforcement_modes_and_keys(raw_client, db, monkeypatch):  # noqa: F811
+    from app.core.config import settings
+
+    c = raw_client
+    tok = staff(c, db)
+    cl = onboard(c)["token"]
+    assert c.get("/v1/me", headers=hdr(cl)).json()["mfa_setup_required"] is False  # klient
+    key = c.post("/v1/admin/api-keys", json={"name": "k", "role": "support"}, headers=BOOT).json()[
+        "key"
+    ]
+    assert c.get("/v1/admin/stats", headers=hdr(key)).status_code == 200  # çelësat API s'preken
+    assert c.get("/v1/admin/stats", headers=BOOT).status_code == 200
+
+    monkeypatch.setattr(settings, "require_2fa", "none")
+    assert c.get("/v1/admin/stats", headers=hdr(tok)).status_code == 200
+    monkeypatch.setattr(settings, "require_2fa", "all")
+    assert c.get("/v1/me", headers=hdr(cl)).json()["mfa_setup_required"] is True
+    monkeypatch.setattr(settings, "require_2fa", "staff")
+    monkeypatch.setattr(settings, "secrets_key", "")  # pa çelës s'mund të konfigurohet: s'detyrohet
+    assert c.get("/v1/admin/stats", headers=hdr(tok)).status_code == 200

@@ -62,6 +62,7 @@ async function request(method, path, { params = {}, body, headers = {} } = {}) {
   if (!res.ok) {
     const d = data && data.detail;
     const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("; ") : `Request failed (HTTP ${res.status})`;
+    if (d && d.code === "mfa_setup_required") window.dispatchEvent(new Event("sms:mfa-setup"));
     throw new ApiError(res.status, d && d.code, msg);
   }
   return data;

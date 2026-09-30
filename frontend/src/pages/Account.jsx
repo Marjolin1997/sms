@@ -75,7 +75,7 @@ function RecoveryCodes({ codes, onDone }) {
   );
 }
 
-function TwoFactor() {
+export function TwoFactor({ onEnabled }) {
   const { confirm } = useUi();
   const st = useLoad(() => api.get("/v1/auth/2fa"), []);
   const [step, setStep] = useState("idle"); // idle | password | scan | disable | regen
@@ -120,7 +120,7 @@ function TwoFactor() {
 
   return (
     <>
-      {codes && <RecoveryCodes codes={codes} onDone={() => setCodes(null)} />}
+      {codes && <RecoveryCodes codes={codes} onDone={() => { setCodes(null); onEnabled?.(); }} />}
       <Card title="Two-factor sign-in" subtitle="A second step at sign-in, so a stolen password isn't enough.">
         <ErrorBox error={st.error} retry={st.reload} />
         {st.data && step === "idle" && (
@@ -129,10 +129,10 @@ function TwoFactor() {
               <span><Badge>on</Badge> <small className="muted">{st.data.recovery_left} recovery code{st.data.recovery_left === 1 ? "" : "s"} left{st.data.recovery_left <= 2 ? ". Make new ones soon." : ""}</small></span>
               <span style={{ flex: 1 }} />
               <Button onClick={() => setStep("regen")}>New recovery codes</Button>
-              <Button variant="danger" onClick={() => setStep("disable")}>Turn off</Button>
+              {st.data.required ? <small className="muted">Required for your role</small> : <Button variant="danger" onClick={() => setStep("disable")}>Turn off</Button>}
             </div>
           ) : (
-            <div className="row wrap"><span className="muted">Off. We recommend turning it on, especially for staff.</span><span style={{ flex: 1 }} /><Button variant="primary" onClick={() => setStep("password")}>Set up</Button></div>
+            <div className="row wrap"><span className="muted">{st.data.required ? "Required for your role. Set it up to continue." : "Off. We recommend turning it on, especially for staff."}</span><span style={{ flex: 1 }} /><Button variant="primary" onClick={() => setStep("password")}>Set up</Button></div>
           )
         )}
         {step === "password" && (
