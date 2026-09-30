@@ -12,6 +12,7 @@ from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, AuditLog, Switch
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageStatus, Route
 from app.services import apikeys, switches
+from app.services import auth as auth_svc
 from app.services import messages as msg_svc
 from app.services.audit import audit
 from app.services.wallet import WalletError
@@ -81,6 +82,76 @@ def revoke_key(
         return k
 
     return _key_out(_run(db, go))
+
+
+# --- Përdorues (login me email) ---------------------------------------------------
+
+
+class UserIn(BaseModel):
+    email: str = Field(max_length=254)
+    role: str
+    owner_ref: str | None = Field(default=None, max_length=64)
+
+
+def _user_out(u, token: str | None = None) -> dict:
+    out = {
+        "id": u.id, "email": u.email, "role": u.role, "owner_ref": u.owner_ref,
+        "status": u.status.value, "invited": u.password_hash is None,
+        "locked": auth_svc.is_locked(u), "last_login_at": u.last_login_at,
+        "created_at": u.created_at,
+    }  # fmt: skip
+    if token:
+        out["invite_token"] = token  # shfaqet vetëm një herë
+    return out
+
+
+@router.post("/users", status_code=201)
+def create_user(
+    body: UserIn, db: Session = Depends(get_db), p: Principal = Depends(require("keys:manage"))
+):
+    def go():
+        u, token = auth_svc.create_user(db, body.email, body.role, body.owner_ref, p.actor)
+        audit(db, p, "user.create", "user", u.id, {"role": u.role, "owner": u.owner_ref})
+        return u, token
+
+    u, token = _run(db, go)
+    return _user_out(u, token)
+
+
+@router.get("/users")
+def list_users(db: Session = Depends(get_db), _: Principal = Depends(require("keys:manage"))):
+    return [_user_out(u) for u in auth_svc.list_users(db)]
+
+
+@router.post("/users/{user_id}/reset")
+def reset_user(
+    user_id: int, db: Session = Depends(get_db), p: Principal = Depends(require("keys:manage"))
+):
+    def go():
+        token = auth_svc.reset_token(db, user_id)
+        audit(db, p, "user.reset_link", "user", user_id)
+        return token
+
+    token = _run(db, go)
+    return {"invite_token": token}
+
+
+@router.post("/users/{user_id}/{action}")
+def user_status(
+    user_id: int,
+    action: str,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("keys:manage")),
+):
+    if action not in ("enable", "disable"):
+        raise HTTPException(404, {"code": "not_found", "message": "unknown action"})
+
+    def go():
+        u = auth_svc.set_status(db, user_id, action == "enable")
+        audit(db, p, f"user.{action}", "user", u.id)
+        return u
+
+    return _user_out(_run(db, go))
 
 
 # --- Routes dhe plane ---------------------------------------------------------

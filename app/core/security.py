@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, KeyStatus
+from app.models.users import User, UserSession, UserStatus
 
 ROLE_PERMS: dict[str, set[str]] = {
     "superadmin": {"*"},
@@ -46,6 +47,7 @@ class Principal:
     role: str
     owner_ref: str | None = None  # i vendosur vetëm për role=client
     key_id: int | None = None
+    session_id: int | None = None  # i vendosur kur hyrja është me email + fjalëkalim
 
     def has(self, perm: str) -> bool:
         perms = ROLE_PERMS.get(self.role, set())
@@ -95,13 +97,35 @@ def _from_key(db: Session, token: str) -> Principal:
     return Principal(f"key:{key.prefix}", key.role, key.owner_ref, key.id)
 
 
+def _from_session(db: Session, token: str) -> Principal:
+    parts = token.split("_", 2)
+    if len(parts) != 3:
+        raise _unauthorized()
+    sess = db.scalar(select(UserSession).where(UserSession.prefix == parts[1]))
+    expected = sess.token_hash if sess else hash_secret("")
+    ok = hmac.compare_digest(hash_secret(parts[2]), expected)
+    now = datetime.now(UTC)
+    if not (sess and ok) or sess.revoked_at is not None or as_utc(sess.expires_at) <= now:
+        raise _unauthorized()
+    user = db.get(User, sess.user_id)
+    if user is None or user.status != UserStatus.ACTIVE:
+        raise _unauthorized()
+    if now - as_utc(sess.last_seen_at) > timedelta(minutes=5):
+        sess.last_seen_at = now
+        db.commit()
+    return Principal(f"user:{user.id}", user.role, user.owner_ref, session_id=sess.id)
+
+
 def current_principal(
     authorization: str = Header(default=""),
     x_admin_key: str = Header(default=""),
     db: Session = Depends(get_db),
 ) -> Principal:
     if authorization.lower().startswith("bearer "):
-        return _from_key(db, authorization[7:].strip())
+        token = authorization[7:].strip()
+        if token.startswith("sess_"):
+            return _from_session(db, token)
+        return _from_key(db, token)
     # Bootstrap: vetëm për të krijuar çelësat e parë; hiqe SMS_ADMIN_API_KEY në prodhim.
     if x_admin_key and settings.admin_api_key:
         if hmac.compare_digest(x_admin_key, settings.admin_api_key):

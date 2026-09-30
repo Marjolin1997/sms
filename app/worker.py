@@ -11,7 +11,7 @@ from datetime import timedelta
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.providers import register_configured
-from app.services import billing, emails, events, inbox, payments, webhooks
+from app.services import auth, billing, emails, events, inbox, payments, webhooks
 from app.services.campaigns import run_due
 from app.services.messages import expire_stale, process_one
 
@@ -74,7 +74,7 @@ def purge() -> None:
             db.commit()
             if n:
                 log.info("purged %d old events", n)
-            k = inbox.purge_old(db, settings.inbox_retention_days)
+            k = inbox.purge_old(db, settings.inbox_retention_days) + auth.purge_expired(db)
             db.commit()
             if k:
                 log.info("purged %d old inbound messages", k)

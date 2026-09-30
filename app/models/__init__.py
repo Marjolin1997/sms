@@ -22,4 +22,5 @@ from app.models.inbox import InboundMessage  # noqa: F401
 from app.models.messaging import SenderId, Template, TemplateVersion  # noqa: F401
 from app.models.rates import Rate, RateCard, RateCardVersion  # noqa: F401
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageEvent, Route  # noqa: F401
+from app.models.users import User, UserSession, UserToken  # noqa: F401
 from app.models.wallet import Hold, LedgerEntry, Topup, Wallet  # noqa: F401

@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api import (
     admin,
     analytics,
+    auth,
     billing,
     campaigns,
     console,
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(console.router)
     app.include_router(analytics.router)
     app.include_router(inbox.router)
+    app.include_router(auth.router)
 
     @app.get("/healthz")
     def healthz():

@@ -17,12 +17,17 @@ import Accounts from "./pages/Accounts.jsx";
 import Rates from "./pages/Rates.jsx";
 import Finance from "./pages/Finance.jsx";
 import Inbox from "./pages/Inbox.jsx";
+import Account from "./pages/Account.jsx";
+import Users from "./pages/Users.jsx";
+import { Accept, Login } from "./Auth.jsx";
 import Reports from "./pages/Reports.jsx";
 import Admin from "./pages/Admin.jsx";
 
 // perm: string ose "a|b" (mjafton një); global: faqe që s'kërkon llogari të zgjedhur (staf)
 const NAV = [
-  { group: "", items: [{ id: "dashboard", label: "Overview", icon: "◧", perm: null, el: Dashboard, desc: "Where things stand right now." }] },
+  { group: "", items: [{ id: "dashboard", label: "Overview", icon: "◧", perm: null, el: Dashboard, desc: "Where things stand right now." },
+    { id: "account", label: "My account", icon: "☺", perm: null, el: Account, global: true, desc: "Your password and the devices you're signed in on." },
+  ] },
   { group: "Messaging", items: [
     { id: "send", label: "Send", icon: "➤", perm: "messages:send", el: Send, desc: "Send an SMS or an email. You see the price before you send." },
     { id: "inbox", label: "Inbox", icon: "✆", perm: "messages:read", el: Inbox, desc: "Replies from the people you message. Read them and answer." },
@@ -50,40 +55,13 @@ const NAV = [
     { id: "accounts", label: "Accounts", icon: "☖", perm: "monitor:read", el: Accounts, global: true, desc: "Every customer account at a glance." },
     { id: "rates", label: "Rates & routes", icon: "%", perm: "rates:read", el: Rates, global: true, desc: "Price lists, effective dates and which provider carries which country." },
     { id: "finance", label: "Finance", icon: "⊕", perm: "topup:confirm", el: Finance, global: true, desc: "Confirm top-ups and make audited balance corrections." },
+    { id: "users", label: "People", icon: "☻", perm: "keys:manage", el: Users, global: true, desc: "Invite people, reset passwords and switch access on or off." },
     { id: "admin", label: "Admin", icon: "⚙", perm: "keys:manage", el: Admin, global: true, desc: "Kill switches and the audit log." },
   ] },
 ];
 
 const can = (me, perm) =>
   !perm || me.permissions.includes("*") || perm.split("|").some((p) => me.permissions.includes(p));
-
-function Login({ onLogin }) {
-  const [key, setK] = useState("");
-  const [error, setError] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    setKey(key.trim());
-    try { onLogin(await api.get("/v1/me")); }
-    catch (err) { setKey(""); setError(err.status === 401 ? new Error("That API key isn't valid. Check for a missing character at the end.") : err); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div className="login">
-      <form className="card login-card" onSubmit={submit}>
-        <div className="brand big">SMS<span>Platform</span></div>
-        <p className="muted">Sign in with your API key. Don't have one? Ask your account manager.</p>
-        <Field label="API key">
-          <input type="password" autoFocus autoComplete="off" placeholder="sms_xxxxxxxx_…" value={key} onChange={(e) => setK(e.target.value)} />
-        </Field>
-        <ErrorBox error={error} />
-        <Button variant="primary" busy={busy} disabled={!key.trim()}>Sign in</Button>
-        <small className="muted">The key stays in this browser tab only and is sent securely with each request.</small>
-      </form>
-    </div>
-  );
-}
 
 function AccountPicker({ owner, setOwner: set, canList }) {
   const accounts = useLoad(() => (canList ? api.get("/v1/admin/accounts") : Promise.resolve([])), [canList]);
@@ -140,7 +118,7 @@ function Shell({ me, onLogout }) {
           ))}
         </nav>
         <div className="side-f">
-          <div className="who"><b>{me.owner_ref || "Staff"}</b><small>{me.role} · {me.actor}</small></div>
+          <div className="who"><b>{me.email || me.owner_ref || "Staff"}</b><small>{me.role}{me.owner_ref && me.email ? ` · ${me.owner_ref}` : me.email ? "" : ` · ${me.actor}`}</small></div>
           <Button onClick={onLogout}>Sign out</Button>
         </div>
       </aside>
@@ -164,14 +142,30 @@ function Shell({ me, onLogout }) {
 export default function App() {
   const [me, setMe] = useState(null);
   const [checking, setChecking] = useState(!!getKey());
+  const [notice, setNotice] = useState("");
+  const [accept, setAccept] = useState(() => /^#accept\/(.+)$/.exec(location.hash)?.[1] || "");
+  const clear = () => { setKey(""); sessionStorage.removeItem("sms_owner"); setMe(null); };
   useEffect(() => {
-    if (!getKey()) return;
+    if (!getKey() || accept) { setChecking(false); return; }
     api.get("/v1/me").then(setMe).catch(() => setKey("")).finally(() => setChecking(false));
+  }, []); // eslint-disable-line
+  // Sesioni skadoi ose u mbyll diku tjetër: kthehu te hyrja me një shpjegim.
+  useEffect(() => {
+    const h = () => { clear(); setNotice("Your session ended. Please sign in again."); };
+    addEventListener("sms:unauthorized", h);
+    return () => removeEventListener("sms:unauthorized", h);
   }, []);
-  const logout = () => { setKey(""); sessionStorage.removeItem("sms_owner"); setMe(null); location.hash = ""; };
+  const logout = async () => {
+    if (me?.via === "password") await api.post("/v1/auth/logout").catch(() => {});
+    clear(); setNotice(""); location.hash = "";
+  };
+  const signedIn = (m) => { setNotice(""); setAccept(""); setMe(m); };
   return (
     <UiProvider>
-      {checking ? <div className="center muted">Loading…</div> : !me ? <Login onLogin={setMe} /> : <Shell me={me} onLogout={logout} />}
+      {checking ? <div className="center muted">Loading…</div>
+        : me ? <Shell me={me} onLogout={logout} />
+        : accept ? <Accept token={accept} onLogin={signedIn} />
+        : <Login onLogin={signedIn} notice={notice} />}
     </UiProvider>
   );
 }

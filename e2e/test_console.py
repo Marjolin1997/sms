@@ -39,6 +39,7 @@ def login(page: Page, key: str):
     page.goto(BASE)
     page.evaluate("sessionStorage.clear()")
     page.reload()
+    page.click("text=Use an API key instead")
     page.fill("input[type=password]", key)
     page.click("button:has-text('Sign in')")
     page.wait_for_selector("nav")
@@ -65,6 +66,7 @@ def client_flow(b):
     p.on("console", lambda m: m.type == "error" and errors.append(f"client console: {m.text}"))
     # ---- hyrje e gabuar, pastaj e saktë
     p.goto(BASE)
+    p.click("text=Use an API key instead")
     p.fill("input[type=password]", "sms_bad_key")
     p.click("button:has-text('Sign in')")
     p.wait_for_selector(".alert.bad")

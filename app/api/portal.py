@@ -20,6 +20,7 @@ from app.models.events import (
     WebhookEndpoint,
 )
 from app.models.sending import Message
+from app.models.users import User
 from app.models.wallet import Wallet
 from app.services import apikeys, webhooks
 from app.services import wallet as wallets
@@ -41,9 +42,11 @@ def _run(db: Session, fn):
 
 
 @router.get("/me")
-def me(p: Principal = Depends(current_principal)):
+def me(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
     """Identiteti i thirrësit: përdoret nga paneli për të treguar vetëm çka lejohet."""
+    user = db.get(User, int(p.actor.split(":")[1])) if p.session_id else None
     return {"actor": p.actor, "role": p.role, "owner_ref": p.owner_ref,
+            "email": user.email if user else None, "via": "password" if user else "api_key",
             "permissions": sorted(ROLE_PERMS.get(p.role, set()))}  # fmt: skip
 
 

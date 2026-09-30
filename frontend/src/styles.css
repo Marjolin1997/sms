@@ -256,3 +256,9 @@ textarea { resize: vertical; }
   .inbox-back { display: inline-flex; }
   .bubble { max-width: 90%; }
 }
+
+/* Login */
+.pw { display: flex; align-items: center; gap: 8px; }
+.pw input { flex: 1; }
+.good-t { color: var(--good); }
+.login-card .link, .pw .link { color: var(--brand); padding: 0; margin: 0; font-weight: 500; }

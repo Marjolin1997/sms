@@ -28,6 +28,13 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 11 Event log + webhooks për klientët (SSRF, retry, nënshkrim), çelësa API vetë-shërbyes, pasqyrë përdorimi (API; pa UI) | ✅ |
 | 12 Billing: plane, abonime, fatura të pandryshueshme me TVSH, pagesë nga wallet, pagesa online (adapter + webhook) | ✅ |
 
+## Hyrja me email dhe fjalëkalim
+- Përdoruesit krijohen nga stafi (Staff → People, ose `POST /v1/admin/users` me `keys:manage`, ose `python -m scripts.create_user email role [--owner acme]` për të parin). Sistemi jep një **lidhje ftese** (72 orë, përdoret një herë, `#accept/<token>`); personi zgjedh vetë fjalëkalimin, kështu që stafi nuk e sheh kurrë.
+- Fjalëkalimet: scrypt me kripë; minimumi 10 karaktere, refuzohen të zakonshmit dhe ata që përmbajnë emrin e email-it. Pas 5 dështimeve llogaria bllokohet 15 minuta; mesazhi është i njëjtë për email të panjohur, fjalëkalim të gabuar dhe llogari të bllokuar (pa zbulim të email-eve).
+- `POST /v1/auth/login` kthen një token sesioni `sess_…` (12 orë; 30 ditë me "më mbaj të hyrë"), që përdoret si `Authorization: Bearer` njësoj si çelësat API dhe ruhet vetëm si SHA-256. Ndryshimi i fjalëkalimit, rivendosja dhe çaktivizimi mbyllin sesionet e tjera. Faqja "My account": ndrysho fjalëkalimin, shih e mbyll pajisjet.
+- Rivendosja e fjalëkalimit bëhet nga stafi (lidhje e re). Vetë-shërbimi me email dhe 2FA nuk janë ende.
+- Çelësat API punojnë si më parë (paneli: "Use an API key instead").
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

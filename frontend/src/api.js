@@ -1,8 +1,13 @@
 // Klient i vogël API. Çelësi ruhet në sessionStorage (fshihet kur mbyllet skeda).
 const STORE = "sms_api_key";
 
-export const getKey = () => sessionStorage.getItem(STORE) || "";
-export const setKey = (k) => (k ? sessionStorage.setItem(STORE, k) : sessionStorage.removeItem(STORE));
+// "Më mbaj të hyrë" ruan tokenin në localStorage; përndryshe vetëm për këtë skedë.
+export const getKey = () => sessionStorage.getItem(STORE) || localStorage.getItem(STORE) || "";
+export function setKey(k, remember = false) {
+  sessionStorage.removeItem(STORE);
+  localStorage.removeItem(STORE);
+  if (k) (remember ? localStorage : sessionStorage).setItem(STORE, k);
+}
 
 // Mesazhe në gjuhë të thjeshtë për kodet e gabimit që i shohin përdoruesit.
 const FRIENDLY = {
@@ -18,6 +23,7 @@ const FRIENDLY = {
   template_not_usable: "That template has no approved version yet.",
   sender_domain_not_verified: "The from address must be on a domain you have verified under Email domains.",
   unauthorized: "Your session is no longer valid. Please sign in again.",
+  session_required: "This needs a personal sign-in with email and password, not an API key.",
   forbidden: "Your role doesn't allow this action.",
 };
 
@@ -52,6 +58,7 @@ async function request(method, path, { params = {}, body, headers = {} } = {}) {
   }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
+  if (res.status === 401 && getKey() && !path.startsWith("/v1/auth/")) window.dispatchEvent(new Event("sms:unauthorized"));
   if (!res.ok) {
     const d = data && data.detail;
     const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("; ") : `Request failed (HTTP ${res.status})`;
