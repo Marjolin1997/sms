@@ -71,6 +71,14 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **Postman:** `GET /v1/postman.json` (collection v2.1 e gjeneruar nga skema, me `{{base_url}}`, `{{api_key}}`, trupa shembull dhe `Idempotency-Key: {{$guid}}`).
 - **Konsola:** faqja “Udhëzues për zhvilluesit” me shembuj për kopjim (në URL-në reale), verifikim webhook-esh dhe shkarkim të OpenAPI/Postman.
 
+## Testet e frontend-it (Faza 19)
+`cd frontend && npm test` (Vitest + Testing Library + jsdom, ~5 s; `npm run test:watch` gjatë zhvillimit). 45 teste:
+- **i18n:** `t()`/`tn()`, ndërrimi Shqip↔English i gjithë pemës dhe ruajtja e zgjedhjes, fjalori pa boshllëqe/`{variabla}` të gabuara, dhe skripti `i18n:check` si test.
+- **API klient:** çelësi Bearer dhe llogaria e zgjedhur, `Idempotency-Key`, gabime të thjeshta për përdoruesin (kodet + shabllonet e mesazheve), gabime rrjeti, rrjedha e **kodit 2FA** (kërkim → riprovë me `X-TOTP` → rikërkim pas kodit të gabuar).
+- **Komponentë:** `smsInfo` (GSM-7/Unicode, segmentet 160/153 dhe 70/67), formatuesit, `Badge`, `Table`, dialogu i konfirmimit (Esc, arsye e detyrueshme), `parseContacts`.
+- **Faqe:** hyrja (çelës i pavlefshëm, sesioni ruhet/hiqet), menytë sipas rolit (klienti pa grupin Staff, stafi me Staff së pari), paralajmërimi 2FA, dhe **Send SMS** (numër i vlefshëm, çmim live, `Idempotency-Key`, kalimi në Unicode).
+- Ekzekutohet në CI para `npm run build`. E2E me shfletues i vërtetë mbetet te `e2e/test_console.py`.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

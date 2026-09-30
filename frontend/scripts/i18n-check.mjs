@@ -9,7 +9,7 @@ const files = [];
 (function walk(d) {
   for (const f of readdirSync(d)) {
     const p = join(d, f);
-    if (statSync(p).isDirectory()) { if (f !== "locales") walk(p); }
+    if (statSync(p).isDirectory()) { if (!["locales", "__tests__", "test"].includes(f)) walk(p); }
     else if (/\.(jsx?|mjs)$/.test(f)) files.push(p);
   }
 })(SRC);
