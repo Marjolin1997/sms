@@ -65,6 +65,12 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **GDPR:** fshirja e kontaktit zëvendëson tekstin/numrin e inbox-it; eksporti i kontaktit (`/v1/contacts/{id}/export`) përfshin `inbound_sms`.
 - **Konsola:** faqja “Kutia hyrëse” (lista, kërkim, të palexuara me badge në meny, “Përgjigju” hap Dërgo me numrin e plotësuar) dhe skeda “Fjalët kyçe”.
 
+## Dokumentimi i API-së (Faza 18)
+- **`docs/API.md`**: udhëzuesi për zhvilluesit (autentikim, gabime, idempotencë, SMS/email me shembuj curl/PHP-Laravel/JS/Python, webhook-e me verifikim nënshkrimi në PHP/Node/Python, inbox, pëlqim, fushata, GDPR, raporte).
+- **OpenAPI i mbrojtur:** `GET /v1/openapi.json` (vetëm me çelës API; `/docs` dhe `/openapi.json` publikë janë të çaktivizuar). Filtrohet sipas rolit: klientët shohin vetëm API-n e tyre, stafi edhe administrimin dhe callback-et e provider-ave. Etiketa sipas fushës, përmbledhje unike, `BearerAuth`, pa shënime të brendshme.
+- **Postman:** `GET /v1/postman.json` (collection v2.1 e gjeneruar nga skema, me `{{base_url}}`, `{{api_key}}`, trupa shembull dhe `Idempotency-Key: {{$guid}}`).
+- **Konsola:** faqja “Udhëzues për zhvilluesit” me shembuj për kopjim (në URL-në reale), verifikim webhook-esh dhe shkarkim të OpenAPI/Postman.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

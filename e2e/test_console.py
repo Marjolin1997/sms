@@ -267,12 +267,25 @@ def client_flow(b):
     with p.expect_download() as dl2:
         p.click("button:has-text('Export SMS (CSV)')")
     check(dl2.value.suggested_filename.startswith("messages-"), "messages CSV downloads")
+    # udhëzues zhvilluesi: shembuj + shkarkim OpenAPI
+    go(p, "developers", 900)
+    check(
+        has("Idempotency-Key", p.inner_text("main")) and has("/v1/messages", p.inner_text("main")),
+        "developer examples",
+    )
+    p.click("[role=tab]:has-text('Python')")
+    check(has("httpx.post", p.inner_text("main")), "language tab switches the example")
+    with p.expect_download() as dl3:
+        p.click("button:has-text('Download OpenAPI')")
+    check(dl3.value.suggested_filename == "openapi.json", "OpenAPI downloads")
     # inbox: SMS hyrës, fjalë kyçe
     go(p, "inbox", 1200)
     check(has("kur mbërrin porosia", p.inner_text("main")), "inbound messages listed")
-    check(p.locator("nav .count").count() == 1, "unread badge in the menu")
-    p.click("button:has-text('Mark all as read')")
-    toast(p, "All marked as read")
+    mark = p.locator("button:has-text('Mark all as read')")
+    if mark.is_enabled():  # prej seed-it të freskët; në ekzekutimet e tjera është lexuar tashmë
+        check(p.locator("nav .count").count() == 1, "unread badge in the menu")
+        mark.click()
+        toast(p, "All marked as read")
     p.click("[role=tab]:has-text('Keywords')")
     p.fill("input[placeholder='HELP']", f"promo{UNIQ}")
     p.click("button:has-text('Save keyword')")

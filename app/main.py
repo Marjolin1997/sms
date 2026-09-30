@@ -82,7 +82,9 @@ class SecurityMiddleware:
 def create_app() -> FastAPI:
     settings.validate_production()
     register_configured()
-    app = FastAPI(title="SMS Platform", version="0.1.0", docs_url=None, redoc_url=None)
+    app = FastAPI(
+        title="SMS Platform", version="1.0", docs_url=None, redoc_url=None, openapi_url=None
+    )
     app.add_middleware(SecurityMiddleware)
     app.include_router(wallets.router)
     app.include_router(rates.router)
@@ -99,6 +101,21 @@ def create_app() -> FastAPI:
     app.include_router(console.router)
     app.include_router(reports.router)
     app.include_router(inbox.router)
+
+    from fastapi import Depends
+
+    from app.core import openapi as oa
+    from app.core.security import STAFF_ROLES, Principal, current_principal
+
+    @app.get("/v1/openapi.json", tags=["Account"], include_in_schema=False)
+    def openapi_json(p: Principal = Depends(current_principal)):
+        """Skema OpenAPI: vetëm me çelës API; klientët nuk shohin pjesën e stafit."""
+        return oa.for_role(oa.build(app), p.role in STAFF_ROLES)
+
+    @app.get("/v1/postman.json", include_in_schema=False)
+    def postman_json(p: Principal = Depends(current_principal)):
+        """Postman collection v2.1 e gjeneruar nga skema (variablat base_url dhe api_key)."""
+        return oa.postman(oa.for_role(oa.build(app), p.role in STAFF_ROLES))
 
     @app.get("/healthz")
     def healthz():

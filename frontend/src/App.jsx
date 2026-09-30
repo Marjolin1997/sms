@@ -21,6 +21,7 @@ import Admin from "./pages/Admin.jsx";
 import Security from "./pages/Security.jsx";
 import Reports from "./pages/Reports.jsx";
 import Inbox from "./pages/Inbox.jsx";
+import Developers from "./pages/Developers.jsx";
 
 // perm: string ose "a|b" (mjafton një); global: faqe që s'kërkon llogari të zgjedhur (staf)
 const NAV = [
@@ -45,6 +46,7 @@ const NAV = [
     { id: "billing", label: T("Billing"), icon: "€", perm: "billing:read", el: Billing, desc: T("Your plan, invoices and payments.") },
   ] },
   { group: T("Developers"), items: [
+    { id: "developers", label: T("Developer guide"), icon: "‹›", perm: "keys:self", el: Developers, global: true, desc: T("Copy-paste examples, webhook verification and the API reference.") },
     { id: "keys", label: T("API keys"), icon: "⚿", perm: "keys:self|keys:manage", el: Keys, global: true, desc: T("Keys let your software talk to the platform.") },
   ] },
   { group: T("Staff"), items: [

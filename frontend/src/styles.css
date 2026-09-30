@@ -222,3 +222,9 @@ textarea { resize: vertical; }
 .langsw button { border: 0; background: transparent; color: var(--muted); padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 .langsw button.on { background: var(--brand); color: var(--brand-ink); }
 .langsw button:focus-visible { outline: 2px solid var(--brand, #4f46e5); outline-offset: -2px; }
+
+/* Shembuj kodi */
+.codeblock { position: relative; margin: 12px 0; }
+.codeblock pre { margin: 0; padding: 14px 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
+.codeblock pre code { background: none; padding: 0; white-space: pre; }
+.codeblock .btn { position: absolute; top: 8px; right: 8px; }
