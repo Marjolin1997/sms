@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     webhook_allow_http: bool = False  # vetëm dev; prodhim = vetëm https
     webhook_timeout: float = 10.0
     event_retention_days: int = 30
+    inbox_retention_days: int = 365
 
     # Faturim
     invoice_due_days: int = 14

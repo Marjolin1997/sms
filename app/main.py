@@ -8,6 +8,7 @@ from app.api import (
     console,
     contacts,
     email,
+    inbox,
     messages,
     messaging,
     portal,
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(billing.router)
     app.include_router(console.router)
     app.include_router(analytics.router)
+    app.include_router(inbox.router)
 
     @app.get("/healthz")
     def healthz():

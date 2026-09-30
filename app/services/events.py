@@ -14,7 +14,7 @@ from app.models.events import (
 )
 
 KNOWN_TYPES = {
-    "message.sent", "message.delivered", "message.failed",
+    "message.sent", "message.delivered", "message.failed", "message.received",
     "email.sent", "email.delivered", "email.bounced", "email.complained", "email.failed",
     "campaign.running", "campaign.paused", "campaign.completed", "campaign.cancelled",
     "consent.opted_out", "consent.opted_in", "webhook.ping",

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.sending import DlrReceipt
 from app.services import consent as consent_svc
+from app.services import inbox as inbox_svc
 from app.services import messages as svc
 from app.services import sender_ids
 from app.services.wallet import Conflict, NotFound
@@ -76,16 +77,21 @@ class InboundIn(BaseModel):
     to: str = Field(min_length=3, max_length=20)  # numri ynë që mori mesazhin
     from_: str = Field(alias="from", min_length=3, max_length=20)
     text: str = Field(max_length=1600)
+    id: str | None = Field(default=None, max_length=128)  # id e provider-it, për idempotencë
 
 
-def _handle_inbound(inb: InboundIn) -> str:
+def _handle_inbound(provider: str, inb: InboundIn) -> str:
     with SessionLocal() as db:
         owners = sender_ids.owners_of_number(db, inb.to)
         if len(owners) != 1:
             return "unrouted"  # asnjë ose shumë pronarë: nuk hamendësojmë kë të çregjistrojmë
         try:
-            action = consent_svc.apply_inbound_keyword(db, next(iter(owners)), inb.from_, inb.text)
+            msg, action = inbox_svc.record_inbound(
+                db, next(iter(owners)), provider, inb.to, inb.from_, inb.text, inb.id
+            )
             db.commit()
+            if msg is None:
+                return "duplicate"
         except consent_svc.InvalidAddress:
             db.rollback()
             return "invalid_number"
@@ -105,4 +111,4 @@ async def inbound_webhook(
         inb = InboundIn.model_validate(json.loads(raw))
     except (ValueError, ValidationError) as e:
         raise HTTPException(422, "invalid inbound payload") from e
-    return {"outcome": await run_in_threadpool(_handle_inbound, inb)}
+    return {"outcome": await run_in_threadpool(_handle_inbound, provider, inb)}

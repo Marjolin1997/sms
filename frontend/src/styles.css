@@ -229,3 +229,30 @@ textarea { resize: vertical; }
 .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 .stat-s .good { color: var(--good); }
 .stat-s .bad { color: var(--bad); }
+
+/* Inbox */
+.inbox { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px; align-items: start; }
+.inbox .card { margin-bottom: 0; }
+.threads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 65vh; overflow-y: auto; }
+.thread { position: relative; width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 44px 10px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.thread:hover { background: var(--bg); }
+.thread.on { background: var(--brand-soft); border-color: var(--brand); }
+.thread.unread .thread-top b, .thread.unread .thread-prev { font-weight: 700; color: var(--ink); }
+.thread-top { display: flex; justify-content: space-between; gap: 8px; }
+.thread-prev { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread .count { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
+.count { background: var(--brand); color: var(--brand-ink); border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 7px; min-width: 20px; text-align: center; }
+.nav-count { margin-left: auto; }
+.bubbles { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; min-height: 200px; overflow-y: auto; padding: 4px 2px 8px; }
+.bubble { max-width: 78%; padding: 8px 12px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); overflow-wrap: anywhere; white-space: pre-wrap; }
+.bubble.out { align-self: flex-end; background: var(--brand-soft); border-color: var(--brand); }
+.bubble small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; white-space: normal; }
+.reply { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.reply textarea { width: 100%; resize: vertical; }
+.inbox-back { display: none; }
+@media (max-width: 800px) {
+  .inbox { grid-template-columns: 1fr; }
+  .inbox.has-conv .inbox-list, .inbox:not(.has-conv) .inbox-placeholder { display: none; }
+  .inbox-back { display: inline-flex; }
+  .bubble { max-width: 90%; }
+}

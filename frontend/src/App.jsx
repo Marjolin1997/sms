@@ -16,6 +16,7 @@ import Approvals from "./pages/Approvals.jsx";
 import Accounts from "./pages/Accounts.jsx";
 import Rates from "./pages/Rates.jsx";
 import Finance from "./pages/Finance.jsx";
+import Inbox from "./pages/Inbox.jsx";
 import Reports from "./pages/Reports.jsx";
 import Admin from "./pages/Admin.jsx";
 
@@ -24,6 +25,7 @@ const NAV = [
   { group: "", items: [{ id: "dashboard", label: "Overview", icon: "◧", perm: null, el: Dashboard, desc: "Where things stand right now." }] },
   { group: "Messaging", items: [
     { id: "send", label: "Send", icon: "➤", perm: "messages:send", el: Send, desc: "Send an SMS or an email. You see the price before you send." },
+    { id: "inbox", label: "Inbox", icon: "✆", perm: "messages:read", el: Inbox, desc: "Replies from the people you message. Read them and answer." },
     { id: "messages", label: "Message history", icon: "☷", perm: "messages:read", el: Messages, desc: "Everything you've sent and what happened to it." },
     { id: "reports", label: "Reports", icon: "▥", perm: "messages:read", el: Reports, desc: "How your messages perform: delivery, spend and what went wrong." },
     { id: "campaigns", label: "Campaigns", icon: "✉", perm: "campaigns:read", el: Campaigns, desc: "Send to a whole list on a schedule, with a budget cap." },
@@ -96,10 +98,10 @@ function AccountPicker({ owner, setOwner: set, canList }) {
 
 function Shell({ me, onLogout }) {
   const [owner, setOwnerState] = useState(() => sessionStorage.getItem("sms_owner") || "");
-  const [page, setPage] = useState(location.hash.slice(1) || "dashboard");
+  const [page, setPage] = useState(location.hash.slice(1).split("/")[0] || "dashboard");
   const [menu, setMenu] = useState(false);
   useEffect(() => {
-    const h = () => { setPage(location.hash.slice(1) || "dashboard"); setMenu(false); scrollTo(0, 0); };
+    const h = () => { setPage(location.hash.slice(1).split("/")[0] || "dashboard"); setMenu(false); scrollTo(0, 0); };
     addEventListener("hashchange", h);
     return () => removeEventListener("hashchange", h);
   }, []);
@@ -117,6 +119,8 @@ function Shell({ me, onLogout }) {
   const needsAccount = isStaff && !current.global && current.id !== "dashboard" && !effectiveOwner;
   // Faqet globale të stafit (miratime, tarifa...) s'duhet të filtrohen nga llogaria e zgjedhur më parë.
   setOwner(current.global ? "" : effectiveOwner);
+  const unread = useLoad(() => (effectiveOwner && can(me, "messages:read") ? api.get("/v1/inbox/unread-count", { owner_ref: effectiveOwner }).catch(() => null) : Promise.resolve(null)), [effectiveOwner], 20000);
+  const unreadCount = unread.data?.unread || 0;
 
   return (
     <div className={`shell ${menu ? "menu-open" : ""}`}>
@@ -129,7 +133,7 @@ function Shell({ me, onLogout }) {
               {g.group && <div className="nav-h">{g.group}</div>}
               {g.items.map((n) => (
                 <a key={n.id} href={`#${n.id}`} aria-current={n.id === current.id ? "page" : undefined} className={n.id === current.id ? "active" : ""}>
-                  <i aria-hidden>{n.icon}</i>{n.label}
+                  <i aria-hidden>{n.icon}</i>{n.label}{n.id === "inbox" && unreadCount > 0 && <span className="count nav-count" aria-label={`${unreadCount} unread`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}
                 </a>
               ))}
             </div>
@@ -150,7 +154,7 @@ function Shell({ me, onLogout }) {
         {needsAccount ? (
           <div className="alert warn">Choose an account above to work on its data. Staff pages in the menu don't need one.</div>
         ) : (
-          <Page key={`${current.id}:${effectiveOwner}`} me={me} owner={effectiveOwner} pick={(o) => { setOwnerState(o); location.hash = "dashboard"; }} />
+          <Page key={`${current.id}:${effectiveOwner}`} me={me} owner={effectiveOwner} onUnreadChange={unread.reload} pick={(o) => { setOwnerState(o); location.hash = "dashboard"; }} />
         )}
       </main>
     </div>

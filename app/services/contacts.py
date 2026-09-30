@@ -159,6 +159,10 @@ def erase(db: Session, owner_ref: str, contact_id: int, actor: str) -> Contact:
                 db, owner_ref, channel, addr, "opt_out", "erasure", "erasure_request", actor
             )
     db.execute(delete(ListMember).where(ListMember.contact_id == c.id))
+    if c.phone:
+        from app.services import inbox
+
+        inbox.erase_number(db, owner_ref, c.phone)  # përgjigjet e tij hyrëse fshihen
     from app.models.campaigns import CampaignRecipient, RecipientStatus
 
     db.execute(  # kopja e adresës te marrësit e campaign-eve hiqet; të pa-dërguarit anulohen
