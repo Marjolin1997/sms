@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.context import SystemContext, TenantContext, TenantUnresolved, for_owner
+from app.core.scope import belongs
 from app.core.security import Principal
 
 
@@ -15,7 +16,9 @@ def tenant(
     if p.owner_ref:
         p.check_owner(owner_ref or p.owner_ref)
         if p.enterprise_id is not None:
-            return TenantContext(p.enterprise_id, p.owner_ref, "principal")
+            ctx = TenantContext(p.enterprise_id, p.owner_ref, "principal")
+            db.info.setdefault("_enterprise_ids", {})[ctx.owner_ref] = ctx.enterprise_id
+            return ctx
         try:  # çelës legacy pa enterprise_id: zgjidhje vetëm-lexim për përputhshmëri
             return for_owner(db, p.owner_ref, origin="principal")
         except TenantUnresolved as e:
@@ -39,3 +42,10 @@ def system(p: Principal, reason: str) -> SystemContext:
     if p.owner_ref:
         raise HTTPException(403, {"code": "forbidden", "message": "staff only"})
     return SystemContext(p.actor, reason)
+
+
+def access_or_404(db: Session, p: Principal, row) -> None:
+    """Rresht i ngarkuar sipas ID: klienti duhet ta ketë në Enterprise-in e vet (përndryshe 404, pa
+    zbulim); stafi (me lejen e rrugës) ka qasje të shprehur ndër-tenant."""
+    if p.owner_ref is not None and not belongs(row, tenant(db, p)):
+        raise HTTPException(404, {"code": "not_found", "message": "resource not found"})

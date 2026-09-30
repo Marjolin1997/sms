@@ -16,6 +16,7 @@ from decimal import Decimal
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, object_session
 
+from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.campaigns import (
     ACTIVE,
@@ -54,8 +55,8 @@ class InvalidCampaign(WalletError):
     code = "invalid_campaign"
 
 
-def _get(db: Session, owner_ref: str, campaign_id: int, lock: bool = False) -> Campaign:
-    q = select(Campaign).where(Campaign.id == campaign_id, Campaign.owner_ref == owner_ref)
+def _get(db: Session, owner: Owner, campaign_id: int, lock: bool = False) -> Campaign:
+    q = select(Campaign).where(Campaign.id == campaign_id, owned(Campaign, owner))
     c = db.scalar(q.with_for_update() if lock else q)
     if c is None:
         raise NotFound("campaign not found")
@@ -64,7 +65,7 @@ def _get(db: Session, owner_ref: str, campaign_id: int, lock: bool = False) -> C
 
 def create(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     name: str,
     list_id: int,
     sender: str,
@@ -125,16 +126,16 @@ def create(
             count_segments(text)
         except ValueError as e:
             raise InvalidCampaign(str(e)) from e
-    contacts._list(db, owner_ref, list_id)
+    contacts._list(db, owner, list_id)
     if template_id:
-        version = templates.usable_version(db, owner_ref, template_id)
+        version = templates.usable_version(db, owner, template_id)
         templates.variables(version.body)
     if max_cost is not None:
         max_cost = wallets.positive(max_cost)
-    if db.scalar(select(Campaign).where(Campaign.owner_ref == owner_ref, Campaign.name == name)):
+    if db.scalar(select(Campaign).where(owned(Campaign, owner), Campaign.name == name)):
         raise Conflict("campaign name already exists")
     c = Campaign(
-        owner_ref=owner_ref, name=name, list_id=list_id, category=category, sender=sender,
+        owner_ref=ref(owner), name=name, list_id=list_id, category=category, sender=sender,
         channel=channel, subject=subject, html_body=html, from_email=from_email,
         from_name=from_name, text=text, template_id=template_id, max_cost=max_cost,
         rate_per_minute=rate_per_minute,
@@ -161,23 +162,23 @@ def _touch(c: Campaign, status: CampaignStatus | None = None, now: datetime | No
 
 def schedule(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     campaign_id: int,
     when: datetime | None,
     now: datetime | None = None,
 ) -> Campaign:
-    c = _get(db, owner_ref, campaign_id, lock=True)
+    c = _get(db, owner, campaign_id, lock=True)
     if c.status != CampaignStatus.DRAFT:
         raise Conflict(f"cannot schedule from status {c.status.value}")
     if c.channel == "email":
-        if email_domains.verified_domain_for(db, owner_ref, c.from_email) is None:
+        if email_domains.verified_domain_for(db, owner, c.from_email) is None:
             raise InvalidCampaign("from_email is not on a verified domain of this account")
     else:
         approved = db.scalar(
             select(func.count())
             .select_from(SenderId)
             .where(
-                SenderId.owner_ref == owner_ref,
+                owned(SenderId, owner),
                 SenderId.value
                 == (c.sender.lstrip("+") if c.sender.lstrip("+").isdigit() else c.sender),
                 SenderId.status == ApprovalStatus.APPROVED,
@@ -195,8 +196,8 @@ def schedule(
     return c
 
 
-def pause(db: Session, owner_ref: str, campaign_id: int, reason: str = "manual") -> Campaign:
-    c = _get(db, owner_ref, campaign_id, lock=True)
+def pause(db: Session, owner: Owner, campaign_id: int, reason: str = "manual") -> Campaign:
+    c = _get(db, owner, campaign_id, lock=True)
     if c.status != CampaignStatus.RUNNING:
         raise Conflict(f"cannot pause from status {c.status.value}")
     c.pause_reason = reason
@@ -205,8 +206,8 @@ def pause(db: Session, owner_ref: str, campaign_id: int, reason: str = "manual")
     return c
 
 
-def resume(db: Session, owner_ref: str, campaign_id: int) -> Campaign:
-    c = _get(db, owner_ref, campaign_id, lock=True)
+def resume(db: Session, owner: Owner, campaign_id: int) -> Campaign:
+    c = _get(db, owner, campaign_id, lock=True)
     if c.status != CampaignStatus.PAUSED:
         raise Conflict(f"cannot resume from status {c.status.value}")
     c.pause_reason = None
@@ -215,9 +216,9 @@ def resume(db: Session, owner_ref: str, campaign_id: int) -> Campaign:
     return c
 
 
-def cancel(db: Session, owner_ref: str, campaign_id: int) -> Campaign:
+def cancel(db: Session, owner: Owner, campaign_id: int) -> Campaign:
     """Ndalon marrësit e pa-dërguar dhe anulon mesazhet që s'i ka marrë ende worker-i."""
-    c = _get(db, owner_ref, campaign_id, lock=True)
+    c = _get(db, owner, campaign_id, lock=True)
     if c.status in (CampaignStatus.COMPLETED, CampaignStatus.CANCELLED):
         raise Conflict(f"campaign already {c.status.value}")
     db.execute(
@@ -531,16 +532,14 @@ class Estimate:
     currency: str | None
 
 
-def estimate(
-    db: Session, owner_ref: str, campaign_id: int, now: datetime | None = None
-) -> Estimate:
+def estimate(db: Session, owner: Owner, campaign_id: int, now: datetime | None = None) -> Estimate:
     """Vlerësim i saktë i kostos (pa shkruar asgjë): kuotë për secilin marrës të lejuar."""
-    c = _get(db, owner_ref, campaign_id)
+    c = _get(db, owner, campaign_id)
     if c.channel == "email":  # pa kosto për mesazh: numërojmë vetëm audiencën e lejuar
-        counts = contacts.audience_counts(db, owner_ref, c.list_id, "email", c.category)
+        counts = contacts.audience_counts(db, owner, c.list_id, "email", c.category)
         ok = counts.get("ok", 0)
         return Estimate(ok, sum(counts.values()) - ok, 0, Decimal(0), None)
-    plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner_ref))
+    plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
     if plan is None:
         raise msg.AccountDisabled("account has no sending plan")
     now = as_utc(now or datetime.now(UTC))
@@ -548,7 +547,7 @@ def estimate(
     est = Estimate(0, 0, 0, Decimal(0), None)
     after, seen = 0, 0
     while True:
-        rows = contacts.audience_batch(db, owner_ref, c.list_id, "sms", c.category, after, 500)
+        rows = contacts.audience_batch(db, owner, c.list_id, "sms", c.category, after, 500)
         if not rows:
             return est
         seen += len(rows)
@@ -565,7 +564,7 @@ def estimate(
                 text = (
                     _subst(c.text, values)
                     if c.text
-                    else templates.render(db, owner_ref, c.template_id, values).text
+                    else templates.render(db, owner, c.template_id, values).text
                 )
                 q = rates.quote(db, plan.rate_card_id, r.address, text, now)
             except WalletError:

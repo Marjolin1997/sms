@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core import crypto
 from app.core.config import settings
+from app.core.scope import Owner, owned, ref
 from app.models.email import DomainStatus, EmailDomain
 from app.services.dns_check import DnsError, get_resolver
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -30,12 +31,12 @@ def decrypt_private_key(d: EmailDomain) -> bytes:
     return crypto.decrypt(d.dkim_private_key_enc)
 
 
-def create(db: Session, owner_ref: str, domain: str) -> EmailDomain:
+def create(db: Session, owner: Owner, domain: str) -> EmailDomain:
     domain = domain.strip().lower().rstrip(".")
     if not _DOMAIN.match(domain):
         raise InvalidDomain("invalid domain name")
     if db.scalar(
-        select(EmailDomain).where(EmailDomain.owner_ref == owner_ref, EmailDomain.domain == domain)
+        select(EmailDomain).where(owned(EmailDomain, owner), EmailDomain.domain == domain)
     ):
         raise Conflict("domain already added")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -48,7 +49,7 @@ def create(db: Session, owner_ref: str, domain: str) -> EmailDomain:
         serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
     )
     d = EmailDomain(
-        owner_ref=owner_ref, domain=domain, dkim_selector=SELECTOR,
+        owner_ref=ref(owner), domain=domain, dkim_selector=SELECTOR,
         dkim_public_key=base64.b64encode(pub).decode(), dkim_private_key_enc=encrypt(pem),
     )  # fmt: skip
     db.add(d)
@@ -78,11 +79,11 @@ def _tags(record: str) -> dict[str, str]:
     return out
 
 
-def verify(db: Session, owner_ref: str, domain_id: int) -> EmailDomain:
+def verify(db: Session, owner: Owner, domain_id: int) -> EmailDomain:
     """Kontrollon DNS. Verifikohet vetëm me DKIM (provë kontrolli mbi domenin) dhe SPF."""
     d = db.scalar(
         select(EmailDomain)
-        .where(EmailDomain.id == domain_id, EmailDomain.owner_ref == owner_ref)
+        .where(EmailDomain.id == domain_id, owned(EmailDomain, owner))
         .with_for_update()
     )
     if d is None:
@@ -122,11 +123,11 @@ def verify(db: Session, owner_ref: str, domain_id: int) -> EmailDomain:
     return d
 
 
-def verified_domain_for(db: Session, owner_ref: str, from_email: str) -> EmailDomain | None:
+def verified_domain_for(db: Session, owner: Owner, from_email: str) -> EmailDomain | None:
     domain = from_email.rsplit("@", 1)[-1].lower()
     return db.scalar(
         select(EmailDomain).where(
-            EmailDomain.owner_ref == owner_ref,
+            owned(EmailDomain, owner),
             EmailDomain.domain == domain,
             EmailDomain.status == DomainStatus.VERIFIED,
         )

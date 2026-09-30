@@ -389,13 +389,16 @@ def test_legacy_table_list_matches_the_models():
 
 
 def test_enterprise_id_is_written_only_by_the_centralized_hook():
-    """M1b: asnjë shërbim/API nuk e shkruan `enterprise_id`; vetëm hook-u `core/tenancy.py`, resolveri
-    `services/enterprises.py` dhe modelet. Asnjë modul nuk e LEXON ende për sjellje (M1c)."""
+    """M1b/M1c: `enterprise_id` prekët vetëm nga modulet e miratuara: hook-u `core/tenancy.py`, resolveri
+    `services/enterprises.py`, modelet, dhe (M1c) abstraksionet e kontekstit/skopimit
+    (`core/context.py`, `core/scope.py`, `api/tenant.py`, `core/security.py`) + `services/events.py`
+    (trashëgimia e identitetit në Event). Shërbimet e tjera skopohen vetëm përmes `scope.owned`."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "app"
     allowed = {"core/tenancy.py", "services/enterprises.py", "models/tenant.py", "models/enterprise.py",
-               "models/__init__.py", "core/config.py"}  # fmt: skip
+               "models/__init__.py", "core/config.py", "core/context.py", "core/scope.py", "api/tenant.py",
+               "core/security.py", "services/events.py"}  # fmt: skip
     offenders = [
         p.relative_to(root).as_posix()
         for p in root.rglob("*.py")

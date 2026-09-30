@@ -297,7 +297,8 @@ def test_api_staff_needs_owner_and_import(raw_client):
     c = raw_client
     staff = _key(c, "support")
     assert c.get("/v1/contacts", headers=staff).status_code == 422
-    assert c.get("/v1/contacts", params={"owner_ref": "c1"}, headers=staff).status_code == 200
+    # M1c: një tenant pa identitet Enterprise (asnjë shkrim ende) nuk ekziston për lexim → 404
+    assert c.get("/v1/contacts", params={"owner_ref": "c1"}, headers=staff).status_code == 404
     assert (
         c.post("/v1/contacts", json={"phone": PHONE, "owner_ref": "c1"}, headers=staff).status_code
         == 403
@@ -305,6 +306,7 @@ def test_api_staff_needs_owner_and_import(raw_client):
     r = c.post("/v1/contacts/import", json={"owner_ref": "c1", "contacts": [{"phone": PHONE}, {"phone": "x"}]},
                headers=BOOT).json()  # fmt: skip
     assert r["created"] == 1 and r["errors"][0]["row"] == 1
+    assert c.get("/v1/contacts", params={"owner_ref": "c1"}, headers=staff).status_code == 200
 
 
 def test_inbound_webhook(raw_client, db, monkeypatch, world):  # noqa: F811

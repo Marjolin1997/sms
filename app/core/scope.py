@@ -30,6 +30,14 @@ def owned(model, owner: Owner):
     return model.owner_ref == owner
 
 
+def belongs(row, owner: Owner) -> bool:
+    """Rreshti i ngarkuar me `db.get` i përket këtij pronari? (të dyja identitetet përputhen)"""
+    if isinstance(owner, TenantContext):
+        return row.enterprise_id == owner.enterprise_id and row.owner_ref == owner.owner_ref
+    LEGACY_READS[row.__tablename__] += 1
+    return row.owner_ref == owner
+
+
 def ref(owner: Owner) -> str:
     """`owner_ref` (fushë përputhshmërie) e një pronari, për shkrim/HMAC."""
     return owner.owner_ref if isinstance(owner, TenantContext) else owner

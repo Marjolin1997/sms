@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, Template, TemplateVersion
 from app.services import approvals
 from app.services.sms_text import count_segments
@@ -33,11 +34,11 @@ def variables(body: str) -> list[str]:
     return list(dict.fromkeys(VAR.findall(body)))
 
 
-def create(db: Session, owner_ref: str, name: str, body: str) -> TemplateVersion:
+def create(db: Session, owner: Owner, name: str, body: str) -> TemplateVersion:
     variables(body)
-    if db.scalar(select(Template).where(Template.owner_ref == owner_ref, Template.name == name)):
+    if db.scalar(select(Template).where(owned(Template, owner), Template.name == name)):
         raise Conflict("template name already exists")
-    t = Template(owner_ref=owner_ref, name=name)
+    t = Template(owner_ref=ref(owner), name=name)
     db.add(t)
     db.flush()
     return _add_version(db, t.id, body)
@@ -76,14 +77,14 @@ def review(db: Session, version_id: int, action: str, actor: str, reason: str | 
     return v
 
 
-def usable_version(db: Session, owner_ref: str, template_id: int) -> TemplateVersion:
+def usable_version(db: Session, owner: Owner, template_id: int) -> TemplateVersion:
     """Versioni më i ri i miratuar i një template-i që i përket këtij klienti."""
     v = db.scalar(
         select(TemplateVersion)
         .join(Template, Template.id == TemplateVersion.template_id)
         .where(
             Template.id == template_id,
-            Template.owner_ref == owner_ref,
+            owned(Template, owner),
             TemplateVersion.status == ApprovalStatus.APPROVED,
         )
         .order_by(TemplateVersion.version.desc())
@@ -102,9 +103,9 @@ class Rendered:
     segments: int
 
 
-def render(db: Session, owner_ref: str, template_id: int, values: dict[str, str]) -> Rendered:
+def render(db: Session, owner: Owner, template_id: int, values: dict[str, str]) -> Rendered:
     """Validim para dërgimit: version i miratuar, variabla të plota (pa të tepërta)."""
-    v = usable_version(db, owner_ref, template_id)
+    v = usable_version(db, owner, template_id)
     needed = set(variables(v.body))
     missing, extra = needed - values.keys(), values.keys() - needed
     if missing or extra:

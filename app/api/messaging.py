@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.tenant import access_or_404, tenant
 from app.core.db import get_db
 from app.core.security import Principal, require
 from app.models.messaging import ApprovalStatus, SenderId, Template, TemplateVersion
@@ -79,7 +80,7 @@ def _own_template(db: Session, template_id: int, p: Principal) -> None:
     t = db.get(Template, template_id)
     if t is None:
         raise HTTPException(404, {"code": "not_found", "message": "template not found"})
-    p.check_owner(t.owner_ref)
+    access_or_404(db, p, t)
 
 
 def _sender(s: SenderId) -> SenderOut:
@@ -102,10 +103,10 @@ def request_sender(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("sender:request")),
 ):
-    p.check_owner(body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
-        s = sid.request(db, body.owner_ref, body.country, body.value)
+        s = sid.request(db, owner, body.country, body.value)
         audit(db, p, "sender.request", "sender_id", s.id, body.model_dump())
         return s
 
@@ -148,10 +149,10 @@ def create_template(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("template:write")),
 ):
-    p.check_owner(body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
-        v = tpl.create(db, body.owner_ref, body.name, body.body)
+        v = tpl.create(db, owner, body.name, body.body)
         audit(db, p, "template.create", "template", v.template_id, {"name": body.name})
         return v
 
@@ -201,6 +202,6 @@ def render(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("template:render")),
 ):
-    p.check_owner(body.owner_ref)
-    r = _run(db, lambda: tpl.render(db, body.owner_ref, template_id, body.values))
+    owner = tenant(db, p, body.owner_ref)
+    r = _run(db, lambda: tpl.render(db, owner, template_id, body.values))
     return RenderOut(**r.__dict__)

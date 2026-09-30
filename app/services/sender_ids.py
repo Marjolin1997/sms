@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, SenderId, SenderKind
 from app.services import approvals
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -33,22 +34,22 @@ def _key(country: str, value: str) -> str:
     return f"{country}:{value.lower()}"
 
 
-def request(db: Session, owner_ref: str, country: str, value: str) -> SenderId:
+def request(db: Session, owner: Owner, country: str, value: str) -> SenderId:
     if not COUNTRY.match(country):
         raise InvalidSender("country must be ISO alpha-2")
     country = country.upper()
     norm, kind = classify(value)
     existing = db.scalar(
         select(SenderId).where(
-            SenderId.owner_ref == owner_ref, SenderId.country == country, SenderId.value == norm
+            owned(SenderId, owner), SenderId.country == country, SenderId.value == norm
         )
     )
     if existing:
         if existing.status in (ApprovalStatus.REJECTED, ApprovalStatus.REVOKED):
-            approvals.transition(existing, "resubmit", owner_ref)
+            approvals.transition(existing, "resubmit", ref(owner))
             db.flush()
         return existing
-    s = SenderId(owner_ref=owner_ref, country=country, value=norm, kind=kind)
+    s = SenderId(owner_ref=ref(owner), country=country, value=norm, kind=kind)
     db.add(s)
     db.flush()
     return s
@@ -88,12 +89,12 @@ def revoke(db: Session, sender_id: int, actor: str, reason: str) -> SenderId:
     return s
 
 
-def assert_usable(db: Session, owner_ref: str, country: str, value: str) -> SenderId:
+def assert_usable(db: Session, owner: Owner, country: str, value: str) -> SenderId:
     """Thirret nga pipeline para dërgimit: sender i miratuar për këtë klient dhe shtet."""
     norm = value.lstrip("+") if NUMERIC.match(value) else value
     s = db.scalar(
         select(SenderId).where(
-            SenderId.owner_ref == owner_ref,
+            owned(SenderId, owner),
             SenderId.country == country.upper(),
             SenderId.value == norm,
             SenderId.status == ApprovalStatus.APPROVED,

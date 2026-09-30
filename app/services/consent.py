@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.scope import Owner, owned, ref
 from app.models.contacts import ConsentAction, ConsentEvent, ConsentState
 from app.services import events
 from app.services.wallet import Conflict, WalletError
@@ -56,9 +57,9 @@ def address_hash(owner_ref: str, channel: str, normalized: str) -> str:
     return hmac.new(settings.pii_hmac_key.encode(), msg, hashlib.sha256).hexdigest()
 
 
-def _state(db: Session, owner_ref: str, channel: str, h: str, lock: bool = False):
+def _state(db: Session, owner: Owner, channel: str, h: str, lock: bool = False):
     q = select(ConsentState).where(
-        ConsentState.owner_ref == owner_ref,
+        owned(ConsentState, owner),
         ConsentState.channel == channel,
         ConsentState.address_hash == h,
     )
@@ -67,7 +68,7 @@ def _state(db: Session, owner_ref: str, channel: str, h: str, lock: bool = False
 
 def _record(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     channel: str,
     address: str,
     action: str,
@@ -78,7 +79,7 @@ def _record(
 ) -> ConsentState:
     """Shkruan provën (event) dhe përditëson gjendjen aktuale në të njëjtin transaksion."""
     norm = normalize(channel, address)
-    h = address_hash(owner_ref, channel, norm)
+    h = address_hash(ref(owner), channel, norm)
     act = ConsentAction(action)
     if act == ConsentAction.OPT_OUT and reason not in HARD_REASONS | SOFT_REASONS:
         raise Conflict(f"unknown opt-out reason '{reason}'")
@@ -89,13 +90,13 @@ def _record(
     if not source or not actor:
         raise Conflict("source and actor are required")
 
-    st = _state(db, owner_ref, channel, h, lock=True)
+    st = _state(db, owner, channel, h, lock=True)
     if act == ConsentAction.OPT_IN and st and not st.opted_in and st.hard:
         if st.reason != "stop_keyword":  # vetëm një STOP i vetë personit mund të zhbëhet
             raise Conflict(f"address is blocked ({st.reason}) and cannot be re-subscribed")
 
     ev = ConsentEvent(
-        owner_ref=owner_ref, channel=channel, address_hash=h, action=act,
+        owner_ref=ref(owner), channel=channel, address_hash=h, action=act,
         reason=reason, source=source, evidence=evidence, actor=actor,
     )  # fmt: skip
     db.add(ev)
@@ -106,14 +107,14 @@ def _record(
         try:
             with db.begin_nested():
                 st = ConsentState(
-                    owner_ref=owner_ref, channel=channel, address_hash=h, opted_in=opted_in,
+                    owner_ref=ref(owner), channel=channel, address_hash=h, opted_in=opted_in,
                     hard=hard, reason=reason, last_event_id=ev.id,
                 )  # fmt: skip
                 db.add(st)
                 db.flush()
             return st
         except IntegrityError:  # garë: dikush e krijoi njëkohësisht
-            st = _state(db, owner_ref, channel, h, lock=True)
+            st = _state(db, owner, channel, h, lock=True)
     # një bounce/complaint/erasure i ri nuk zbutet nga një opt-out "soft" i mëvonshëm
     if not opted_in and st.hard and not hard:
         hard, reason = True, st.reason
@@ -124,7 +125,7 @@ def _record(
 
 def record(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     channel: str,
     address: str,
     action: str,
@@ -133,11 +134,11 @@ def record(
     actor: str,
     evidence: str | None = None,
 ) -> ConsentState:
-    st = _record(db, owner_ref, channel, address, action, reason, source, actor, evidence)
+    st = _record(db, owner, channel, address, action, reason, source, actor, evidence)
     kind = "opted_in" if action == "opt_in" else "opted_out"
     # adresa futet qëllimisht: klienti e përdor për të sinkronizuar CRM-në (retention e eventeve)
     events.emit(
-        db, owner_ref, f"consent.{kind}", "consent", st.id,
+        db, owner, f"consent.{kind}", "consent", st.id,
         {"channel": channel, "address": normalize(channel, address), "reason": st.reason,
          "hard": st.hard},
     )  # fmt: skip
@@ -162,28 +163,28 @@ def decide(state: ConsentState | None, category: str) -> Decision:
     return Decision(True, "ok") if state.opted_in else Decision(False, "opted_out")
 
 
-def check(db: Session, owner_ref: str, channel: str, address: str, category: str) -> Decision:
+def check(db: Session, owner: Owner, channel: str, address: str, category: str) -> Decision:
     norm = normalize(channel, address)
-    st = _state(db, owner_ref, channel, address_hash(owner_ref, channel, norm))
+    st = _state(db, owner, channel, address_hash(ref(owner), channel, norm))
     return decide(st, category)
 
 
-def assert_may_send(db: Session, owner_ref: str, channel: str, address: str, category: str):
-    d = check(db, owner_ref, channel, address, category)
+def assert_may_send(db: Session, owner: Owner, channel: str, address: str, category: str):
+    d = check(db, owner, channel, address, category)
     if not d.allowed:
         raise RecipientSuppressed(f"recipient cannot be contacted: {d.reason}")
 
 
-def apply_inbound_keyword(db: Session, owner_ref: str, from_number: str, text: str) -> str | None:
+def apply_inbound_keyword(db: Session, owner: Owner, from_number: str, text: str) -> str | None:
     """SMS hyrës: STOP → bllokim i plotë; START → rikthim (vetëm pas STOP të vetë personit)."""
     word = re.sub(r"[^\w]", "", text.strip().lower())
     if word in STOP_WORDS:
-        record(db, owner_ref, "sms", from_number, "opt_out", "stop_keyword", "inbound_sms",
+        record(db, owner, "sms", from_number, "opt_out", "stop_keyword", "inbound_sms",
                "inbound", evidence=text[:200])  # fmt: skip
         return "opt_out"
     if word in START_WORDS:
         try:
-            record(db, owner_ref, "sms", from_number, "opt_in", "opt_in", "inbound_sms",
+            record(db, owner, "sms", from_number, "opt_in", "opt_in", "inbound_sms",
                    "inbound", evidence=f"inbound keyword: {text[:100]}")  # fmt: skip
         except Conflict:
             return None

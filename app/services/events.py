@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.context import TenantContext
+from app.core.scope import Owner, owned, ref
 from app.models.events import (
     DeliveryStatus,
     EndpointStatus,
@@ -38,9 +40,14 @@ def matches(patterns: list[str], event_type: str) -> bool:
     )
 
 
+def _eid(owner: Owner):
+    """Eventet trashëgojnë identitetin e tenant-it nga konteksti i burimit që po procesohet."""
+    return owner.enterprise_id if isinstance(owner, TenantContext) else None
+
+
 def emit(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     type_: str,
     resource_type: str,
     resource_id,
@@ -53,13 +60,13 @@ def emit(
         raise ValueError(f"unknown event type {type_}")
     now = now or datetime.now(UTC)
     ev = Event(
-        owner_ref=owner_ref, type=type_, resource_type=resource_type,
+        owner_ref=ref(owner), enterprise_id=_eid(owner), type=type_, resource_type=resource_type,
         resource_id=str(resource_id), data=data, created_at=now,
     )  # fmt: skip
     db.add(ev)
     db.flush()
     q = select(WebhookEndpoint).where(
-        WebhookEndpoint.owner_ref == owner_ref, WebhookEndpoint.status == EndpointStatus.ACTIVE
+        owned(WebhookEndpoint, owner), WebhookEndpoint.status == EndpointStatus.ACTIVE
     )
     if only_endpoint_id is not None:
         q = q.where(WebhookEndpoint.id == only_endpoint_id)

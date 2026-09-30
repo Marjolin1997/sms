@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, owned, ref
 from app.models.wallet import (
     EntryType,
     Hold,
@@ -56,14 +57,12 @@ def positive(value) -> Decimal:
     return d
 
 
-def create_wallet(db: Session, owner_ref: str, currency: str) -> Wallet:
+def create_wallet(db: Session, owner: Owner, currency: str) -> Wallet:
     currency = currency.upper()
-    existing = db.scalar(
-        select(Wallet).where(Wallet.owner_ref == owner_ref, Wallet.currency == currency)
-    )
+    existing = db.scalar(select(Wallet).where(owned(Wallet, owner), Wallet.currency == currency))
     if existing:
         return existing
-    w = Wallet(owner_ref=owner_ref, currency=currency)
+    w = Wallet(owner_ref=ref(owner), currency=currency)
     db.add(w)
     db.flush()
     return w

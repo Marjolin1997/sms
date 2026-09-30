@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.billing import (
     BillingProfile,
@@ -104,7 +105,7 @@ def retire_plan(db: Session, plan_id: int) -> Plan:
 
 
 def set_profile(
-    db: Session, owner_ref: str, legal_name: str, address: str, country: str, email: str,
+    db: Session, owner: Owner, legal_name: str, address: str, country: str, email: str,
     tax_id: str | None = None, vat_rate=None,
 ) -> BillingProfile:  # fmt: skip
     from app.services import consent
@@ -115,9 +116,9 @@ def set_profile(
         raise InvalidBilling(str(e)) from e
     if not re.fullmatch(r"[A-Za-z]{2}", country):
         raise InvalidBilling("country must be ISO alpha-2")
-    prof = db.scalar(select(BillingProfile).where(BillingProfile.owner_ref == owner_ref))
+    prof = db.scalar(select(BillingProfile).where(owned(BillingProfile, owner)))
     if prof is None:
-        prof = BillingProfile(owner_ref=owner_ref, vat_rate=Decimal(0), legal_name="", address="",
+        prof = BillingProfile(owner_ref=ref(owner), vat_rate=Decimal(0), legal_name="", address="",
                               country="", email="")  # fmt: skip
         db.add(prof)
     prof.legal_name, prof.address = legal_name.strip(), address.strip()
@@ -132,27 +133,25 @@ def set_profile(
     return prof
 
 
-def get_profile(db: Session, owner_ref: str) -> BillingProfile | None:
-    return db.scalar(select(BillingProfile).where(BillingProfile.owner_ref == owner_ref))
+def get_profile(db: Session, owner: Owner) -> BillingProfile | None:
+    return db.scalar(select(BillingProfile).where(owned(BillingProfile, owner)))
 
 
 # --- Abonime ---------------------------------------------------------------------------
 
 
 def assign_plan(
-    db: Session, owner_ref: str, plan_id: int, auto_pay: bool = True, now: datetime | None = None
+    db: Session, owner: Owner, plan_id: int, auto_pay: bool = True, now: datetime | None = None
 ) -> Subscription:
     now = as_utc(now or datetime.now(UTC))
     plan = db.get(Plan, plan_id)
     if plan is None or plan.status != PlanStatus.ACTIVE:
         raise InvalidBilling("plan not found or retired")
-    if get_profile(db, owner_ref) is None:
+    if get_profile(db, owner) is None:
         raise InvalidBilling("a billing profile is required before subscribing")
-    sub = db.scalar(
-        select(Subscription).where(Subscription.owner_ref == owner_ref).with_for_update()
-    )
+    sub = db.scalar(select(Subscription).where(owned(Subscription, owner)).with_for_update())
     if sub is None:
-        sub = Subscription(owner_ref=owner_ref, plan_id=plan.id, started_at=now, auto_pay=auto_pay)
+        sub = Subscription(owner_ref=ref(owner), plan_id=plan.id, started_at=now, auto_pay=auto_pay)
         db.add(sub)
     elif sub.status == SubStatus.CANCELLED:  # rifillim: ankorë e re
         sub.plan_id, sub.pending_plan_id, sub.status = plan.id, None, SubStatus.ACTIVE
@@ -169,10 +168,8 @@ def assign_plan(
     return sub
 
 
-def cancel_subscription(db: Session, owner_ref: str) -> Subscription:
-    sub = db.scalar(
-        select(Subscription).where(Subscription.owner_ref == owner_ref).with_for_update()
-    )
+def cancel_subscription(db: Session, owner: Owner) -> Subscription:
+    sub = db.scalar(select(Subscription).where(owned(Subscription, owner)).with_for_update())
     if sub is None or sub.status != SubStatus.ACTIVE:
         raise NotFound("no active subscription")
     sub.cancel_at_period_end = True
@@ -186,12 +183,12 @@ def period(sub: Subscription, k: int | None = None) -> tuple[datetime, datetime]
     return add_months(start, k), add_months(start, k + 1)
 
 
-def email_usage(db: Session, owner_ref: str, start: datetime, end: datetime) -> int:
+def email_usage(db: Session, owner: Owner, start: datetime, end: datetime) -> int:
     return db.scalar(
         select(func.count())
         .select_from(Email)
         .where(
-            Email.owner_ref == owner_ref,
+            owned(Email, owner),
             Email.created_at >= start,
             Email.created_at < end,
             Email.status.in_(BILLABLE_EMAIL),
@@ -315,12 +312,10 @@ def run_billing(db: Session, now: datetime | None = None) -> int:
 # --- Pagesa dhe anulim --------------------------------------------------------------------
 
 
-def _get_invoice(
-    db: Session, owner_ref: str | None, invoice_id: int, lock: bool = False
-) -> Invoice:
+def _get_invoice(db: Session, owner: Owner | None, invoice_id: int, lock: bool = False) -> Invoice:
     q = select(Invoice).where(Invoice.id == invoice_id)
-    if owner_ref is not None:
-        q = q.where(Invoice.owner_ref == owner_ref)
+    if owner is not None:
+        q = q.where(owned(Invoice, owner))
     inv = db.scalar(q.with_for_update() if lock else q)
     if inv is None:
         raise NotFound("invoice not found")
@@ -335,17 +330,15 @@ def _mark_paid(db: Session, inv: Invoice, via: str, now: datetime) -> None:
 
 
 def pay_from_wallet(
-    db: Session, owner_ref: str, invoice_id: int, now: datetime | None = None
+    db: Session, owner: Owner, invoice_id: int, now: datetime | None = None
 ) -> Invoice:
     now = as_utc(now or datetime.now(UTC))
-    inv = _get_invoice(db, owner_ref, invoice_id, lock=True)
+    inv = _get_invoice(db, owner, invoice_id, lock=True)
     if inv.status == InvoiceStatus.PAID:
         return inv
     if inv.status != InvoiceStatus.OPEN:
         raise Conflict(f"invoice is {inv.status.value}")
-    w = db.scalar(
-        select(Wallet).where(Wallet.owner_ref == owner_ref, Wallet.currency == inv.currency)
-    )
+    w = db.scalar(select(Wallet).where(owned(Wallet, owner), Wallet.currency == inv.currency))
     if w is None:
         raise NotFound(f"no {inv.currency} wallet")
     wallets.charge(db, w.id, inv.total, f"invoice:{inv.id}", "invoice", inv.number, inv.number)

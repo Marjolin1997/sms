@@ -129,9 +129,9 @@ def test_owned_requires_both_enterprise_and_owner_ref_to_agree(db):
 
 
 def test_legacy_string_path_is_explicit_and_counted(db):
-    scope.LEGACY_READS.clear()
     contacts_svc.upsert(db, "A", phone="+355691230003")
     db.commit()
+    scope.LEGACY_READS.clear()
     assert db.scalars(select(Contact).where(scope.owned(Contact, "A"))).all()
     assert scope.LEGACY_READS["sms_contacts"] == 1
     with pytest.raises(TypeError):

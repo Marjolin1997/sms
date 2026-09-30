@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core import crypto
 from app.core.config import settings
+from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.events import (
     DeliveryStatus,
@@ -52,22 +53,20 @@ def _validate(url: str, event_types: list[str]) -> None:
 
 
 def create_endpoint(
-    db: Session, owner_ref: str, url: str, event_types: list[str] | None = None,
+    db: Session, owner: Owner, url: str, event_types: list[str] | None = None,
     description: str | None = None,
 ) -> tuple[WebhookEndpoint, str]:  # fmt: skip
     """→ (endpoint, sekreti). Sekreti kthehet vetëm këtu dhe pas rotate_secret."""
     event_types = ["*"] if event_types is None else event_types  # [] është i pavlefshëm
     _validate(url, event_types)
     count = db.scalar(
-        select(func.count())
-        .select_from(WebhookEndpoint)
-        .where(WebhookEndpoint.owner_ref == owner_ref)
+        select(func.count()).select_from(WebhookEndpoint).where(owned(WebhookEndpoint, owner))
     )
     if count >= MAX_ENDPOINTS:
         raise Conflict(f"at most {MAX_ENDPOINTS} webhook endpoints per account")
     secret = new_secret()
     ep = WebhookEndpoint(
-        owner_ref=owner_ref, url=url, secret_enc=crypto.encrypt(secret.encode()),
+        owner_ref=ref(owner), url=url, secret_enc=crypto.encrypt(secret.encode()),
         event_types=event_types, description=description,
     )  # fmt: skip
     db.add(ep)
@@ -75,9 +74,9 @@ def create_endpoint(
     return ep, secret
 
 
-def _get(db: Session, owner_ref: str, endpoint_id: int, lock: bool = False) -> WebhookEndpoint:
+def _get(db: Session, owner: Owner, endpoint_id: int, lock: bool = False) -> WebhookEndpoint:
     q = select(WebhookEndpoint).where(
-        WebhookEndpoint.id == endpoint_id, WebhookEndpoint.owner_ref == owner_ref
+        WebhookEndpoint.id == endpoint_id, owned(WebhookEndpoint, owner)
     )
     ep = db.scalar(q.with_for_update() if lock else q)
     if ep is None:
@@ -86,11 +85,11 @@ def _get(db: Session, owner_ref: str, endpoint_id: int, lock: bool = False) -> W
 
 
 def update_endpoint(
-    db: Session, owner_ref: str, endpoint_id: int, url: str | None = None,
+    db: Session, owner: Owner, endpoint_id: int, url: str | None = None,
     event_types: list[str] | None = None, enabled: bool | None = None,
     description: str | None = None,
 ) -> WebhookEndpoint:  # fmt: skip
-    ep = _get(db, owner_ref, endpoint_id, lock=True)
+    ep = _get(db, owner, endpoint_id, lock=True)
     new_url = url or ep.url
     new_types = ep.event_types if event_types is None else event_types
     _validate(new_url, new_types)
@@ -106,15 +105,15 @@ def update_endpoint(
     return ep
 
 
-def delete_endpoint(db: Session, owner_ref: str, endpoint_id: int) -> None:
-    ep = _get(db, owner_ref, endpoint_id, lock=True)
+def delete_endpoint(db: Session, owner: Owner, endpoint_id: int) -> None:
+    ep = _get(db, owner, endpoint_id, lock=True)
     for d in db.scalars(select(WebhookDelivery).where(WebhookDelivery.endpoint_id == ep.id)):
         db.delete(d)
     db.delete(ep)
 
 
-def rotate_secret(db: Session, owner_ref: str, endpoint_id: int) -> tuple[WebhookEndpoint, str]:
-    ep = _get(db, owner_ref, endpoint_id, lock=True)
+def rotate_secret(db: Session, owner: Owner, endpoint_id: int) -> tuple[WebhookEndpoint, str]:
+    ep = _get(db, owner, endpoint_id, lock=True)
     secret = new_secret()
     ep.secret_enc = crypto.encrypt(secret.encode())
     ep.updated_at = datetime.now(UTC)
@@ -122,19 +121,19 @@ def rotate_secret(db: Session, owner_ref: str, endpoint_id: int) -> tuple[Webhoo
     return ep, secret
 
 
-def send_test(db: Session, owner_ref: str, endpoint_id: int) -> Event:
-    ep = _get(db, owner_ref, endpoint_id)
+def send_test(db: Session, owner: Owner, endpoint_id: int) -> Event:
+    ep = _get(db, owner, endpoint_id)
     if ep.status != EndpointStatus.ACTIVE:
         raise Conflict("endpoint is disabled")
-    return events.emit(db, owner_ref, "webhook.ping", "endpoint", ep.id, {"ok": True},
+    return events.emit(db, owner, "webhook.ping", "endpoint", ep.id, {"ok": True},
                        only_endpoint_id=ep.id)  # fmt: skip
 
 
-def redeliver(db: Session, owner_ref: str, delivery_id: int) -> WebhookDelivery:
+def redeliver(db: Session, owner: Owner, delivery_id: int) -> WebhookDelivery:
     d = db.scalar(
         select(WebhookDelivery)
         .join(WebhookEndpoint, WebhookEndpoint.id == WebhookDelivery.endpoint_id)
-        .where(WebhookDelivery.id == delivery_id, WebhookEndpoint.owner_ref == owner_ref)
+        .where(WebhookDelivery.id == delivery_id, owned(WebhookEndpoint, owner))
         .with_for_update(of=WebhookDelivery)
     )
     if d is None:

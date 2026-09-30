@@ -5,7 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.tenant import tenant
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.contacts import Contact, ContactList, ContactStatus, ListMember
 from app.services import consent
@@ -77,7 +79,7 @@ def create_contact(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:write")),
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
     fields = body.model_dump(exclude={"owner_ref"})
     c, created = _run(db, lambda: svc.upsert(db, owner, **fields))
     response.status_code = 201 if created else 200
@@ -88,7 +90,7 @@ def create_contact(
 def import_contacts(
     body: ImportIn, db: Session = Depends(get_db), p: Principal = Depends(require("contacts:write"))
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
     rows = [c.model_dump(exclude={"owner_ref"}) for c in body.contacts]
     r = _run(db, lambda: svc.import_contacts(db, owner, rows))
     return {"created": r.created, "updated": r.updated, "errors": r.errors}
@@ -104,9 +106,9 @@ def list_contacts(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     stmt = select(Contact).where(
-        Contact.owner_ref == owner, Contact.id > after_id, Contact.status == ContactStatus.ACTIVE
+        owned(Contact, owner), Contact.id > after_id, Contact.status == ContactStatus.ACTIVE
     )
     if list_id is not None:
         stmt = stmt.join(ListMember, ListMember.contact_id == Contact.id).where(
@@ -131,7 +133,7 @@ def get_contact(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     return _run(db, lambda: svc._get(db, owner, contact_id))
 
 
@@ -143,10 +145,10 @@ def export_contact(
     p: Principal = Depends(require("contacts:read")),
 ):
     """GDPR (e drejta e qasjes): gjithçka që mbajmë për këtë person te kjo llogari."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     c = _run(db, lambda: svc._get(db, owner, contact_id))
     out = svc.export_data(db, owner, c)
-    audit(db, p, "contact.export", "contact", c.id, {"owner": owner})
+    audit(db, p, "contact.export", "contact", c.id, {"owner": owner.owner_ref})
     db.commit()
     return out
 
@@ -159,7 +161,7 @@ def patch_contact(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     fields = body.model_dump(exclude_unset=True)
     return _run(db, lambda: svc.update(db, owner, contact_id, **fields))
 
@@ -172,11 +174,11 @@ def erase_contact(
     p: Principal = Depends(require("contacts:write")),
 ):
     """Fshirje GDPR: PII hiqet; adresat mbeten të bllokuara vetëm si HMAC."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         c = svc.erase(db, owner, contact_id, p.actor)
-        audit(db, p, "contact.erase", "contact", c.id, {"owner": owner})
+        audit(db, p, "contact.erase", "contact", c.id, {"owner": owner.owner_ref})
 
     _run(db, go)
     return Response(status_code=204)
@@ -203,7 +205,7 @@ def _list_out(lst: ContactList) -> dict:
 def create_list(
     body: ListIn, db: Session = Depends(get_db), p: Principal = Depends(require("contacts:write"))
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
     return _list_out(_run(db, lambda: svc.create_list(db, owner, body.name)))
 
 
@@ -213,10 +215,8 @@ def get_lists(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:read")),
 ):
-    owner = owner_for(p, owner_ref)
-    rows = db.scalars(
-        select(ContactList).where(ContactList.owner_ref == owner).order_by(ContactList.id)
-    )
+    owner = tenant(db, p, owner_ref)
+    rows = db.scalars(select(ContactList).where(owned(ContactList, owner)).order_by(ContactList.id))
     return [_list_out(x) for x in rows]
 
 
@@ -227,7 +227,7 @@ def add_members(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:write")),
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref)
     return {"added": _run(db, lambda: svc.add_members(db, owner, list_id, body.contact_ids))}
 
 
@@ -239,7 +239,7 @@ def remove_member(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     _run(db, lambda: svc.remove_member(db, owner, list_id, contact_id))
     return Response(status_code=204)
 
@@ -254,7 +254,7 @@ def audience(
     p: Principal = Depends(require("contacts:read")),
 ):
     """Sa nga lista mund të kontaktohet dhe pse të tjerët jo (para se të nisë një campaign)."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     if channel not in consent.CHANNELS or category not in consent.CATEGORIES:
         raise HTTPException(422, {"code": "invalid", "message": "bad channel or category"})
     counts = _run(db, lambda: svc.audience_counts(db, owner, list_id, channel, category))
@@ -281,7 +281,7 @@ class ConsentIn(BaseModel):
 def record_consent(
     body: ConsentIn, db: Session = Depends(get_db), p: Principal = Depends(require("consent:write"))
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
         st = consent.record(
@@ -289,7 +289,7 @@ def record_consent(
             body.source, p.actor, body.evidence,
         )  # fmt: skip
         audit(db, p, f"consent.{body.action}", "consent", st.id,
-              {"owner": owner, "channel": body.channel, "reason": st.reason})  # fmt: skip
+              {"owner": owner.owner_ref, "channel": body.channel, "reason": st.reason})  # fmt: skip
         return st
 
     st = _run(db, go)
@@ -305,6 +305,6 @@ def check_consent(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("contacts:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     d = _run(db, lambda: consent.check(db, owner, channel, address, category))
     return {"allowed": d.allowed, "reason": d.reason}

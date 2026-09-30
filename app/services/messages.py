@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, owned, ref
 from app.models.sending import (
     TERMINAL,
     TRANSITIONS,
@@ -56,10 +57,8 @@ class RateLimited(WalletError):
 DEFAULT_RATE_LIMIT = 600  # mesazhe/minutë për llogari
 
 
-def _find(db: Session, owner_ref: str, key: str) -> Message | None:
-    return db.scalar(
-        select(Message).where(Message.owner_ref == owner_ref, Message.idempotency_key == key)
-    )
+def _find(db: Session, owner: Owner, key: str) -> Message | None:
+    return db.scalar(select(Message).where(owned(Message, owner), Message.idempotency_key == key))
 
 
 def find_route(db: Session, destination: str) -> Route:
@@ -90,7 +89,7 @@ def _move(db: Session, m: Message, to: MessageStatus, detail: str | None = None)
 
 def submit(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     key: str,
     destination: str,
     sender: str,
@@ -112,7 +111,7 @@ def submit(
         ).encode()
     ).hexdigest()
 
-    existing = _find(db, owner_ref, key)
+    existing = _find(db, owner, key)
     if existing:
         if existing.request_hash != digest:
             raise Conflict("idempotency key reused with a different request")
@@ -120,14 +119,14 @@ def submit(
 
     if not switches.is_enabled(db, switches.SUBMIT):
         raise SendingPaused("sending is temporarily paused")
-    plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner_ref))
+    plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
     if plan is None or not plan.enabled:
         raise AccountDisabled("account has no active sending plan")
     limit = plan.rate_limit_per_min or DEFAULT_RATE_LIMIT
     recent = db.scalar(
         select(func.count())
         .select_from(Message)
-        .where(Message.owner_ref == owner_ref, Message.created_at > now - timedelta(minutes=1))
+        .where(owned(Message, owner), Message.created_at > now - timedelta(minutes=1))
     )
     if recent >= limit:
         raise RateLimited(f"limit of {limit} messages per minute exceeded")
@@ -135,12 +134,12 @@ def submit(
         raise rates.InvalidNumber("destination must be E.164")
     destination = destination.lstrip("+")
     route = find_route(db, destination)
-    sender_ids.assert_usable(db, owner_ref, route.country, sender)
-    consent.assert_may_send(db, owner_ref, "sms", destination, category)
+    sender_ids.assert_usable(db, owner, route.country, sender)
+    consent.assert_may_send(db, owner, "sms", destination, category)
 
     template_version_id = None
     if template_id:
-        r = templates.render(db, owner_ref, template_id, values or {})
+        r = templates.render(db, owner, template_id, values or {})
         text, template_version_id = r.text, r.version_id
     else:
         try:
@@ -151,9 +150,7 @@ def submit(
     q = rates.quote(db, plan.rate_card_id, destination, text, now)
     if q.total <= 0:
         raise rates.NoRate("zero-priced destinations are not supported")
-    wallet = db.scalar(
-        select(Wallet).where(Wallet.owner_ref == owner_ref, Wallet.currency == q.currency)
-    )
+    wallet = db.scalar(select(Wallet).where(owned(Wallet, owner), Wallet.currency == q.currency))
     if wallet is None:
         raise NotFound(f"no {q.currency} wallet for account")
 
@@ -162,7 +159,7 @@ def submit(
         with db.begin_nested():  # dështimi rikthen edhe rezervimin
             hold = wallets.reserve(db, wallet.id, q.total, reference=public_id)
             m = Message(
-                public_id=public_id, owner_ref=owner_ref, idempotency_key=key,
+                public_id=public_id, owner_ref=ref(owner), idempotency_key=key,
                 request_hash=digest, wallet_id=wallet.id, hold_id=hold.id,
                 category=category, sender=sender, destination=destination,
                 country=route.country, text=text,
@@ -176,7 +173,7 @@ def submit(
             db.add(MessageEvent(message_id=m.id, from_status=None, to_status="queued"))
     except IntegrityError:
         # kërkesë paralele me të njëjtin key fitoi garën
-        again = _find(db, owner_ref, key)
+        again = _find(db, owner, key)
         if again and again.request_hash == digest:
             return again
         raise Conflict("idempotency key reused with a different request") from None

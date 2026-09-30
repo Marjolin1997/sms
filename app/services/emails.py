@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.email import (
     EMAIL_TRANSITIONS,
@@ -38,10 +39,8 @@ class SenderDomainNotVerified(WalletError):
     code = "sender_domain_not_verified"
 
 
-def _find(db: Session, owner_ref: str, key: str) -> Email | None:
-    return db.scalar(
-        select(Email).where(Email.owner_ref == owner_ref, Email.idempotency_key == key)
-    )
+def _find(db: Session, owner: Owner, key: str) -> Email | None:
+    return db.scalar(select(Email).where(owned(Email, owner), Email.idempotency_key == key))
 
 
 def _move(db: Session, e: Email, to: EmailStatus, detail: str | None = None) -> None:
@@ -59,7 +58,7 @@ def _move(db: Session, e: Email, to: EmailStatus, detail: str | None = None) -> 
 
 def submit(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     key: str,
     from_email: str,
     to_email: str,
@@ -96,7 +95,7 @@ def submit(
         ).encode()
     ).hexdigest()
 
-    existing = _find(db, owner_ref, key)
+    existing = _find(db, owner, key)
     if existing:
         if existing.request_hash != digest:
             raise Conflict("idempotency key reused with a different request")
@@ -106,7 +105,7 @@ def submit(
         from app.services.messages import SendingPaused
 
         raise SendingPaused("sending is temporarily paused")
-    plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner_ref))
+    plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
     if plan is None or not plan.enabled:
         from app.services.messages import AccountDisabled
 
@@ -115,22 +114,22 @@ def submit(
     recent = db.scalar(
         select(func.count())
         .select_from(Email)
-        .where(Email.owner_ref == owner_ref, Email.created_at > now - timedelta(minutes=1))
+        .where(owned(Email, owner), Email.created_at > now - timedelta(minutes=1))
     )
     if recent >= limit:
         from app.services.messages import RateLimited
 
         raise RateLimited(f"limit of {limit} emails per minute exceeded")
-    domain = email_domains.verified_domain_for(db, owner_ref, from_email)
+    domain = email_domains.verified_domain_for(db, owner, from_email)
     if domain is None:
         raise SenderDomainNotVerified("from address is not on a verified domain of this account")
-    consent.assert_may_send(db, owner_ref, "email", to_email, category)
+    consent.assert_may_send(db, owner, "email", to_email, category)
 
     public_id = str(uuid.uuid4())
     try:
         with db.begin_nested():
             e = Email(
-                public_id=public_id, owner_ref=owner_ref, idempotency_key=key,
+                public_id=public_id, owner_ref=ref(owner), idempotency_key=key,
                 request_hash=digest, category=category, domain_id=domain.id,
                 from_email=from_email, from_name=from_name, to_email=to_email,
                 subject=subject, text_body=text, html_body=html,
@@ -140,7 +139,7 @@ def submit(
             db.flush()
             db.add(EmailEvent(email_id=e.id, from_status=None, to_status="queued"))
     except IntegrityError:
-        again = _find(db, owner_ref, key)
+        again = _find(db, owner, key)
         if again and again.request_hash == digest:
             return again
         raise Conflict("idempotency key reused with a different request") from None

@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, belongs, owned, ref
 from app.models.contacts import Contact, ContactStatus
 from app.models.inbound import InboundMessage, Keyword
 from app.services import consent, events, sender_ids
@@ -32,38 +33,34 @@ def first_word(text: str) -> str:
 # --- Fjalët kyçe ------------------------------------------------------------------
 
 
-def set_keyword(db: Session, owner_ref: str, keyword: str, reply_text: str | None) -> Keyword:
+def set_keyword(db: Session, owner: Owner, keyword: str, reply_text: str | None) -> Keyword:
     kw = keyword.strip().lower()
     if not _KW.match(kw):
         raise InvalidKeyword("a keyword is 2-32 letters or digits, no spaces")
     if kw in RESERVED:
         raise InvalidKeyword(f"'{kw}' is reserved (opt-out/opt-in words are handled automatically)")
-    row = db.scalar(select(Keyword).where(Keyword.owner_ref == owner_ref, Keyword.keyword == kw))
+    row = db.scalar(select(Keyword).where(owned(Keyword, owner), Keyword.keyword == kw))
     if row is None:
-        n = db.scalar(
-            select(func.count()).select_from(Keyword).where(Keyword.owner_ref == owner_ref)
-        )
+        n = db.scalar(select(func.count()).select_from(Keyword).where(owned(Keyword, owner)))
         if n >= MAX_KEYWORDS:
             raise Conflict(f"at most {MAX_KEYWORDS} keywords per account")
-        row = Keyword(owner_ref=owner_ref, keyword=kw)
+        row = Keyword(owner_ref=ref(owner), keyword=kw)
         db.add(row)
     row.reply_text = (reply_text or "").strip() or None
     db.flush()
     return row
 
 
-def delete_keyword(db: Session, owner_ref: str, keyword_id: int) -> None:
+def delete_keyword(db: Session, owner: Owner, keyword_id: int) -> None:
     row = db.get(Keyword, keyword_id)
-    if row is None or row.owner_ref != owner_ref:
+    if row is None or not belongs(row, owner):
         raise NotFound("keyword not found")
     db.delete(row)
     db.flush()
 
 
-def list_keywords(db: Session, owner_ref: str) -> list[Keyword]:
-    return list(
-        db.scalars(select(Keyword).where(Keyword.owner_ref == owner_ref).order_by(Keyword.id))
-    )
+def list_keywords(db: Session, owner: Owner) -> list[Keyword]:
+    return list(db.scalars(select(Keyword).where(owned(Keyword, owner)).order_by(Keyword.id)))
 
 
 # --- Marrja -----------------------------------------------------------------------
@@ -112,7 +109,7 @@ def receive(
         )
     )
     row = InboundMessage(
-        public_id=str(uuid.uuid4()), owner_ref=owner, provider=provider,
+        public_id=str(uuid.uuid4()), owner_ref=ref(owner), provider=provider,
         provider_message_id=provider_message_id, from_number=norm_from,
         to_number=to.lstrip("+"), text=text, action=action,
         keyword=rule.keyword if rule else None, contact_id=contact_id,
@@ -163,19 +160,19 @@ def _auto_reply(db: Session, row: InboundMessage, text: str) -> None:
 # --- Inbox -------------------------------------------------------------------------
 
 
-def unread_count(db: Session, owner_ref: str) -> int:
+def unread_count(db: Session, owner: Owner) -> int:
     return db.scalar(
         select(func.count())
         .select_from(InboundMessage)
-        .where(InboundMessage.owner_ref == owner_ref, InboundMessage.read_at.is_(None))
+        .where(owned(InboundMessage, owner), InboundMessage.read_at.is_(None))
     )
 
 
-def mark_read(db: Session, owner_ref: str, ids: list[int] | None = None) -> int:
+def mark_read(db: Session, owner: Owner, ids: list[int] | None = None) -> int:
     """ids=None → të gjitha të palexuarat e llogarisë. → sa u shënuan."""
     stmt = (
         sa_update(InboundMessage)
-        .where(InboundMessage.owner_ref == owner_ref, InboundMessage.read_at.is_(None))
+        .where(owned(InboundMessage, owner), InboundMessage.read_at.is_(None))
         .values(read_at=datetime.now(UTC))
     )
     if ids is not None:
@@ -183,10 +180,10 @@ def mark_read(db: Session, owner_ref: str, ids: list[int] | None = None) -> int:
     return db.execute(stmt).rowcount
 
 
-def scrub_contact(db: Session, owner_ref: str, phone: str) -> None:
+def scrub_contact(db: Session, owner: Owner, phone: str) -> None:
     """GDPR: teksti dhe numri i një personi të fshirë largohen nga inbox-i."""
     db.execute(
         sa_update(InboundMessage)
-        .where(InboundMessage.owner_ref == owner_ref, InboundMessage.from_number == phone)
+        .where(owned(InboundMessage, owner), InboundMessage.from_number == phone)
         .values(text="[erased]", from_number="erased", contact_id=None)
     )

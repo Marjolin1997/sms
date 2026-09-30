@@ -5,6 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, owned, ref
 from app.models.contacts import (
     Contact,
     ContactList,
@@ -45,10 +46,10 @@ def _norm(phone: str | None, email: str | None) -> tuple[str | None, str | None]
     return p, e
 
 
-def _get(db: Session, owner_ref: str, contact_id: int, lock: bool = False) -> Contact:
+def _get(db: Session, owner: Owner, contact_id: int, lock: bool = False) -> Contact:
     q = select(Contact).where(
         Contact.id == contact_id,
-        Contact.owner_ref == owner_ref,
+        owned(Contact, owner),
         Contact.status == ContactStatus.ACTIVE,
     )
     c = db.scalar(q.with_for_update() if lock else q)
@@ -59,7 +60,7 @@ def _get(db: Session, owner_ref: str, contact_id: int, lock: bool = False) -> Co
 
 def upsert(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     phone: str | None = None,
     email: str | None = None,
     first_name: str | None = None,
@@ -79,7 +80,7 @@ def upsert(
         if val:
             c = db.scalar(
                 select(Contact).where(
-                    Contact.owner_ref == owner_ref,
+                    owned(Contact, owner),
                     col == val,
                     Contact.status == ContactStatus.ACTIVE,
                 )
@@ -105,7 +106,7 @@ def upsert(
         db.flush()
         return c, False
     c = Contact(
-        owner_ref=owner_ref, phone=p, email=e, external_id=external_id,
+        owner_ref=ref(owner), phone=p, email=e, external_id=external_id,
         first_name=first_name and first_name[:64], last_name=last_name and last_name[:64],
         attributes=attributes,
     )  # fmt: skip
@@ -121,7 +122,7 @@ class ImportResult:
     errors: list[dict] = field(default_factory=list)
 
 
-def import_contacts(db: Session, owner_ref: str, rows: list[dict]) -> ImportResult:
+def import_contacts(db: Session, owner: Owner, rows: list[dict]) -> ImportResult:
     """Çdo rresht në savepoint: një rresht i keq nuk prish të tjerët."""
     if len(rows) > MAX_IMPORT:
         raise InvalidContact(f"at most {MAX_IMPORT} rows per import")
@@ -129,7 +130,7 @@ def import_contacts(db: Session, owner_ref: str, rows: list[dict]) -> ImportResu
     for i, row in enumerate(rows):
         try:
             with db.begin_nested():
-                _, created = upsert(db, owner_ref, **row)
+                _, created = upsert(db, owner, **row)
             out.created += created
             out.updated += not created
         except WalletError as e:
@@ -137,8 +138,8 @@ def import_contacts(db: Session, owner_ref: str, rows: list[dict]) -> ImportResu
     return out
 
 
-def update(db: Session, owner_ref: str, contact_id: int, **fields) -> Contact:
-    c = _get(db, owner_ref, contact_id, lock=True)
+def update(db: Session, owner: Owner, contact_id: int, **fields) -> Contact:
+    c = _get(db, owner, contact_id, lock=True)
     if "attributes" in fields and fields["attributes"] is not None:
         c.attributes = _attrs(fields["attributes"])
     for k in ("first_name", "last_name"):
@@ -149,19 +150,17 @@ def update(db: Session, owner_ref: str, contact_id: int, **fields) -> Contact:
     return c
 
 
-def erase(db: Session, owner_ref: str, contact_id: int, actor: str) -> Contact:
+def erase(db: Session, owner: Owner, contact_id: int, actor: str) -> Contact:
     """GDPR: PII fshihet, anëtarësitë hiqen; adresat mbeten të bllokuara vetëm si HMAC,
     që një import i mëvonshëm të mos i rikthejë në dërgim."""
-    c = _get(db, owner_ref, contact_id, lock=True)
+    c = _get(db, owner, contact_id, lock=True)
     if c.phone:
         from app.services import inbox
 
-        inbox.scrub_contact(db, owner_ref, c.phone)
+        inbox.scrub_contact(db, owner, c.phone)
     for channel, addr in (("sms", c.phone), ("email", c.email)):
         if addr:
-            consent.record(
-                db, owner_ref, channel, addr, "opt_out", "erasure", "erasure_request", actor
-            )
+            consent.record(db, owner, channel, addr, "opt_out", "erasure", "erasure_request", actor)
     db.execute(delete(ListMember).where(ListMember.contact_id == c.id))
     from app.models.campaigns import CampaignRecipient, RecipientStatus
 
@@ -188,34 +187,30 @@ def erase(db: Session, owner_ref: str, contact_id: int, actor: str) -> Contact:
 # --- Lista ------------------------------------------------------------------
 
 
-def create_list(db: Session, owner_ref: str, name: str) -> ContactList:
-    if db.scalar(
-        select(ContactList).where(ContactList.owner_ref == owner_ref, ContactList.name == name)
-    ):
+def create_list(db: Session, owner: Owner, name: str) -> ContactList:
+    if db.scalar(select(ContactList).where(owned(ContactList, owner), ContactList.name == name)):
         raise Conflict("list name already exists")
-    lst = ContactList(owner_ref=owner_ref, name=name)
+    lst = ContactList(owner_ref=ref(owner), name=name)
     db.add(lst)
     db.flush()
     return lst
 
 
-def _list(db: Session, owner_ref: str, list_id: int) -> ContactList:
-    lst = db.scalar(
-        select(ContactList).where(ContactList.id == list_id, ContactList.owner_ref == owner_ref)
-    )
+def _list(db: Session, owner: Owner, list_id: int) -> ContactList:
+    lst = db.scalar(select(ContactList).where(ContactList.id == list_id, owned(ContactList, owner)))
     if lst is None:
         raise NotFound("list not found")
     return lst
 
 
-def add_members(db: Session, owner_ref: str, list_id: int, contact_ids: list[int]) -> int:
-    _list(db, owner_ref, list_id)
+def add_members(db: Session, owner: Owner, list_id: int, contact_ids: list[int]) -> int:
+    _list(db, owner, list_id)
     if len(contact_ids) > MAX_IMPORT:
         raise InvalidContact(f"at most {MAX_IMPORT} contacts per call")
     valid = set(
         db.scalars(
             select(Contact.id).where(
-                Contact.owner_ref == owner_ref,
+                owned(Contact, owner),
                 Contact.id.in_(contact_ids),
                 Contact.status == ContactStatus.ACTIVE,
             )
@@ -236,8 +231,8 @@ def add_members(db: Session, owner_ref: str, list_id: int, contact_ids: list[int
     return len(valid - existing)
 
 
-def remove_member(db: Session, owner_ref: str, list_id: int, contact_id: int) -> None:
-    _list(db, owner_ref, list_id)
+def remove_member(db: Session, owner: Owner, list_id: int, contact_id: int) -> None:
+    _list(db, owner, list_id)
     db.execute(
         delete(ListMember).where(ListMember.list_id == list_id, ListMember.contact_id == contact_id)
     )
@@ -256,7 +251,7 @@ class AudienceRow:
 
 def audience_batch(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     list_id: int,
     channel: str,
     category: str,
@@ -265,7 +260,7 @@ def audience_batch(
 ) -> list[AudienceRow]:
     """Faqe e audiencës me vendim për secilin kontakt. Campaigns e thërrasin me `after_id`
     që të mos ngarkojnë listën e plotë në memorie."""
-    _list(db, owner_ref, list_id)
+    _list(db, owner, list_id)
     contacts = db.scalars(
         select(Contact)
         .join(ListMember, ListMember.contact_id == Contact.id)
@@ -283,12 +278,12 @@ def audience_batch(
     for c in contacts:
         addr = c.phone if channel == "sms" else c.email
         if addr:
-            hashes[c.id] = consent.address_hash(owner_ref, channel, addr)
+            hashes[c.id] = consent.address_hash(ref(owner), channel, addr)
     states = {}
     if hashes:
         for st in db.scalars(
             select(ConsentState).where(
-                ConsentState.owner_ref == owner_ref,
+                owned(ConsentState, owner),
                 ConsentState.channel == channel,
                 ConsentState.address_hash.in_(set(hashes.values())),
             )
@@ -306,12 +301,12 @@ def audience_batch(
 
 
 def audience_counts(
-    db: Session, owner_ref: str, list_id: int, channel: str, category: str
+    db: Session, owner: Owner, list_id: int, channel: str, category: str
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
     after = 0
     while True:
-        batch = audience_batch(db, owner_ref, list_id, channel, category, after)
+        batch = audience_batch(db, owner, list_id, channel, category, after)
         if not batch:
             return counts
         for r in batch:
@@ -322,7 +317,7 @@ def audience_counts(
 EXPORT_LIMIT = 1000
 
 
-def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
+def export_data(db: Session, owner: Owner, c: Contact) -> dict:
     """Paketa e qasjes për subjektin e të dhënave: profili, listat, historiku i pëlqimit
     (evidenca ruhet me HMAC të adresës; këtu lidhet përsëri me kontaktin) dhe mesazhet."""
     from app.models.contacts import ConsentEvent
@@ -333,18 +328,18 @@ def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
     lists = db.execute(
         select(ContactList.name, ListMember.added_at)
         .join(ListMember, ListMember.list_id == ContactList.id)
-        .where(ListMember.contact_id == c.id, ContactList.owner_ref == owner_ref)
+        .where(ListMember.contact_id == c.id, owned(ContactList, owner))
     ).all()
     hashes = {}
     for channel, addr in (("sms", c.phone), ("email", c.email)):
         if addr:
-            hashes[consent.address_hash(owner_ref, channel, consent.normalize(channel, addr))] = (
+            hashes[consent.address_hash(ref(owner), channel, consent.normalize(channel, addr))] = (
                 channel
             )
     events = (
         db.scalars(
             select(ConsentEvent)
-            .where(ConsentEvent.owner_ref == owner_ref, ConsentEvent.address_hash.in_(hashes))
+            .where(owned(ConsentEvent, owner), ConsentEvent.address_hash.in_(hashes))
             .order_by(ConsentEvent.id)
         ).all()
         if hashes
@@ -353,7 +348,7 @@ def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
     sms = (
         db.scalars(
             select(Message)
-            .where(Message.owner_ref == owner_ref, Message.destination == c.phone)
+            .where(owned(Message, owner), Message.destination == c.phone)
             .order_by(Message.id.desc())
             .limit(EXPORT_LIMIT)
         ).all()
@@ -363,7 +358,7 @@ def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
     emails = (
         db.scalars(
             select(Email)
-            .where(Email.owner_ref == owner_ref, Email.to_email == c.email)
+            .where(owned(Email, owner), Email.to_email == c.email)
             .order_by(Email.id.desc())
             .limit(EXPORT_LIMIT)
         ).all()
@@ -373,7 +368,7 @@ def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
     inbound = (
         db.scalars(
             select(InboundMessage)
-            .where(InboundMessage.owner_ref == owner_ref, InboundMessage.from_number == c.phone)
+            .where(owned(InboundMessage, owner), InboundMessage.from_number == c.phone)
             .order_by(InboundMessage.id.desc())
             .limit(EXPORT_LIMIT)
         ).all()

@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.scope import Owner, belongs, owned, ref
 from app.core.security import ROLE_PERMS, STAFF_ROLES, generate_key
 from app.models.admin import ApiKey, KeyStatus
 from app.services.wallet import Conflict, NotFound, WalletError
@@ -103,9 +104,9 @@ def rotate_key(db: Session, key_id: int, created_by: str, grace_minutes: int = 6
     return old, new, full
 
 
-def rotate_own_key(db: Session, owner_ref: str, key_id: int, created_by: str, grace: int = 60):
+def rotate_own_key(db: Session, owner: Owner, key_id: int, created_by: str, grace: int = 60):
     key = db.get(ApiKey, key_id)
-    if key is None or key.owner_ref != owner_ref:
+    if key is None or not belongs(key, owner):
         raise NotFound("api key not found")
     return rotate_key(db, key_id, created_by, grace)
 
@@ -119,7 +120,7 @@ MAX_SELF_SERVICE_KEYS = 20
 
 def create_own_key(
     db: Session,
-    owner_ref: str,
+    owner: Owner,
     name: str,
     created_by: str,
     expires_at: datetime | None = None,
@@ -131,22 +132,22 @@ def create_own_key(
         select(func.count())
         .select_from(ApiKey)
         .where(
-            ApiKey.owner_ref == owner_ref,
+            owned(ApiKey, owner),
             ApiKey.role == "client",
             ApiKey.status == KeyStatus.ACTIVE,
         )
     )
     if active >= MAX_SELF_SERVICE_KEYS:
         raise Conflict(f"at most {MAX_SELF_SERVICE_KEYS} active keys per account")
-    return create_key(db, name, "client", owner_ref, created_by, expires_at, allowed_cidrs)
+    return create_key(db, name, "client", ref(owner), created_by, expires_at, allowed_cidrs)
 
 
-def list_own_keys(db: Session, owner_ref: str) -> list[ApiKey]:
-    return list(db.scalars(select(ApiKey).where(ApiKey.owner_ref == owner_ref).order_by(ApiKey.id)))
+def list_own_keys(db: Session, owner: Owner) -> list[ApiKey]:
+    return list(db.scalars(select(ApiKey).where(owned(ApiKey, owner)).order_by(ApiKey.id)))
 
 
-def revoke_own_key(db: Session, owner_ref: str, key_id: int) -> ApiKey:
+def revoke_own_key(db: Session, owner: Owner, key_id: int) -> ApiKey:
     key = db.get(ApiKey, key_id)
-    if key is None or key.owner_ref != owner_ref:
+    if key is None or not belongs(key, owner):
         raise NotFound("api key not found")
     return revoke_key(db, key_id)

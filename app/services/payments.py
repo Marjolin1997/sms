@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.billing import (
     Invoice,
@@ -33,14 +34,14 @@ class PaymentsDisabled(WalletError):
 
 
 def start_payment(
-    db: Session, owner_ref: str, purpose: str, amount=None, invoice_id: int | None = None,
+    db: Session, owner: Owner, purpose: str, amount=None, invoice_id: int | None = None,
     wallet_id: int | None = None,
 ) -> Payment:  # fmt: skip
     purpose = PaymentPurpose(purpose)
     if purpose == PaymentPurpose.INVOICE:
         if invoice_id is None:
             raise InvalidAmount("invoice_id is required")
-        inv = billing._get_invoice(db, owner_ref, invoice_id, lock=True)
+        inv = billing._get_invoice(db, owner, invoice_id, lock=True)
         if inv.status != InvoiceStatus.OPEN:
             raise Conflict(f"invoice is {inv.status.value}")
         existing = db.scalar(
@@ -53,7 +54,7 @@ def start_payment(
         amt, currency, w_id = inv.total, inv.currency, None
         desc = f"Invoice {inv.number}"
     else:
-        w = db.scalar(select(Wallet).where(Wallet.id == wallet_id, Wallet.owner_ref == owner_ref))
+        w = db.scalar(select(Wallet).where(Wallet.id == wallet_id, owned(Wallet, owner)))
         if w is None:
             raise NotFound("wallet not found")
         amt = wallets.positive(amount if amount is not None else 0)
@@ -67,11 +68,11 @@ def start_payment(
         raise PaymentsDisabled("online payments are not enabled; contact us to top up")
     try:
         gw = get_gateway(settings.payment_provider)
-        session = gw.create_checkout(f"{owner_ref}:{purpose.value}", amt, currency, desc)
+        session = gw.create_checkout(f"{ref(owner)}:{purpose.value}", amt, currency, desc)
     except ProviderError as e:
         raise GatewayError(f"payment gateway unavailable: {e.code}") from e
     p = Payment(
-        owner_ref=owner_ref, purpose=purpose, invoice_id=inv.id if inv else None, wallet_id=w_id,
+        owner_ref=ref(owner), purpose=purpose, invoice_id=inv.id if inv else None, wallet_id=w_id,
         amount=amt, currency=currency, provider=gw.name, external_id=session.external_id,
         checkout_url=session.url,
     )  # fmt: skip
