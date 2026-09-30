@@ -263,3 +263,350 @@ def test_corrupt_row_with_other_tenants_enterprise_id_is_invisible_to_both(ab, d
     db.commit()
     assert c.get(f"/v1/contacts/{ids['a']['contact']}", headers=a).status_code == 404
     assert c.get(f"/v1/contacts/{ids['a']['contact']}", headers=b).status_code == 404
+
+
+# ====================================================================================================
+# M1c-c: messages, ledger/balance, campaigns, API keys, webhooks, reports, sender IDs, dashboard
+# ====================================================================================================
+
+import csv  # noqa: E402
+import io  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from app.models.sending import AccountPlan, Message  # noqa: E402
+from app.services import campaigns, net_guard, rates, sender_ids, webhooks  # noqa: E402
+from app.services import contacts as contacts_svc  # noqa: E402
+from app.services import messages as msgsvc  # noqa: E402
+from app.services import wallet as wallets  # noqa: E402
+from app.services.wallet import TopupMethod  # noqa: E402
+from tests.test_pipeline import PAST  # noqa: E402
+
+DST = {"a": "+355691230003", "b": "+355691230004"}
+
+
+@pytest.fixture(autouse=True)
+def _public_dns():
+    old = net_guard.get_resolver()
+    net_guard.set_resolver(lambda host: ["93.184.216.34"])
+    yield
+    net_guard.set_resolver(old)
+
+
+def _funded_tenant(db, owner, sender, card_id):
+    w = wallets.create_wallet(db, owner, "EUR")
+    wallets.confirm_topup(db, wallets.create_topup(db, w.id, "10", TopupMethod.CASH).id)
+    db.add(AccountPlan(owner_ref=owner, rate_card_id=card_id))
+    s = sender_ids.request(db, owner, "AL", sender)
+    sender_ids.approve(db, s.id, "admin")
+    db.commit()
+    return w, s
+
+
+@pytest.fixture
+def abc(db):
+    """A: 2 mesazhe, B: 1. Secili me wallet të financuar, sender të miratuar, webhook, campaign, çelës."""
+    import app.providers as providers
+    from app.models.sending import Route
+    from app.providers import FakeProvider
+
+    providers._registry["fake"] = FakeProvider()
+    card = rates.create_card(db, "std", "EUR")
+    v = rates.new_draft(db, card.id)
+    rates.set_rate(db, v.id, "355", "0.05")
+    rates.publish(db, v.id, PAST, now=PAST - timedelta(days=1))
+    db.add(Route(prefix="355", country="AL", provider="fake"))
+    db.commit()
+    c = TestClient(create_app())
+    out = {"c": c}
+    for who, owner, sender in (("a", "tenA", "SNDA"), ("b", "tenB", "SNDB")):
+        h, key_id = key_headers(c, owner)
+        w, s = _funded_tenant(db, owner, sender, card.id)
+        n = 2 if who == "a" else 1
+        mids = []
+        for i in range(n):
+            r = c.post(
+                "/v1/messages",
+                json={
+                    "owner_ref": owner,
+                    "to": DST[who].replace("4", "5") if i else DST[who],
+                    "sender": sender,
+                    "text": f"secret-{who}-{i}",
+                },
+                headers={**h, "Idempotency-Key": f"k-{who}-{i}"},
+            )
+            assert r.status_code == 202, r.text
+            mids.append(r.json()["id"])
+        ep, _ = webhooks.create_endpoint(db, owner, f"https://hooks.example.com/{who}", ["*"])
+        lst = contacts_svc.create_list(db, owner, f"list-{who}")
+        ct, _ = contacts_svc.upsert(db, owner, phone=DST[who], first_name=who.upper())
+        contacts_svc.add_members(db, owner, lst.id, [ct.id])
+        camp = campaigns.create(db, owner, f"camp-{who}", lst.id, sender, "tester", text="hello")
+        db.commit()
+        out[who] = {
+            "h": h,
+            "key_id": key_id,
+            "wallet": w.id,
+            "sender_id": s.id,
+            "msgs": mids,
+            "ep": ep.id,
+            "list": lst.id,
+            "camp": camp.id,
+            "owner": owner,
+        }
+    while msgsvc.process_one(db) is not None:
+        pass
+    for m in db.scalars(select(Message)).all():
+        msgsvc.apply_dlr(db, "fake", m.provider_message_id, delivered=True)
+    db.commit()
+    scope.LEGACY_READS.clear()
+    yield out
+    assert dict(scope.LEGACY_READS) == {}, "kërkesa e klientit përdori rrugën legacy owner_ref"
+
+
+def _same_as_ghost(c, method, path_a, path_ghost, headers, body=None):
+    """Përgjigja për burimin e A duhet të jetë e pandashme nga ajo për një ID që s'ekziston."""
+    ra = c.request(method, path_a, headers=headers, json=body)
+    rg = c.request(method, path_ghost, headers=headers, json=body)
+    return ra.status_code, rg.status_code, ra.json() == rg.json()
+
+
+# --- Messages ------------------------------------------------------------------------------------
+
+
+def test_messages_get_and_events_cross_tenant_look_like_missing(abc):
+    c, b, a = abc["c"], abc["b"]["h"], abc["a"]
+    mid = a["msgs"][0]
+    for suffix in ("", "/events"):
+        sa, sg, same = _same_as_ghost(
+            c, "GET", f"/v1/messages/{mid}{suffix}", f"/v1/messages/nope{suffix}", b
+        )
+        assert (sa, sg, same) == (404, 404, True), suffix
+    assert c.get(f"/v1/messages/{mid}", headers=a["h"]).status_code == 200
+
+
+def test_messages_list_filters_search_pagination_never_cross(abc):
+    c, b = abc["c"], abc["b"]["h"]
+    listing = c.get("/v1/messages", headers=b).json()
+    assert len(listing["items"]) == 1 and listing["items"][0]["to"] == DST["b"][1:]
+    assert c.get("/v1/messages", params={"q": DST["a"]}, headers=b).json()["items"] == []
+    assert c.get("/v1/messages", params={"status": "delivered"}, headers=b).json()["items"]
+    for before in (None, 1_000_000):
+        p = {"limit": 1} | ({"before_id": before} if before else {})
+        page = c.get("/v1/messages", params=p, headers=b).json()
+        assert all("secret-a" not in str(x) for x in page["items"])
+    assert c.get("/v1/messages", params={"owner_ref": "tenA"}, headers=b).status_code == 404
+
+
+def test_messages_send_cannot_spoof_other_tenant(abc):
+    c, b = abc["c"], abc["b"]["h"]
+    r = c.post("/v1/messages", headers={**b, "Idempotency-Key": "spoof"},
+               json={"owner_ref": "tenA", "to": DST["a"], "sender": "SNDA", "text": "x"})  # fmt: skip
+    assert r.status_code == 404 and "tenA" not in r.text
+    # sender i A nuk përdoret nga B as me owner_ref-in e vet
+    r = c.post("/v1/messages", headers={**b, "Idempotency-Key": "spoof2"},
+               json={"owner_ref": "tenB", "to": DST["a"], "sender": "SNDA", "text": "x"})  # fmt: skip
+    assert r.status_code in (403, 422)
+
+
+def test_idempotency_keys_are_per_enterprise(abc, db):
+    c, a, b = abc["c"], abc["a"]["h"], abc["b"]["h"]
+    r = c.post("/v1/messages", headers={**b, "Idempotency-Key": "k-a-0"},
+               json={"owner_ref": "tenB", "to": DST["b"], "sender": "SNDB", "text": "mine"})  # fmt: skip
+    assert r.status_code == 202 and r.json()["id"] not in abc["a"]["msgs"]  # fmt: skip
+    assert c.get(f"/v1/messages/{r.json()['id']}", headers=a).status_code == 404
+
+
+# --- Ledger / balance / wallets --------------------------------------------------------------------
+
+
+def test_wallet_balance_ledger_topups_alert_cross_tenant(abc):
+    c, b, wid = abc["c"], abc["b"]["h"], abc["a"]["wallet"]
+    for method, suffix, body in (("GET", "", None), ("GET", "/ledger", None),
+                                 ("GET", "/topups", None), ("PUT", "/alert", {"threshold": "1"})):  # fmt: skip
+        sa, sg, same = _same_as_ghost(
+            c, method, f"/v1/wallets/{wid}{suffix}", f"/v1/wallets/99999{suffix}", b, body
+        )
+        assert (sa, sg, same) == (404, 404, True), (method, suffix)
+
+
+def test_wallet_list_and_ledger_pagination_only_own(abc):
+    c, b = abc["c"], abc["b"]["h"]
+    mine = c.get("/v1/wallets", headers=b).json()
+    assert [w["id"] for w in mine] == [abc["b"]["wallet"]]
+    led = c.get(f"/v1/wallets/{abc['b']['wallet']}/ledger", params={"limit": 1}, headers=b).json()
+    assert len(led) == 1
+    assert c.get("/v1/wallets", params={"owner_ref": "tenA"}, headers=b).status_code == 404
+
+
+def test_balance_of_a_is_unchanged_by_b_activity(abc, db):
+    c, a, b = abc["c"], abc["a"], abc["b"]
+    before = c.get(f"/v1/wallets/{a['wallet']}", headers=a["h"]).json()
+    c.post("/v1/messages", headers={**b["h"], "Idempotency-Key": "more"},
+           json={"owner_ref": "tenB", "to": DST["b"], "sender": "SNDB", "text": "y"})  # fmt: skip
+    assert c.get(f"/v1/wallets/{a['wallet']}", headers=a["h"]).json() == before
+
+
+# --- Campaigns -------------------------------------------------------------------------------------
+
+
+def test_campaign_all_operations_cross_tenant_and_list(abc):
+    c, b, camp = abc["c"], abc["b"]["h"], abc["a"]["camp"]
+    for method, suffix, body in (
+        ("GET", "", None), ("GET", "/estimate", None), ("GET", "/recipients", None),
+        ("POST", "/pause", None), ("POST", "/resume", None), ("POST", "/cancel", None),
+        ("POST", "/schedule", {"scheduled_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()}),
+    ):  # fmt: skip
+        sa, sg, same = _same_as_ghost(
+            c, method, f"/v1/campaigns/{camp}{suffix}", f"/v1/campaigns/99999{suffix}", b, body
+        )
+        assert (sa, sg, same) == (404, 404, True), (method, suffix)
+    assert [x["id"] for x in c.get("/v1/campaigns", headers=b).json()] == [abc["b"]["camp"]]
+
+
+def test_campaign_cannot_use_other_tenants_list_or_sender(abc):
+    c, b, a = abc["c"], abc["b"]["h"], abc["a"]
+    base = {"owner_ref": "tenB", "name": "steal", "text": "x", "channel": "sms"}
+    r = c.post("/v1/campaigns", headers=b, json=base | {"list_id": a["list"], "sender": "SNDB"})
+    assert r.status_code == 404 and "list-a" not in r.text  # lista e A
+    r = c.post(
+        "/v1/campaigns", headers=b, json=base | {"list_id": abc["b"]["list"], "sender": "SNDA"}
+    )
+    assert r.status_code == 201  # sender-i kontrollohet kur planifikohet
+    when = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+    sched = c.post(
+        f"/v1/campaigns/{r.json()['id']}/schedule", headers=b, json={"scheduled_at": when}
+    )
+    assert sched.status_code in (403, 422) and "tenA" not in sched.text  # sender i A nuk vlen
+
+
+# --- API keys --------------------------------------------------------------------------------------
+
+
+def test_api_keys_cross_tenant(abc):
+    c, b, kid = abc["c"], abc["b"]["h"], abc["a"]["key_id"]
+    for action in ("rotate", "revoke"):
+        sa, sg, same = _same_as_ghost(
+            c, "POST", f"/v1/portal/api-keys/{kid}/{action}",
+            f"/v1/portal/api-keys/99999/{action}", b,
+        )  # fmt: skip
+        assert (sa, sg, same) == (404, 404, True), action
+    mine = c.get("/v1/portal/api-keys", headers=b).json()
+    assert {k["id"] for k in mine} == {abc["b"]["key_id"]}
+    assert (
+        c.get(f"/v1/messages/{abc['a']['msgs'][0]}", headers=abc["a"]["h"]).status_code == 200
+    )  # A ok
+
+
+def test_client_cannot_create_key_for_other_tenant(abc, db):
+    c, b = abc["c"], abc["b"]["h"]
+    r = c.post("/v1/portal/api-keys", headers=b, json={"name": "mine"})
+    assert r.status_code == 201
+    from app.models.admin import ApiKey
+
+    k = db.scalar(select(ApiKey).where(ApiKey.id == r.json()["id"]))
+    assert k.owner_ref == "tenB" and k.enterprise_id == db.scalar(
+        select(ApiKey.enterprise_id).where(ApiKey.id == abc["b"]["key_id"])
+    )
+
+
+# --- Webhooks --------------------------------------------------------------------------------------
+
+
+def test_webhook_endpoints_cross_tenant(abc):
+    c, b, ep = abc["c"], abc["b"]["h"], abc["a"]["ep"]
+    for method, suffix, body in (("PATCH", "", {"description": "x"}), ("DELETE", "", None),
+                                 ("POST", "/rotate-secret", None), ("POST", "/test", None)):  # fmt: skip
+        sa, sg, same = _same_as_ghost(
+            c, method, f"/v1/webhooks/endpoints/{ep}{suffix}",
+            f"/v1/webhooks/endpoints/99999{suffix}", b, body,
+        )  # fmt: skip
+        assert (sa, sg) == (404, 404), (method, suffix)
+        assert same, (method, suffix)
+    assert c.get("/v1/webhooks/endpoints", headers=b).json()[0]["id"] == abc["b"]["ep"]
+    assert len(c.get("/v1/webhooks/endpoints", headers=b).json()) == 1
+
+
+def test_webhook_deliveries_events_and_redeliver_only_own(abc, db):
+    from app.models.events import WebhookDelivery
+
+    c, b = abc["c"], abc["b"]["h"]
+    a_delivery = db.scalar(
+        select(WebhookDelivery.id).where(WebhookDelivery.endpoint_id == abc["a"]["ep"])
+    )
+    assert a_delivery is not None
+    dl = c.get("/v1/webhooks/deliveries", headers=b).json()
+    assert dl and all(d["endpoint_id"] == abc["b"]["ep"] for d in dl)
+    assert c.post(f"/v1/webhooks/deliveries/{a_delivery}/redeliver", headers=b).status_code == 404
+    ev = c.get("/v1/events", headers=b).json()
+    assert ev and all("secret-a" not in str(e) and "tenA" not in str(e) for e in ev)
+
+
+# --- Reports / exports / aggregates / dashboard -------------------------------------------------------
+
+
+def test_reports_usage_and_csv_only_own(abc):
+    c, b = abc["c"], abc["b"]["h"]
+    today = datetime.now(UTC).date()
+    u = c.get("/v1/reports/usage", params={"from": str(today)}, headers=b).json()
+    assert u["totals"]["sms"]["count"] == 1  # A ka 2
+    csv_a = c.get("/v1/reports/messages.csv", headers=abc["a"]["h"]).text
+    csv_b = c.get("/v1/reports/messages.csv", headers=b).text
+    rows_a = list(csv.reader(io.StringIO(csv_a.lstrip("﻿"))))
+    rows_b = list(csv.reader(io.StringIO(csv_b.lstrip("﻿"))))
+    assert len(rows_a) == 3 and len(rows_b) == 2
+    a_ids = {r[0] for r in rows_a[1:]}
+    assert a_ids.isdisjoint({r[0] for r in rows_b[1:]})
+    assert "SNDA" not in csv_b
+    for path in ("/v1/reports/usage", "/v1/reports/messages.csv", "/v1/reports/emails.csv"):
+        assert c.get(path, params={"owner_ref": "tenA"}, headers=b).status_code == 404
+
+
+def test_dashboard_metrics_and_onboarding_only_own(abc):
+    c, b = abc["c"], abc["b"]["h"]
+    o = c.get("/v1/portal/overview", headers=b).json()
+    assert o["sms_last_30d"] == {"delivered": 1}
+    assert [w["id"] for w in o["wallets"]] == [abc["b"]["wallet"]]
+    assert o["webhooks"]["active_endpoints"] == 1 and len(o["campaigns"]) == 1
+    assert c.get("/v1/portal/overview", params={"owner_ref": "tenA"}, headers=b).status_code == 404
+    onb = c.get("/v1/portal/onboarding", headers=b).json()
+    assert {s["id"]: s["done"] for s in onb["steps"]}["message"] is True
+    a_over = c.get("/v1/portal/overview", headers=abc["a"]["h"]).json()
+    assert a_over["sms_last_30d"] == {"delivered": 2}
+
+
+# --- Sender IDs -------------------------------------------------------------------------------------
+
+
+def test_sender_ids_list_only_own_and_staff_queue_is_audited(abc, db):
+    from app.models.admin import AuditLog
+
+    c, b = abc["c"], abc["b"]["h"]
+    mine = c.get("/v1/sender-ids", headers=b).json()
+    assert {s["value"] for s in mine} == {"SNDB"} and all(s["owner_ref"] == "tenB" for s in mine)
+    boot = c.get("/v1/sender-ids", headers=BOOT)  # SYSTEM: ndër-tenant, i shprehur
+    assert {s["owner_ref"] for s in boot.json()} == {"tenA", "tenB"}
+    row = db.scalar(select(AuditLog).where(AuditLog.action == "cross_tenant.list"))
+    assert row is not None and row.target_type == "sender_ids" and row.actor == "bootstrap"
+    only_a = c.get("/v1/sender-ids", params={"owner_ref": "tenA"}, headers=BOOT).json()
+    assert {s["owner_ref"] for s in only_a} == {"tenA"}
+
+
+def test_client_cannot_review_or_touch_other_tenants_sender(abc):
+    c, b, sid = abc["c"], abc["b"]["h"], abc["a"]["sender_id"]
+    for action in ("approve", "reject", "revoke"):
+        assert c.post(f"/v1/sender-ids/{sid}/{action}", headers=b, json={}).status_code in (
+            401,
+            403,
+        )
+
+
+# --- Billing profile ----------------------------------------------------------------------------------
+
+
+def test_billing_profile_is_per_enterprise(abc):
+    c, a, b = abc["c"], abc["a"]["h"], abc["b"]["h"]
+    body = {"legal_name": "A Ltd", "address": "Tirana", "country": "AL", "email": "a@a.al"}
+    assert c.put("/v1/billing/profile", json=body, headers=a).status_code == 200
+    got_b = c.get("/v1/billing/profile", headers=b)
+    assert got_b.status_code == 200 and got_b.json() is None
+    assert "A Ltd" not in c.get("/v1/billing/invoices", headers=b).text

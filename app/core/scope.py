@@ -13,6 +13,7 @@ from collections import Counter
 
 from sqlalchemy import and_
 
+from app.core.config import settings
 from app.core.context import SystemContext, TenantContext
 
 log = logging.getLogger("sms.scope")
@@ -24,6 +25,8 @@ Owner = TenantContext | str
 
 def owned(model, owner: Owner):
     if isinstance(owner, TenantContext):
+        if settings.tenant_scoping == "owner_ref":  # rikthim emergjent, i shprehur në konfigurim
+            return model.owner_ref == owner.owner_ref
         return and_(model.enterprise_id == owner.enterprise_id, model.owner_ref == owner.owner_ref)
     if not isinstance(owner, str):
         raise TypeError(f"owner must be TenantContext or owner_ref str, got {type(owner)!r}")
@@ -34,6 +37,8 @@ def owned(model, owner: Owner):
 def belongs(row, owner: Owner) -> bool:
     """Rreshti i ngarkuar me `db.get` i përket këtij pronari? (të dyja identitetet përputhen)"""
     if isinstance(owner, TenantContext):
+        if settings.tenant_scoping == "owner_ref":
+            return row.owner_ref == owner.owner_ref
         return row.enterprise_id == owner.enterprise_id and row.owner_ref == owner.owner_ref
     LEGACY_READS[row.__tablename__] += 1
     return row.owner_ref == owner

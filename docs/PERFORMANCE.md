@@ -61,3 +61,18 @@ SQL/request tipik 23 → 23; SQL/mesazh workeri (sesion i ri/cikël) 8 → ~8.6 
 nuk ka `enterprise_id`); mikro: ON cold ≈ +0.5 ms/op (një SELECT), ON warm ≈ OFF.
 `enterprises_audit --check --strict` = 0/0 pas `backfill_enterprise_id` mbi rreshtat e shkruar me OFF
 (OFF nuk plotëson `enterprise_id`, sipas konceptit).
+
+
+## M1c: kostoja e skopimit me `enterprise_id` (`SMS_TENANT_SCOPING=enterprise`, dual-write ON) kundrejt rikthimit (`owner_ref`, dual-write OFF)
+
+Metodë: `scripts/bench_ab.py` (dataset identik nga TEMPLATE PG **me backfill** të `enterprise_id`, sepse skopimi është fail-closed), renditje e ndërthurur, plus matje të kontrolluara në të njëjtin proces.
+
+| Matje | ON (M1c) | OFF (rikthim) | ON vs OFF |
+|---|---|---|---|
+| Drain radhe, 2 workers (msg/s, mesatare 3) | 211.4 | 217.6 | −2.9% |
+| A1 accept, një wallet (req/s, 5+5 runs) | 51.9 | 53.6 | −3.1% |
+| A2 accept, 20 llogari (req/s, 5+5 runs) | 76.5 | 78.1 | −2.1% (mediana −6.3%, OFF varion 67.7–84.1) |
+| Request tipik në proces, 6 raunde të ndërthurura (ms) | 28.09 | 28.19 | −0.3% |
+| SQL për `POST /v1/messages` | 23 | 24 | rikthimi bën 1 SELECT shtesë te `sms_enterprises` |
+
+Një A/B i parë 3+3 dha A2 −7.7% (brenda 5–10%): u analizua me 10 runs të balancuara + matje në proces; nuk u riprodhua (shih tabelën), prandaj konsiderohet zhurmë e makinës (OFF ndryshon ±10% mes runs). Para/pas M1c me të njëjtin harnes: ON 226.5 → 211.4 msg/s por edhe OFF 235.0 → 217.6 (zhvendosje e përbashkët e makinës); raporti ON/OFF 0.964 → 0.972, pra M1c s'ka regres të vetin. Kufij: një makinë, provider `fake`.

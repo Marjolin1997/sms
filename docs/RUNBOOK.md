@@ -48,6 +48,11 @@ Një host me Docker Compose (`docker-compose.prod.yml`): `db` (PostgreSQL 16), `
 | Dyshim për balancë të gabuar | `python -m scripts.verify_ledger`; korrigjim vetëm me *Financa → Korrigjim* (i audituar, i pandryshueshëm) |
 | Disku i DB-së po mbushet | `event_retention_days` pastron ngjarjet; ledger/audit janë të pandryshueshme me qëllim: zmadhoni diskun |
 
+## 6b. Skopimi i tenant-it (M1c)
+- **Para se të nisësh versionin M1c në një mjedis me të dhëna:** `python -m scripts.enterprises_audit --check` → `alembic upgrade head` → `python -m scripts.backfill_enterprise_id` → `python -m scripts.enterprises_audit --check --strict` = **0/0**. Pa backfill, `/readyz` kthen 503 (rreshtat pa `enterprise_id` do të fshiheshin nga klientët).
+- **Rikthim emergjent (pa ndryshuar kodin):** `SMS_TENANT_SCOPING=owner_ref` dhe rinis API/workers. Kthen skopimin te `owner_ref`. Mos e çaktivizo `SMS_ENTERPRISE_DUAL_WRITE` ndërsa skopimi është `enterprise` (aplikacioni refuzon të niset).
+- Qasja ndër-tenant e stafit shfaqet në `GET /v1/admin/audit` si `cross_tenant.*`.
+
 ## 7. Çfarë NUK mbulohet ende
 - Pa gateway të vërtetë pagese (`SMS_PAYMENT_PROVIDER=disabled`; mbushjet bëhen manualisht nga Financa) dhe pa provider SMS të vërtetë të lidhur (HTTP/SMPP sipas dokumentacionit të tij).
 - Rrotullimi i `SMS_SECRETS_KEY` dhe `SMS_PII_HMAC_KEY` nuk mbështetet (kërkon rienkriptim/rihash). Ruajini me kujdes.

@@ -54,6 +54,9 @@ def env_for(db, mode):
     return ENV | {
         "SMS_DATABASE_URL": dburl(db),
         "SMS_ENTERPRISE_DUAL_WRITE": "true" if mode == "ON" else "false",
+        "SMS_TENANT_SCOPING": "enterprise"
+        if mode == "ON"
+        else "owner_ref",  # M1c (ignorohet para tij)
     }
 
 
@@ -237,6 +240,14 @@ def main() -> int:
         check=True,
         capture_output=True,
     )
+    for mod in (["scripts.enterprises_audit", "--backfill"], ["scripts.backfill_enterprise_id"]):
+        # M1c: skopimi me enterprise_id është fail-closed → dataseti i përbashkët duhet të ketë backfill
+        subprocess.run(
+            [sys.executable, "-m", *mod],
+            env=env_for("tpl_bench", "ON"),
+            check=True,
+            capture_output=True,
+        )
     results: dict = {"accept": {"ON": [], "OFF": []}, "drain": {"ON": [], "OFF": []}}
     if not a.skip_accept:
         print(f"== ACCEPT: {order}", flush=True)

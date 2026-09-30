@@ -398,7 +398,7 @@ def test_enterprise_id_is_written_only_by_the_centralized_hook():
     root = Path(__file__).resolve().parents[1] / "app"
     allowed = {"core/tenancy.py", "services/enterprises.py", "models/tenant.py", "models/enterprise.py",
                "models/__init__.py", "core/config.py", "core/context.py", "core/scope.py", "api/tenant.py",
-               "core/security.py", "services/events.py"}  # fmt: skip
+               "core/security.py", "services/events.py", "core/readiness.py"}  # fmt: skip
     offenders = [
         p.relative_to(root).as_posix()
         for p in root.rglob("*.py")

@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,10 @@ class Settings(BaseSettings):
     # M1b: enterprise_id plotësohet automatikisht nga owner_ref (app/core/tenancy.py).
     enterprise_dual_write: bool = True
     enterprise_dual_write_strict: bool = False  # True: anomali owner_ref → gabim (jo NULL)
+    # M1c: skopimi i tenant-it. "enterprise" (parazgjedhja) = enterprise_id DHE owner_ref;
+    # "owner_ref" = RRUGË RIKTHIMI emergjente (vetëm owner_ref, si para M1c).
+    # "enterprise" kërkon dual-write aktiv.
+    tenant_scoping: Literal["enterprise", "owner_ref"] = "enterprise"
 
     # Gjuha e teksteve për përdoruesit fundorë (faturë, faqja e çregjistrimit, fundi i emailit).
     default_language: Literal["sq", "en"] = "sq"
@@ -110,6 +115,15 @@ class Settings(BaseSettings):
     def validate_production(self) -> None:
         if self.env == "production" and (problems := self.production_problems()):
             raise RuntimeError("unsafe production configuration:\n - " + "\n - ".join(problems))
+
+    @model_validator(mode="after")
+    def _scoping_needs_dual_write(self):
+        if self.tenant_scoping == "enterprise" and not self.enterprise_dual_write:
+            raise ValueError(
+                "SMS_TENANT_SCOPING=enterprise requires SMS_ENTERPRISE_DUAL_WRITE=true "
+                "(rreshtat e rinj do të mbeten pa enterprise_id dhe do të fshiheshin)"
+            )
+        return self
 
 
 settings = Settings()

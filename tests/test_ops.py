@@ -85,6 +85,31 @@ def test_readyz_detects_schema_behind(client):
             c.execute(text("drop table sms_alembic_version"))
 
 
+def test_readyz_blocks_enterprise_scoping_until_backfill_is_complete(client, monkeypatch, db):
+    """M1c: rreshta pa enterprise_id do të fshiheshin nga tenant-ët → jo gati derisa të bëhet backfill."""
+    from app.core.config import settings
+    from app.services import contacts as contacts_svc
+
+    monkeypatch.setattr(readiness, "_BACKFILL_TTL_S", 0.0)  # pa cache në test
+    with engine.begin() as c:
+        c.execute(text("create table sms_alembic_version (version_num varchar(32) not null)"))
+        c.execute(text("insert into sms_alembic_version values (:v)"), {"v": readiness._head()})
+    try:
+        assert client.get("/readyz").status_code == 200
+        contacts_svc.upsert(db, "acme", phone="+355691230003")
+        db.commit()
+        assert client.get("/readyz").status_code == 200  # dual-write e ka plotësuar
+        db.execute(text("update sms_contacts set enterprise_id = null"))
+        db.commit()
+        r = client.get("/readyz")
+        assert r.status_code == 503 and "backfill" in r.json()["reason"]
+        monkeypatch.setattr(settings, "tenant_scoping", "owner_ref")  # rikthim i shprehur
+        assert client.get("/readyz").status_code == 200
+    finally:
+        with engine.begin() as c:
+            c.execute(text("drop table sms_alembic_version"))
+
+
 def test_request_id_generated_and_echoed(client):
     r = client.get("/healthz")
     assert len(r.headers["x-request-id"]) == 32

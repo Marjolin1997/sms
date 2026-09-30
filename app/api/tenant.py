@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.context import SystemContext, TenantContext, TenantUnresolved, for_owner
 from app.core.scope import belongs, owned
 from app.core.security import Principal
@@ -15,12 +16,14 @@ def tenant(
     zbulim metadata); stafi duhet të emërtojë `owner_ref` shprehimisht."""
     if p.owner_ref:
         p.check_owner(owner_ref or p.owner_ref)
-        if p.enterprise_id is not None:
+        if p.enterprise_id is not None and settings.tenant_scoping == "enterprise":
             ctx = TenantContext(p.enterprise_id, p.owner_ref, "principal")
             db.info.setdefault("_enterprise_ids", {})[ctx.owner_ref] = ctx.enterprise_id
             return ctx
         try:  # çelës legacy pa enterprise_id: zgjidhje vetëm-lexim për përputhshmëri
-            return for_owner(db, p.owner_ref, origin="principal")
+            return for_owner(
+                db, p.owner_ref, create=settings.tenant_scoping == "owner_ref", origin="principal"
+            )
         except TenantUnresolved as e:
             raise HTTPException(
                 403, {"code": "tenant_unresolved", "message": "tenant identity not resolved"}

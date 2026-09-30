@@ -293,3 +293,73 @@ def test_worker_has_no_request_context():
 
     src = inspect.getsource(w)
     assert "api.tenant" not in src and "current_principal" not in src
+
+
+def test_worker_path_does_not_use_legacy_owner_ref_scoping(db, world):  # noqa: F811
+    """WORKER: mesazh → SENT → DLR → events/webhooks, pa asnjë skopim vetëm me owner_ref."""
+    from tests.test_pipeline import send
+
+    send(db, key="w1")
+    scope.LEGACY_READS.clear()
+    while msgsvc.process_one(db) is not None:
+        pass
+    m = db.scalar(select(msgsvc.Message))
+    msgsvc.apply_dlr(db, "fake", m.provider_message_id, delivered=True)
+    db.commit()
+    assert dict(scope.LEGACY_READS) == {}
+
+
+def test_worker_legacy_job_without_enterprise_id_still_processes(db, world):  # noqa: F811
+    """Job legacy (vetëm owner_ref): resolveri vetëm për përputhshmëri; eventet marrin identitetin."""
+    from app.models.events import Event
+    from tests.test_pipeline import send
+
+    m = send(db, key="legacy")
+    eid = m.enterprise_id
+    db.execute(msgsvc.Message.__table__.update().values(enterprise_id=None))
+    db.commit()
+    db.expire_all()
+    while msgsvc.process_one(db) is not None:
+        pass
+    db.commit()
+    ev = db.scalars(select(Event)).all()
+    assert ev and all(e.enterprise_id == eid for e in ev)
+
+
+def test_worker_anomalous_owner_ref_row_still_processes_via_explicit_legacy_path(db, world):  # noqa: F811
+    """owner_ref anomal (pa identitet Enterprise) nuk ndalon SMS-in: rruga legacy e shprehur."""
+    from tests.test_pipeline import send
+
+    m = send(db, key="anom")
+    db.execute(msgsvc.Message.__table__.update().values(enterprise_id=None, owner_ref="c1 "))
+    db.commit()
+    db.expire_all()
+    scope.LEGACY_READS.clear()
+    assert msgsvc.process_one(db) is not None
+    assert scope.LEGACY_READS  # e numëruar (M1d), por pa përjashtim
+    assert m.status.value == "sent"
+
+
+# --- Çelësi i skopimit (rikthim emergjent) ---------------------------------------------------------
+
+
+def test_enterprise_scoping_refuses_to_start_without_dual_write():
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match="requires SMS_ENTERPRISE_DUAL_WRITE"):
+        Settings(enterprise_dual_write=False, tenant_scoping="enterprise")
+    assert Settings(enterprise_dual_write=False, tenant_scoping="owner_ref")  # rikthimi lejohet
+
+
+def test_owner_ref_rollback_mode_scopes_by_owner_ref_only(db, monkeypatch):
+    from app.core.config import settings
+
+    a, _ = contacts_svc.upsert(db, "A", phone="+355691230003")
+    db.commit()
+    ctx = for_owner(db, "A")
+    a.enterprise_id = None  # rresht pa backfill
+    db.commit()
+    assert db.scalars(select(Contact).where(scope.owned(Contact, ctx))).all() == []  # fail-closed
+    monkeypatch.setattr(settings, "tenant_scoping", "owner_ref")
+    assert len(db.scalars(select(Contact).where(scope.owned(Contact, ctx))).all()) == 1
+    assert scope.belongs(a, ctx)
