@@ -77,7 +77,7 @@ async def accept_phase(base: str, keys: list[tuple[str, str]], total: int, conc:
             owner, key = keys[i % len(keys)]
             body = {
                 "owner_ref": owner,
-                "to": f"+3556912{i % 100000:05d}",
+                "to": "+355691230003",
                 "sender": "BENCH" + owner.removeprefix("bench"),
                 "text": f"bench {i}",
             }
@@ -167,7 +167,7 @@ def integrity() -> str:
     return f"wallets inkonsistente={bad}, mesazhe të pa-përfunduara={stuck}, dublikate idempotence={dup}"
 
 
-def show(name: str, r: dict) -> None:
+def show(name: str, r: dict) -> None:  # noqa: D103
     print(
         f"{name:<34} {r['rps']:>8.0f} req/s   p50 {r['p50']:>6.0f} ms   p95 {r['p95']:>6.0f} ms   p99 {r['p99']:>6.0f} ms   gabime {r['errors']}"
     )
@@ -202,4 +202,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(line_buffering=True)
     sys.exit(main())

@@ -93,6 +93,9 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - `GET /v1/admin/messages/unresolved`: mesazhet që dështuan me `*_outcome_unknown` (p.sh. timeout pasi kërkesa mund të kishte mbërritur te Twilio; nuk riprovohen që të mos dërgohen dy herë). Numri maskohet, pa tekst mesazhi; krahasohen me panelin e provider-it.
 - **Konsola:** faqja “Shëndeti i provider-ave” (staf) me alarm kur shkalla është nën 80% (të paktën 20 mesazhe të përfunduara), mesazhe të ngecura dhe radha e rakordimit; rifreskohet çdo 10 s. Udhëzon të ndalet `dispatch` ose të kalohet rruga te provider tjetër.
 
+## Kapaciteti (Faza 22)
+Matje reale në PostgreSQL: **~55–79 SMS/s pranim** për host (4 vCPU, gjithçka bashkë), **~250 mesazhe/s dërgim** me 2 workers, **~40 marrës/s për një fushatë të vetme**; integritet i parave i paprekur nën ngarkesë. Metoda, kufijtë dhe si të shkallëzosh: **`docs/PERFORMANCE.md`**; skriptet `scripts/bench.py`, `scripts/bench_campaign.py`.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 
