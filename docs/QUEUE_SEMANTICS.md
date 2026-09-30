@@ -77,3 +77,35 @@ Outbox-i i webhook-ëve është atomik me biznesin: `emit` nuk bën commit; roll
 ## Divergjenca SMS / Email / Webhook (arsye pse dy kontrata, jo një)
 SMS+email: mbajtja me status, pa lease, at-most-once për crash. Webhook: mbajtja me lease, at-least-once.
 SMS lëshon para në `fail`/`cancel`; email jo. Email hap tx leximi para provider-it; SMS jo.
+
+## M2-b: `DispatchQueue` + `PostgresDispatchQueue` (vetëm SMS)
+Paketa `app/queue/` (nuk importon asgjë nga `app.models/services/providers/api`; provohet nga test AST).
+- `DispatchSpec(model, pending, attempts, next_attempt_at, id, backoff_s=30, max_attempts=5)`: e ofron service.
+- `DispatchHooks(reserved, requeued, sent, failed)`: e ofron service (`messages._SmsHooks`); brenda tyre
+  `_move` mbetet burimi i vetëm i state machine-it, `_fail` lëshon hold-in e wallet-it.
+- `DispatchQueue`: `publish`, `reserve`, `acknowledge`, `retry -> Outcome{RETRIED,FAILED,EXHAUSTED}`, `fail`,
+  `cancel_if_pending`. **Asnjë commit/rollback** (transaksioni është i thirrësit). Retry: i përhershëm →
+  `hooks.failed`; i përkohshëm dhe `attempts<max` → `next_attempt_at=now+backoff_s·2^(attempts−1)` + `hooks.requeued`;
+  përndryshe `hooks.failed` (EXHAUSTED). `attempts` rritet vetëm në `reserve`.
+- `messages.claim_next` / `cancel_if_queued` mbeten funksione publike (delegojnë); SQL-i i `FOR UPDATE SKIP LOCKED`
+  ka dalë nga `messages.py`. Email dhe webhook nuk janë migruar (M2-c, M2-d).
+- **Provë ekuivalence:** 100 SQL statement (submit + process_one + retry) në PostgreSQL, teksti i normalizuar,
+  identik para/pas (diff bosh); numri: submit 21, process_one 8, retry 8.
+
+## Risku i njohur, i pandryshuar: email thërret SMTP brenda transaksioni leximi të hapur
+**Shkaku:** `emails.process_one` bën COMMIT#1 (claim), por para `provider.send` thërret
+`email_domains.verified_domain_for(db, …)` dhe `decrypt_private_key(domain)`, që ekzekutojnë SELECT në të
+njëjtin `Session`. SQLAlchemy autobegin hap transaksion të ri, që mbetet i hapur gjatë ndërtimit të MIME/DKIM
+dhe gjatë SMTP, deri te COMMIT#2. SMS s'ka thirrje DB midis COMMIT#1 dhe provider-it, prandaj është `idle`.
+**Ndikimi:**
+1. `idle_in_transaction_session_timeout` (`db_idle_tx_timeout_ms`=60 s në `make_engine`): SMTP me
+   STARTTLS+AUTH+DATA, me `timeout=15s` **për operacion**, mund ta kalojë 60 s; PostgreSQL e vret sesionin,
+   COMMIT#2 dështon (OperationalError) dhe email-i mbetet `SENDING` ndërsa mund të jetë dërguar. Kjo
+   është dritare e re për SENDING të ngecur (rikuperim manual; s'ka raportim për email).
+2. Një lidhje e pool-it (`db_pool_size`=10) mbahet e zënë gjatë gjithë SMTP-së (SMS e lëshon).
+   Me shumë workers/provider të ngadaltë kjo ul kapacitetin e pool-it dhe mban snapshot të hapur (vacuum).
+3. Nuk mban lock rreshti (provuar me `FOR UPDATE NOWAIT`).
+**Rekomandim (patch i veçantë, jo në M2):** lexo domenin/çelësin DKIM **para** COMMIT#1, ose bëj
+`db.commit()` para `provider.send`, me test që `pg_stat_activity.state='idle'` gjatë SMTP dhe benchmark të vetin.
+Testi `test_worker_connection_state_during_the_provider_call` e dokumenton sjelljen e sotme (email=1
+`idle in transaction`, SMS=0) dhe do të kthehet në `0` kur të rregullohet.

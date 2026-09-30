@@ -26,6 +26,8 @@ from app.models.sending import (
 )
 from app.models.wallet import Wallet
 from app.providers import ProviderError, SendRequest, get_provider
+from app.queue.dispatch import DispatchSpec
+from app.queue.postgres import PostgresDispatchQueue
 from app.services import consent, events, rates, sender_ids, switches, templates
 from app.services import wallet as wallets
 from app.services.sms_text import count_segments
@@ -169,8 +171,7 @@ def submit(
                 total_price=q.total, rate_version_id=q.version_id, rate_id=q.rate_id,
                 provider=route.provider, next_attempt_at=now,
             )  # fmt: skip
-            db.add(m)
-            db.flush()
+            queue.publish(db, m)
             db.add(MessageEvent(message_id=m.id, from_status=None, to_status="queued"))
     except IntegrityError:
         # kërkesë paralele me të njëjtin key fitoi garën
@@ -186,25 +187,45 @@ def submit(
 
 def claim_next(db: Session, now: datetime | None = None) -> Message | None:
     """Merr një mesazh të gatshëm dhe e shënon SENDING. SKIP LOCKED lejon shumë workers."""
-    now = rates.as_utc(now or datetime.now(UTC))
-    m = db.scalar(
-        select(Message)
-        .where(Message.status == MessageStatus.QUEUED, Message.next_attempt_at <= now)
-        .order_by(Message.next_attempt_at, Message.id)
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    )
-    if m is None:
-        return None
-    _move(db, m, MessageStatus.SENDING)
-    m.attempts += 1
-    return m
+    return queue.reserve(db, rates.as_utc(now or datetime.now(UTC)))
 
 
 def _fail(db: Session, m: Message, code: str) -> None:
     _move(db, m, MessageStatus.FAILED, code)
     m.error_code = code
     wallets.release(db, m.hold_id)
+
+
+class _SmsHooks:
+    """Tranzicionet e SMS: `_move` mbetet burimi i vetëm i të vërtetës për state machine-in."""
+
+    def reserved(self, db, m: Message) -> None:
+        _move(db, m, MessageStatus.SENDING)
+
+    def requeued(self, db, m: Message, error: str) -> None:
+        m.error_code = error
+        _move(db, m, MessageStatus.QUEUED, f"retry:{error}")
+
+    def sent(self, db, m: Message, provider_ref: str) -> None:
+        m.provider_message_id = provider_ref
+        _move(db, m, MessageStatus.SENT, provider_ref)
+
+    def failed(self, db, m: Message, reason: str) -> None:
+        _fail(db, m, reason)
+
+
+queue = PostgresDispatchQueue(
+    DispatchSpec(
+        model=Message,
+        pending=Message.status == MessageStatus.QUEUED,
+        attempts=Message.attempts,
+        next_attempt_at=Message.next_attempt_at,
+        id=Message.id,
+        backoff_s=BACKOFF_SECONDS,
+        max_attempts=MAX_ATTEMPTS,
+    ),
+    _SmsHooks(),
+)
 
 
 def process_one(db: Session, now: datetime | None = None) -> Message | None:
@@ -221,24 +242,13 @@ def process_one(db: Session, now: datetime | None = None) -> Message | None:
     try:
         result = get_provider(m.provider).send(req)
     except ProviderError as e:
-        _after_error(db, m, e.code, e.temporary, now)
+        queue.retry(db, m, error=e.code, temporary=e.temporary, now=now)
     except Exception:  # rezultati i panjohur; provider-i është idempotent sipas reference
-        _after_error(db, m, "provider_exception", True, now)
+        queue.retry(db, m, error="provider_exception", temporary=True, now=now)
     else:
-        m.provider_message_id = result.provider_message_id
-        _move(db, m, MessageStatus.SENT, result.provider_message_id)
+        queue.acknowledge(db, m, result.provider_message_id)
     db.commit()
     return m
-
-
-def _after_error(db: Session, m: Message, code: str, temporary: bool, now: datetime) -> None:
-    if temporary and m.attempts < MAX_ATTEMPTS:
-        delay = BACKOFF_SECONDS * 2 ** (m.attempts - 1)
-        m.next_attempt_at = now + timedelta(seconds=delay)
-        m.error_code = code
-        _move(db, m, MessageStatus.QUEUED, f"retry:{code}")
-    else:
-        _fail(db, m, code)
 
 
 # --- DLR --------------------------------------------------------------------
@@ -301,12 +311,4 @@ def stuck_sending(db: Session, older_than: timedelta, now: datetime | None = Non
 def cancel_if_queued(db: Session, message_id: int) -> bool:
     """Anulon një mesazh që s'është marrë ende nga worker-i; rezervimi lirohet.
     SKIP LOCKED: nëse worker-i e ka në dorë, nuk e prekim (do të dërgohet)."""
-    m = db.scalar(
-        select(Message)
-        .where(Message.id == message_id, Message.status == MessageStatus.QUEUED)
-        .with_for_update(skip_locked=True)
-    )
-    if m is None:
-        return False
-    _fail(db, m, "campaign_cancelled")
-    return True
+    return queue.cancel_if_pending(db, message_id, reason="campaign_cancelled")
