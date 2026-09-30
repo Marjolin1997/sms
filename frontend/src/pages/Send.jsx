@@ -12,7 +12,11 @@ function Sms() {
   const senders = useLoad(() => api.get("/v1/sender-ids", { status: "approved" }), []);
   const templates = useLoad(() => api.get("/v1/templates", { status: "approved" }).catch(() => []), []);
   const wallets = useLoad(() => api.get("/v1/wallets"), []);
-  const [f, setF] = useState({ to: "", sender: "", text: "", category: "transactional", templateId: "" });
+  const [f, setF] = useState(() => {
+    let to = "";
+    try { to = sessionStorage.getItem("sms_prefill_to") || ""; sessionStorage.removeItem("sms_prefill_to"); } catch { /* pa sessionStorage */ }
+    return { to, sender: "", text: "", category: "transactional", templateId: "" };
+  });
   const [values, setValues] = useState({});
   const [quote, setQuote] = useState(null);
   const [sent, setSent] = useState(null);

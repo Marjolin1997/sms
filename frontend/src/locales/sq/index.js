@@ -10,5 +10,6 @@ import money from "./money.js";
 import staff from "./staff.js";
 import security from "./security.js";
 import reports from "./reports.js";
+import inbox from "./inbox.js";
 
-export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports };
+export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports, ...inbox };

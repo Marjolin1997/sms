@@ -267,6 +267,21 @@ def client_flow(b):
     with p.expect_download() as dl2:
         p.click("button:has-text('Export SMS (CSV)')")
     check(dl2.value.suggested_filename.startswith("messages-"), "messages CSV downloads")
+    # inbox: SMS hyrës, fjalë kyçe
+    go(p, "inbox", 1200)
+    check(has("kur mbërrin porosia", p.inner_text("main")), "inbound messages listed")
+    check(p.locator("nav .count").count() == 1, "unread badge in the menu")
+    p.click("button:has-text('Mark all as read')")
+    toast(p, "All marked as read")
+    p.click("[role=tab]:has-text('Keywords')")
+    p.fill("input[placeholder='HELP']", f"promo{UNIQ}")
+    p.click("button:has-text('Save keyword')")
+    toast(p, "Keyword saved")
+    check(has(f"promo{UNIQ}", p.inner_text("main")), "keyword listed")
+    p.locator(f"tbody tr:has-text('promo{UNIQ}') button:has-text('Delete')").click()
+    p.wait_for_selector("[role=dialog]")
+    p.click("[role=dialog] button.danger-solid")
+    toast(p, "Keyword deleted")
     # njoftim për bilanc të ulët
     go(p, "wallet", 1200)
     p.fill("input[placeholder='5.00']", "3")

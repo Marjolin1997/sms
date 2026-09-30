@@ -20,6 +20,7 @@ import Finance from "./pages/Finance.jsx";
 import Admin from "./pages/Admin.jsx";
 import Security from "./pages/Security.jsx";
 import Reports from "./pages/Reports.jsx";
+import Inbox from "./pages/Inbox.jsx";
 
 // perm: string ose "a|b" (mjafton një); global: faqe që s'kërkon llogari të zgjedhur (staf)
 const NAV = [
@@ -27,6 +28,7 @@ const NAV = [
   { group: T("Messaging"), items: [
     { id: "send", label: T("Send"), icon: "➤", perm: "messages:send", el: Send, desc: T("Send an SMS or an email. You see the price before you send.") },
     { id: "messages", label: T("Message history"), icon: "☷", perm: "messages:read", el: Messages, desc: T("Everything you've sent and what happened to it.") },
+    { id: "inbox", label: T("Inbox"), icon: "↩", perm: "inbox:read", el: Inbox, desc: T("Replies from your recipients, and automatic answers to keywords.") },
     { id: "reports", label: T("Reports"), icon: "▤", perm: "reports:read", el: Reports, desc: T("Usage, costs and CSV exports.") },
     { id: "campaigns", label: T("Campaigns"), icon: "✉", perm: "campaigns:read", el: Campaigns, desc: T("Send to a whole list on a schedule, with a budget cap.") },
   ] },
@@ -111,6 +113,14 @@ function Shell({ me, onLogout }) {
   useEffect(() => { sessionStorage.setItem("sms_owner", owner); }, [owner]);
 
   const isStaff = !me.owner_ref;
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (isStaff || !can(me, "inbox:read")) return;
+    const load = () => !document.hidden && api.get("/v1/inbox/unread").then((r) => setUnread(r.unread)).catch(() => {});
+    load();
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
+  }, [isStaff, page]); // eslint-disable-line
   // staf: vetëm faqet staf + ato që kanë kuptim me një llogari; klient: pa grupin Staff
   let groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => can(me, i.perm) && (isStaff || g.group !== "Staff")) })).filter((g) => g.items.length);
   // Stafi punon kryesisht te faqet e veta: grupi "Staff" del menjëherë pas Overview.
@@ -133,7 +143,7 @@ function Shell({ me, onLogout }) {
               {g.group && <div className="nav-h">{t(g.group)}</div>}
               {g.items.map((n) => (
                 <a key={n.id} href={`#${n.id}`} aria-current={n.id === current.id ? "page" : undefined} className={n.id === current.id ? "active" : ""}>
-                  <i aria-hidden>{n.icon}</i>{t(n.label)}
+                  <i aria-hidden>{n.icon}</i>{t(n.label)}{n.id === "inbox" && unread > 0 && <span className="count">{unread}</span>}
                 </a>
               ))}
             </div>

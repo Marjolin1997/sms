@@ -57,6 +57,14 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - `SMS_PAYMENT_PROVIDER=disabled` çaktivizon pagesat online (kthen `payments_disabled`) derisa të ekzistojë gateway i vërtetë.
 - Udhëzuesi i plotë me hapat, TLS, përditësime, incidente: **`docs/RUNBOOK.md`**.
 
+## SMS hyrës dhe inbox (Faza 17)
+- **Marrja:** `POST /webhooks/inbound/{provider}` (nënshkrim HMAC si DLR) me `{"to","from","text","id"?}`. Mesazhi drejtohet te pronari i numrit numerik të miratuar; **çdo mesazh ruhet** (idempotent sipas `id` të provider-it), jo vetëm STOP/START. Përgjigja: `opt_out | opt_in | keyword | ignored | duplicate | unrouted | invalid_number`.
+- **Inbox:** `GET /v1/inbox` (`q`, `unread`, `before_id`, `limit`; kthen edhe `unread`), `GET /v1/inbox/unread`, `POST /v1/inbox/read {"ids":[…]}` (pa `ids` = të gjitha). Lidhet automatikisht me kontaktin sipas numrit. Leje: `inbox:read`, `inbox:write` (klient; `inbox:read` edhe mbështetje).
+- **Fjalë kyçe:** `GET/PUT/DELETE /v1/keywords`: fjala e parë e mesazhit (p.sh. `HELP`) me `reply_text` opsional dërgon **përgjigje automatike** si SMS normal (tarifohet, një për numër në minutë kundër cikleve bot-me-bot; dështimi nuk humbet mesazhin, ruhet si `reply_status`). STOP/START janë të rezervuara dhe punojnë gjithmonë.
+- **Ngjarja `message.received`** shkon te webhook-et e klientit (`message.*` ose `*`).
+- **GDPR:** fshirja e kontaktit zëvendëson tekstin/numrin e inbox-it; eksporti i kontaktit (`/v1/contacts/{id}/export`) përfshin `inbound_sms`.
+- **Konsola:** faqja “Kutia hyrëse” (lista, kërkim, të palexuara me badge në meny, “Përgjigju” hap Dërgo me numrin e plotësuar) dhe skeda “Fjalët kyçe”.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

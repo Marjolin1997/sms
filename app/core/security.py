@@ -29,13 +29,14 @@ ROLE_PERMS: dict[str, set[str]] = {
     "support": {
         "wallet:read", "messages:read", "monitor:read", "audit:read", "switch:write",
         "contacts:read", "campaigns:read", "email:read",
-        "webhooks:read", "events:read", "portal:read", "billing:read", "reports:read",
+        "webhooks:read", "events:read", "portal:read", "billing:read", "reports:read", "inbox:read",
     },
     "client": {
         "wallet:read", "messages:send", "messages:read", "sender:request",
         "template:write", "template:render", "contacts:read", "contacts:write", "consent:write",
         "campaigns:read", "campaigns:write", "email:send", "email:read", "email:write",
         "webhooks:read", "webhooks:write", "events:read", "keys:self", "portal:read",
+        "inbox:read", "inbox:write",
         "billing:read", "billing:pay", "billing:profile", "reports:read", "wallet:alert",
     },
 }  # fmt: skip

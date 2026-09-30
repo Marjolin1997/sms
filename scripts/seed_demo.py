@@ -21,6 +21,7 @@ from app.services import (
     consent,
     email_domains,
     emails,
+    inbox,
     net_guard,
     payments,
     rates,
@@ -239,6 +240,23 @@ def main() -> None:
             audit(db, boss, kind, "demo", tid, {"seed": True})
         switches.set_switch(db, switches.SUBMIT, True, "demo-seed", None)
         db.commit()
+
+        # --- SMS hyrës: numër me sender numerik të miratuar, fjalë kyçe dhe disa mesazhe
+        num = sender_ids.request(db, OWNER, "AL", "+355690000001")
+        sender_ids.approve(db, num.id, "demo-approver")
+        inbox.set_keyword(
+            db, OWNER, "help", "Na telefononi në 0800 123 ose shkruani në ndihme@acme.example"
+        )
+        db.commit()
+        for i, (frm, text) in enumerate(
+            [
+                ("+355691110001", "Përshëndetje, kur mbërrin porosia ime?"),
+                ("+38344210002", "HELP"),
+                ("+355691110003", "Faleminderit!"),
+            ]
+        ):
+            inbox.receive(db, "fake", f"seed-mo-{i}", "+355690000001", frm, text)
+            db.commit()
 
         # --- faturim: plan, profil me TVSH, abonim 75 ditë më parë → dy fatura (njëra e paguar)
         plan = billing.create_plan(db, "growth", "Growth", "EUR", "29.00", 5000, "0.001")

@@ -153,6 +153,10 @@ def erase(db: Session, owner_ref: str, contact_id: int, actor: str) -> Contact:
     """GDPR: PII fshihet, anëtarësitë hiqen; adresat mbeten të bllokuara vetëm si HMAC,
     që një import i mëvonshëm të mos i rikthejë në dërgim."""
     c = _get(db, owner_ref, contact_id, lock=True)
+    if c.phone:
+        from app.services import inbox
+
+        inbox.scrub_contact(db, owner_ref, c.phone)
     for channel, addr in (("sms", c.phone), ("email", c.email)):
         if addr:
             consent.record(
@@ -323,6 +327,7 @@ def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
     (evidenca ruhet me HMAC të adresës; këtu lidhet përsëri me kontaktin) dhe mesazhet."""
     from app.models.contacts import ConsentEvent
     from app.models.email import Email
+    from app.models.inbound import InboundMessage
     from app.models.sending import Message
 
     lists = db.execute(
@@ -365,7 +370,21 @@ def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
         if c.email
         else []
     )
+    inbound = (
+        db.scalars(
+            select(InboundMessage)
+            .where(InboundMessage.owner_ref == owner_ref, InboundMessage.from_number == c.phone)
+            .order_by(InboundMessage.id.desc())
+            .limit(EXPORT_LIMIT)
+        ).all()
+        if c.phone
+        else []
+    )
     return {
+        "inbound_sms": [
+            {"id": m.public_id, "to": m.to_number, "text": m.text, "created_at": m.created_at}
+            for m in inbound
+        ],
         "contact": {
             "id": c.id, "phone": c.phone, "email": c.email, "first_name": c.first_name,
             "last_name": c.last_name, "external_id": c.external_id,
