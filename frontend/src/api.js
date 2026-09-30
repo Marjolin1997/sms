@@ -20,6 +20,10 @@ const FRIENDLY = {
   template_not_usable: T("That template has no approved version yet."),
   sender_domain_not_verified: T("The from address must be on a domain you have verified under Email domains."),
   unauthorized: T("Your session is no longer valid. Please sign in again."),
+  totp_required: T("This action needs your two-factor code."),
+  totp_invalid: T("That two-factor code isn't right or was already used. Wait for the next code and try again."),
+  totp_enrollment_required: T("Turn on two-factor authentication first (Admin → Security)."),
+  no_key: T("Two-factor works with API keys, not with the bootstrap key."),
   too_many_attempts: T("Too many failed sign-in attempts from this network. Wait a few minutes and try again."),
   ip_not_allowed: T("This key isn't allowed from your current network address."),
   forbidden: T("Your role doesn't allow this action."),
@@ -93,7 +97,11 @@ let owner = ""; // llogaria që shohin/administrojnë stafi; klienti e ka të fi
 export const setOwner = (o) => (owner = o || "");
 export const currentOwner = () => owner;
 
-async function request(method, path, { params = {}, body, headers = {} } = {}) {
+// Hapi i dytë (TOTP): UiProvider regjistron një funksion që kërkon kodin nga përdoruesi.
+let totpPrompt = null;
+export const setTotpPrompt = (fn) => (totpPrompt = fn);
+
+async function request(method, path, { params = {}, body, headers = {}, attempt = 0 } = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries({ ...(owner ? { owner_ref: owner } : {}), ...params }))
     if (v !== undefined && v !== null && v !== "") qs.set(k, v);
@@ -114,7 +122,12 @@ async function request(method, path, { params = {}, body, headers = {} } = {}) {
   if (!res.ok) {
     const d = data && data.detail;
     const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("; ") : t("Request failed (HTTP {status})", { status: res.status });
-    throw new ApiError(res.status, d && d.code, msg);
+    const code = d && d.code;
+    if ((code === "totp_required" || code === "totp_invalid") && totpPrompt && attempt < 3) {
+      const otp = await totpPrompt(code === "totp_invalid");
+      if (otp) return request(method, path, { params, body, headers: { ...headers, "X-TOTP": otp }, attempt: attempt + 1 });
+    }
+    throw new ApiError(res.status, code, msg);
   }
   return data;
 }

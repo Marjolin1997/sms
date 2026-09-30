@@ -8,8 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.contacts import owner_for
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import ROLE_PERMS, Principal, current_principal, require
+from app.models.admin import ApiKey
 from app.models.campaigns import Campaign
 from app.models.email import Email
 from app.models.events import (
@@ -21,7 +23,7 @@ from app.models.events import (
 )
 from app.models.sending import Message
 from app.models.wallet import Wallet
-from app.services import apikeys, webhooks
+from app.services import apikeys, twofactor, webhooks
 from app.services import wallet as wallets
 from app.services.audit import audit
 from app.services.wallet import WalletError
@@ -41,10 +43,53 @@ def _run(db: Session, fn):
 
 
 @router.get("/me")
-def me(p: Principal = Depends(current_principal)):
+def me(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
     """Identiteti i thirrësit: përdoret nga paneli për të treguar vetëm çka lejohet."""
+    key = db.get(ApiKey, p.key_id) if p.key_id else None
     return {"actor": p.actor, "role": p.role, "owner_ref": p.owner_ref,
-            "permissions": sorted(ROLE_PERMS.get(p.role, set()))}  # fmt: skip
+            "permissions": sorted(ROLE_PERMS.get(p.role, set())),
+            "key_id": p.key_id, "two_factor": bool(key and key.totp_enabled),
+            "two_factor_required": settings.require_staff_2fa and p.owner_ref is None
+            and p.key_id is not None}  # fmt: skip
+
+
+class CodeIn(BaseModel):
+    code: str = Field(min_length=6, max_length=10)
+
+
+def _own_key_id(p: Principal) -> int:
+    if p.key_id is None:
+        raise HTTPException(
+            400,
+            {"code": "no_key", "message": "two-factor applies to API keys, not the bootstrap key"},
+        )
+    return p.key_id
+
+
+@router.post("/me/2fa/enroll", status_code=201)
+def enroll_2fa(db: Session = Depends(get_db), p: Principal = Depends(current_principal)):
+    kid = _own_key_id(p)
+
+    def go():
+        secret, uri = twofactor.enroll(db, kid)
+        audit(db, p, "2fa.enroll_started", "apikey", kid)
+        return {"secret": secret, "otpauth_uri": uri}
+
+    return _run(db, go)
+
+
+@router.post("/me/2fa/confirm")
+def confirm_2fa(
+    body: CodeIn, db: Session = Depends(get_db), p: Principal = Depends(current_principal)
+):
+    kid = _own_key_id(p)
+
+    def go():
+        twofactor.confirm(db, kid, body.code)
+        audit(db, p, "2fa.enabled", "apikey", kid)
+        return {"two_factor": True}
+
+    return _run(db, go)
 
 
 # --- Webhook endpoints ---------------------------------------------------------------

@@ -3,7 +3,8 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Index, String, Text, event
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Index, String, Text, event
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -33,6 +34,9 @@ class ApiKey(Base):
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     allowed_cidrs: Mapped[str | None] = mapped_column(Text)  # JSON: ["203.0.113.0/24", ...]
+    totp_secret_enc: Mapped[str | None] = mapped_column(Text)  # Fernet; kurrë në tekst të hapur
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)  # kundër riluajtjes së kodit
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

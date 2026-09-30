@@ -36,6 +36,13 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **GDPR, e drejta e qasjes:** `GET /v1/contacts/{id}/export` kthen profilin, listat, historikun e pëlqimit (me evidencë), SMS-et dhe emailet e atij personi; regjistrohet në audit. Konsola ka butonin “Eksporto të dhënat”.
 - Kujdes: kufizimi është sipas IP; pas një sulmi nga një IP, edhe `X-Admin-Key` dhe çelësat e vlefshëm nga ajo IP bllokohen gjatë dritares.
 
+## 2FA për stafin (Faza 14)
+- **TOTP (RFC 6238)** për çelësat e stafit: `POST /v1/me/2fa/enroll` kthen sekretin dhe `otpauth://` URI; `POST /v1/me/2fa/confirm {"code"}` e aktivizon. Sekreti ruhet i enkriptuar (Fernet, `SMS_SECRETS_KEY`); një kod pranohet vetëm një herë (mbrojtje kundër riluajtjes, dritare ±30 s).
+- **Çfarë mbrohet:** ndryshimet (jo leximet) me lejet `wallet:adjust`, `topup:confirm`, `keys:manage`, `switch:write`, `plans:write`, `rates:write`, `routes:write`, `billing:admin`. Kodi dërgohet në header-in `X-TOTP`; pa të: `403 totp_required`, i gabuar: `403 totp_invalid` (numërohet te kufizimi i provave, Faza 13).
+- **`SMS_REQUIRE_STAFF_2FA=true`:** çelësat e stafit pa 2FA refuzohen për ato veprime (`totp_enrollment_required`) derisa ta aktivizojnë. Çelësi bootstrap (`X-Admin-Key`) dhe klientët përjashtohen; në prodhim hiqni `SMS_ADMIN_API_KEY` pasi krijoni çelësat personalë.
+- **Humbi telefoni:** një superadmin (me kodin e vet) ose bootstrap: `POST /v1/admin/api-keys/{id}/reset-2fa`; regjistrohet në audit.
+- **Konsola:** faqja “Siguria” (konfigurim me sekret/link + kod konfirmimi) dhe dialog që kërkon kodin automatikisht kur një veprim e kërkon.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

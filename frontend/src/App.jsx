@@ -18,6 +18,7 @@ import Accounts from "./pages/Accounts.jsx";
 import Rates from "./pages/Rates.jsx";
 import Finance from "./pages/Finance.jsx";
 import Admin from "./pages/Admin.jsx";
+import Security from "./pages/Security.jsx";
 
 // perm: string ose "a|b" (mjafton një); global: faqe që s'kërkon llogari të zgjedhur (staf)
 const NAV = [
@@ -40,13 +41,14 @@ const NAV = [
     { id: "billing", label: T("Billing"), icon: "€", perm: "billing:read", el: Billing, desc: T("Your plan, invoices and payments.") },
   ] },
   { group: T("Developers"), items: [
-    { id: "keys", label: T("API keys"), icon: "⚿", perm: "keys:self|keys:manage", el: Keys, desc: T("Keys let your software talk to the platform.") },
+    { id: "keys", label: T("API keys"), icon: "⚿", perm: "keys:self|keys:manage", el: Keys, global: true, desc: T("Keys let your software talk to the platform.") },
   ] },
   { group: T("Staff"), items: [
     { id: "approvals", label: T("Approvals"), icon: "✓", perm: "sender:review|template:review", el: Approvals, global: true, desc: T("Sender IDs and templates waiting for a decision.") },
     { id: "accounts", label: T("Accounts"), icon: "☖", perm: "monitor:read", el: Accounts, global: true, desc: T("Every customer account at a glance.") },
     { id: "rates", label: T("Rates & routes"), icon: "%", perm: "rates:read", el: Rates, global: true, desc: T("Price lists, effective dates and which provider carries which country.") },
     { id: "finance", label: T("Finance"), icon: "⊕", perm: "topup:confirm", el: Finance, global: true, desc: T("Confirm top-ups and make audited balance corrections.") },
+    { id: "security", label: T("Security"), icon: "⛨", perm: "monitor:read", el: Security, global: true, desc: T("Two-factor authentication for your staff key.") },
     { id: "admin", label: T("Admin"), icon: "⚙", perm: "keys:manage", el: Admin, global: true, desc: T("Kill switches and the audit log.") },
   ] },
 ];
@@ -148,6 +150,9 @@ function Shell({ me, onLogout }) {
           <div className="top-t"><h1>{t(current.label)}</h1><p className="muted">{t(current.desc)}</p></div>
           {isStaff && !current.global && <AccountPicker owner={owner} set={setOwnerState} canList={can(me, "monitor:read")} />}
         </header>
+        {isStaff && me.two_factor_required && !me.two_factor && (
+          <div className="alert warn"><span>{t("Two-factor is required for sensitive actions.")} <a href="#security">{t("Set it up now")}</a></span></div>
+        )}
         {needsAccount ? (
           <div className="alert warn">{t("Choose an account above to work on its data. Staff pages in the menu don't need one.")}</div>
         ) : (

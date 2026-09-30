@@ -264,6 +264,42 @@ def client_flow(b):
     ctx.close()
 
 
+def twofactor_flow(b):
+    """Çelës i ri stafi: aktivizon 2FA (faqja Security); veprimi i ndjeshëm kërkon kod."""
+    from app.core import totp
+
+    ctx = new_ctx(b, {"width": 1360, "height": 900})
+    r = ctx.request.post(
+        f"{BASE}/v1/admin/api-keys",
+        headers={"Authorization": f"Bearer {ADMIN}"},
+        data={"name": f"e2e 2fa {UNIQ}", "role": "superadmin"},
+    )
+    check(r.status == 201, "staff key for 2FA test created")
+    p = ctx.new_page()
+    p.on("pageerror", lambda e: errors.append(f"2fa pageerror: {e}"))
+    login(p, r.json()["key"])
+    go(p, "security", 800)
+    p.click("button:has-text('Set up two-factor')")
+    p.wait_for_selector("code.wrap-code")
+    secret = p.inner_text("code.wrap-code").strip()
+    now_step = int(time.time() // totp.STEP)
+    p.fill("input[placeholder='123456']", totp._code(secret, now_step))
+    p.click("button:has-text('Confirm')")
+    toast(p, "Two-factor is on")
+    p.wait_for_timeout(1800)  # faqja rifreskohet
+    go(p, "keys", 900)
+    p.fill("input[placeholder='Production server']", f"2fa key {UNIQ}")
+    p.select_option("select", "support")  # staf: një çelës klienti do të kërkonte llogari
+    p.click("button:has-text('Create key')")
+    p.wait_for_selector("[role=dialog]")
+    check(has("Two-factor code", p.inner_text("[role=dialog]")), "sensitive action asks for a code")
+    p.fill("[role=dialog] input", totp._code(secret, now_step + 1))
+    p.click("[role=dialog] button.primary")
+    p.wait_for_selector(".secret code", timeout=6000)
+    check(True, "action succeeds with the code")
+    ctx.close()
+
+
 def new_client_checklist(b):
     """Llogari e re (globex): checklist i plotë me hapa të pa-bërë."""
     ctx = new_ctx(b, {"width": 1360, "height": 900})
@@ -392,6 +428,7 @@ with sync_playwright() as pw:
     try:
         albanian_flow(b)
         client_flow(b)
+        twofactor_flow(b)
         new_client_checklist(b)
         staff_flow(b)
         mobile_flow(b)

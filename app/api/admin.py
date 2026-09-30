@@ -11,7 +11,7 @@ from app.core.security import Principal, require
 from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, AuditLog, Switch
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageStatus, Route
-from app.services import apikeys, switches
+from app.services import apikeys, switches, twofactor
 from app.services import messages as msg_svc
 from app.services.audit import audit
 from app.services.wallet import WalletError
@@ -50,6 +50,7 @@ def _key_out(k: ApiKey, secret: str | None = None) -> dict:
         "id": k.id, "prefix": k.prefix, "name": k.name, "role": k.role,
         "owner_ref": k.owner_ref, "status": k.status.value, "expires_at": k.expires_at,
         "last_used_at": k.last_used_at, "allowed_cidrs": apikeys.cidrs_of(k),
+        "two_factor": k.totp_enabled,
     }  # fmt: skip
     if secret:
         out["key"] = secret  # shfaqet vetëm një herë
@@ -92,6 +93,18 @@ def rotate_key(
 
     old, new, full = _run(db, go)
     return {**_key_out(new, full), "replaces": _key_out(old)}
+
+
+@router.post("/api-keys/{key_id}/reset-2fa")
+def reset_2fa(
+    key_id: int, db: Session = Depends(get_db), p: Principal = Depends(require("keys:manage"))
+):
+    def go():
+        k = twofactor.reset(db, key_id)
+        audit(db, p, "apikey.reset_2fa", "apikey", k.id)
+        return k
+
+    return _key_out(_run(db, go))
 
 
 @router.post("/api-keys/{key_id}/revoke")

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { locale, t } from "./i18n.jsx";
+import { setTotpPrompt } from "./api.js";
 
 /* ---------- Njoftime (toast) dhe dialog konfirmimi ---------- */
 const Ctx = createContext(null);
@@ -17,6 +18,13 @@ export function UiProvider({ children }) {
   }, []);
   const confirm = useCallback((opts) => new Promise((resolve) => setDialog({ ...opts, resolve })), []);
   const close = (v) => { dialog.resolve(v); setDialog(null); };
+  useEffect(() => {
+    setTotpPrompt((retry) => confirm({
+      title: t("Two-factor code"), body: retry ? t("That code wasn't accepted. Enter the current 6-digit code.") : t("Enter the 6-digit code from your authenticator app to continue."),
+      input: t("6-digit code"), placeholder: "123456", inputRequired: true, minLength: 6, confirmLabel: t("Verify"),
+    }));
+    return () => setTotpPrompt(null);
+  }, [confirm]);
 
   return (
     <Ctx.Provider value={{ toast, confirm }}>

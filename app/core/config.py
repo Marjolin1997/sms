@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Me N>0, IP e klientit është elementi N-nga-fundi i X-Forwarded-For.
     trusted_proxy_hops: int = 0
 
+    # Hapi i dytë (TOTP) për veprime të ndjeshme të stafit. True = çelësat e stafit pa 2FA
+    # të regjistruar refuzohen për to (çelësi bootstrap përjashtohet: është vetëm për nisjen).
+    require_staff_2fa: bool = False
+
     # PostgreSQL në prodhim; SQLite vetëm për zhvillim të shpejtë lokal.
     database_url: str = "sqlite:///./sms_dev.db"
     db_pool_size: int = 10

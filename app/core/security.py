@@ -173,10 +173,61 @@ def current_principal(
         raise
 
 
+# Veprime që lëvizin para, ndryshojnë çmime/rrugë, çelësa ose ndalojnë platformën.
+SENSITIVE_PERMS = {
+    "wallet:adjust", "topup:confirm", "keys:manage", "switch:write",
+    "plans:write", "rates:write", "routes:write", "billing:admin",
+}  # fmt: skip
+
+
+def _step_up(db: Session, request: Request, p: Principal, perms: tuple[str, ...], code: str):
+    """Hapi i dytë (TOTP) për çelësat e stafit te ndryshimet e ndjeshme (jo leximet). Bootstrap
+    dhe klientët përjashtohen; kodi i përdorur një herë nuk pranohet dy herë."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return  # leximi nuk kërkon hap të dytë; vetëm ndryshimet
+    if p.key_id is None or p.owner_ref is not None or not (set(perms) & SENSITIVE_PERMS):
+        return
+    key = db.get(ApiKey, p.key_id, with_for_update=True)
+    if key is None or not key.totp_enabled:
+        if settings.require_staff_2fa:
+            raise HTTPException(
+                403,
+                {"code": "totp_enrollment_required",
+                 "message": "enable two-factor authentication for this key first"},
+            )  # fmt: skip
+        return
+    ip = client_ip(request)
+    if _too_many_failures(db, ip):
+        raise HTTPException(
+            429,
+            {"code": "too_many_attempts", "message": "too many failed attempts, try again later"},
+        )
+    if not code:
+        raise HTTPException(
+            403,
+            {"code": "totp_required", "message": "a two-factor code is required (X-TOTP header)"},
+        )
+    from app.core import crypto, totp
+
+    step = totp.verify(crypto.decrypt(key.totp_secret_enc).decode(), code, key.totp_last_step)
+    if step is None:
+        db.rollback()
+        _record_failure(db, ip, key.prefix)
+        raise HTTPException(403, {"code": "totp_invalid", "message": "invalid two-factor code"})
+    key.totp_last_step = step
+    db.commit()
+
+
 def require(perm: str):
-    def dep(p: Principal = Depends(current_principal)) -> Principal:
+    def dep(
+        request: Request,
+        p: Principal = Depends(current_principal),
+        x_totp: str = Header(default=""),
+        db: Session = Depends(get_db),
+    ) -> Principal:
         if not p.has(perm):
             raise HTTPException(403, {"code": "forbidden", "message": f"missing {perm}"})
+        _step_up(db, request, p, (perm,), x_totp)
         return p
 
     return dep
@@ -185,11 +236,17 @@ def require(perm: str):
 def require_any(*perms: str):
     """Mjafton një nga lejet (p.sh. kush kërkon ose kush miraton sender ID)."""
 
-    def dep(p: Principal = Depends(current_principal)) -> Principal:
+    def dep(
+        request: Request,
+        p: Principal = Depends(current_principal),
+        x_totp: str = Header(default=""),
+        db: Session = Depends(get_db),
+    ) -> Principal:
         if not any(p.has(x) for x in perms):
             raise HTTPException(
                 403, {"code": "forbidden", "message": f"missing one of: {', '.join(perms)}"}
             )
+        _step_up(db, request, p, perms, x_totp)
         return p
 
     return dep
