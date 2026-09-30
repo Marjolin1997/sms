@@ -434,7 +434,9 @@ def mobile_flow(b):
 
 
 with sync_playwright() as pw:
-    b = pw.chromium.launch(executable_path=CHROME, args=["--no-sandbox"])
+    b = pw.chromium.launch(
+        executable_path=CHROME if os.path.exists(CHROME) else None, args=["--no-sandbox"]
+    )
     t0 = time.time()
     try:
         albanian_flow(b)

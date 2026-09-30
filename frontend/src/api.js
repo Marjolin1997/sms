@@ -24,6 +24,7 @@ const FRIENDLY = {
   totp_invalid: T("That two-factor code isn't right or was already used. Wait for the next code and try again."),
   totp_enrollment_required: T("Turn on two-factor authentication first (Admin → Security)."),
   no_key: T("Two-factor works with API keys, not with the bootstrap key."),
+  payments_disabled: T("Online payments aren't available yet. Contact us to top up your wallet."),
   too_many_attempts: T("Too many failed sign-in attempts from this network. Wait a few minutes and try again."),
   ip_not_allowed: T("This key isn't allowed from your current network address."),
   forbidden: T("Your role doesn't allow this action."),

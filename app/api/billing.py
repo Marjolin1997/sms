@@ -21,7 +21,13 @@ from app.services.audit import audit
 from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1")
-_STATUS = {"not_found": 404, "conflict": 409, "insufficient_funds": 402, "gateway_error": 502}
+_STATUS = {
+    "not_found": 404,
+    "conflict": 409,
+    "insufficient_funds": 402,
+    "gateway_error": 502,
+    "payments_disabled": 503,
+}
 
 
 def _run(db: Session, fn):

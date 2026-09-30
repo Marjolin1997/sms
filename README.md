@@ -49,6 +49,14 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **Bilanc i ulët:** `PUT /v1/wallets/{id}/alert {"threshold": "5"}` (null = çaktivizo). Kur balanca e disponueshme bie nën prag del një event `wallet.low_balance` (një herë për çdo rënie; rifutet kur balanca ngrihet mbi prag) që shkon te webhook-et (`wallet.*` ose `*`).
 - **Konsola:** faqja “Raportet” (përdorim, sipas ditës, butonat CSV) dhe karta “Njoftim për bilanc të ulët” te Portofoli. Leje të reja: `reports:read` (klient, financë, mbështetje), `wallet:alert` (klient, financë).
 
+## Deploy dhe operim (Faza 16)
+- **CI** (`.github/workflows/ci.yml`): lint + format, teste në PostgreSQL dhe SQLite, migrime up/down/up, rrjedhë backup→restore→verifikim ledger, build i frontend-it (me kontrollin e përkthimeve), e2e me shfletues, build i imazheve Docker + `nginx -t`, dhe audit varësish (këshillues). Dependabot për pip/npm/docker/actions.
+- **Prodhim:** `docker-compose.prod.yml` (db, migrate, api, worker, webhook-worker, nginx+konsola), imazhe me përdorues jo-root, sistem skedarësh vetëm-lexim, healthcheck-e (API `readyz`, workers me heartbeat). `SMS_ENV=production` bën aplikacionin të refuzojë nisjen me konfigurim të pasigurt (SQLite, çelësa mungojnë/dobët, `http://`, providers `fake`).
+- **`/readyz`** kthen 503 nëse DB s'përgjigjet ose skema s'është në versionin e kodit; çdo përgjigje ka `X-Request-ID`.
+- **Backup/restore:** `scripts/backup.sh` (custom + checksum + rotacion), `scripts/restore.sh` (vetëm në bazë të re), `python -m scripts.verify_ledger` (balanca = SUM(delta), faturat pa boshllëqe).
+- `SMS_PAYMENT_PROVIDER=disabled` çaktivizon pagesat online (kthen `payments_disabled`) derisa të ekzistojë gateway i vërtetë.
+- Udhëzuesi i plotë me hapat, TLS, përditësime, incidente: **`docs/RUNBOOK.md`**.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

@@ -28,6 +28,10 @@ class GatewayError(WalletError):
     code = "gateway_error"
 
 
+class PaymentsDisabled(WalletError):
+    code = "payments_disabled"
+
+
 def start_payment(
     db: Session, owner_ref: str, purpose: str, amount=None, invoice_id: int | None = None,
     wallet_id: int | None = None,
@@ -59,8 +63,10 @@ def start_payment(
             )
         currency, w_id, inv = w.currency, w.id, None
         desc = f"Wallet top-up {currency}"
-    gw = get_gateway(settings.payment_provider)
+    if settings.payment_provider == "disabled":
+        raise PaymentsDisabled("online payments are not enabled; contact us to top up")
     try:
+        gw = get_gateway(settings.payment_provider)
         session = gw.create_checkout(f"{owner_ref}:{purpose.value}", amt, currency, desc)
     except ProviderError as e:
         raise GatewayError(f"payment gateway unavailable: {e.code}") from e

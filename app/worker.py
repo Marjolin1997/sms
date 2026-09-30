@@ -5,8 +5,10 @@ bllokojë dërgimin e SMS/email."""
 
 import argparse
 import logging
+import os
 import time
 from datetime import timedelta
+from pathlib import Path
 
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -16,6 +18,15 @@ from app.services.campaigns import run_due
 from app.services.messages import expire_stale, process_one
 
 log = logging.getLogger("sms.worker")
+HEARTBEAT = Path(os.environ.get("SMS_WORKER_HEARTBEAT", "/tmp/sms-worker-alive"))  # noqa: S108
+
+
+def heartbeat() -> None:
+    """Skedari përditësohet çdo cikël; healthcheck-u i Docker-it kontrollon moshën e tij."""
+    try:
+        HEARTBEAT.touch()
+    except OSError:
+        pass
 
 
 def sweep() -> None:
@@ -47,6 +58,7 @@ def run(poll_seconds: float = 1.0, sweep_every: float = 60.0) -> None:
     register_configured()
     last_sweep = last_campaigns = last_billing = 0.0
     while True:
+        heartbeat()
         if time.monotonic() - last_sweep >= sweep_every:
             sweep()
             last_sweep = time.monotonic()
@@ -82,6 +94,7 @@ def purge() -> None:
 def run_webhooks(poll_seconds: float = 1.0, purge_every: float = 3600.0) -> None:
     last_purge = 0.0
     while True:
+        heartbeat()
         if time.monotonic() - last_purge >= purge_every:
             purge()
             last_purge = time.monotonic()

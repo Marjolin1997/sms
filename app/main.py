@@ -1,4 +1,7 @@
+import uuid
+
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from app.api import (
     admin,
@@ -16,9 +19,11 @@ from app.api import (
     wallets,
     webhooks,
 )
+from app.core.config import settings
 from app.providers import register_configured
 
 MAX_BODY_BYTES = 256 * 1024
+_RID_CHARS = set(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
 
 
 class SecurityMiddleware:
@@ -35,6 +40,10 @@ class SecurityMiddleware:
         if length and length.isdigit() and int(length) > MAX_BODY_BYTES:
             return await self._reply(send, 413, b'{"detail":"payload too large"}')
         received = 0
+        incoming = headers.get(b"x-request-id", b"")
+        # ID e klientit pranohet vetëm nëse është e sigurt për log-e (pa hapësira/kontroll)
+        ok = 0 < len(incoming) <= 64 and all(c in _RID_CHARS for c in incoming)
+        request_id = incoming if ok else uuid.uuid4().hex.encode()
 
         async def limited_receive():
             nonlocal received
@@ -49,6 +58,7 @@ class SecurityMiddleware:
             if msg["type"] == "http.response.start":
                 have = {k.lower() for k, _ in msg.get("headers", [])}
                 extra = [
+                    (b"x-request-id", request_id),
                     (b"x-content-type-options", b"nosniff"),
                     (b"cache-control", b"no-store"),
                     (b"referrer-policy", b"no-referrer"),
@@ -69,6 +79,7 @@ class SecurityMiddleware:
 
 
 def create_app() -> FastAPI:
+    settings.validate_production()
     register_configured()
     app = FastAPI(title="SMS Platform", version="0.1.0", docs_url=None, redoc_url=None)
     app.add_middleware(SecurityMiddleware)
@@ -93,12 +104,11 @@ def create_app() -> FastAPI:
 
     @app.get("/readyz")
     def readyz():
-        from sqlalchemy import text
+        from app.core.readiness import check
 
-        from app.core.db import SessionLocal
-
-        with SessionLocal() as db:
-            db.execute(text("select 1"))
+        problem = check()
+        if problem:
+            return JSONResponse({"status": "not_ready", "reason": problem}, status_code=503)
         return {"status": "ready"}
 
     return app

@@ -6,6 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SMS_", env_file=".env", extra="ignore")
 
+    # "production" aktivizon kontrollet e nisjes (validate_production): pa to aplikacioni
+    # refuzon të nisë me konfigurim të pasigurt.
+    env: Literal["development", "production"] = "development"
+
     # Gjuha e teksteve për përdoruesit fundorë (faturë, faqja e çregjistrimit, fundi i emailit).
     default_language: Literal["sq", "en"] = "sq"
 
@@ -68,6 +72,34 @@ class Settings(BaseSettings):
     dlr_secrets: dict[str, str] = {}
     # Sa kohë presim DLR pas SENT para se ta konsiderojmë të humbur.
     dlr_timeout_hours: int = 72
+
+    def production_problems(self) -> list[str]:
+        """Konfigurime që nuk lejohen në prodhim (lista bosh = në rregull)."""
+        bad = []
+        if self.database_url.startswith("sqlite"):
+            bad.append("SMS_DATABASE_URL must be PostgreSQL")
+        if len(self.pii_hmac_key) < 32:
+            bad.append("SMS_PII_HMAC_KEY must be set (at least 32 characters)")
+        if not self.secrets_key:
+            bad.append("SMS_SECRETS_KEY must be set (Fernet key)")
+        if self.admin_api_key and (
+            len(self.admin_api_key) < 24
+            or self.admin_api_key.lower().startswith(("change", "dev", "test", "demo"))
+        ):
+            bad.append("SMS_ADMIN_API_KEY is weak/default: use 24+ random characters or unset it")
+        if not self.public_base_url.startswith("https://"):
+            bad.append("SMS_PUBLIC_BASE_URL must be https://")
+        if self.webhook_allow_http:
+            bad.append("SMS_WEBHOOK_ALLOW_HTTP must be false")
+        if self.email_provider == "fake":
+            bad.append("SMS_EMAIL_PROVIDER must not be 'fake'")
+        if self.payment_provider == "fake":
+            bad.append("SMS_PAYMENT_PROVIDER must not be 'fake' (use 'disabled' for now)")
+        return bad
+
+    def validate_production(self) -> None:
+        if self.env == "production" and (problems := self.production_problems()):
+            raise RuntimeError("unsafe production configuration:\n - " + "\n - ".join(problems))
 
 
 settings = Settings()

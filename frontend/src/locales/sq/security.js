@@ -26,4 +26,5 @@ export default {
   "Two-factor": "2FA", "Reset two-factor for “{name}”?": "Ta rivendos 2FA për “{name}”?",
   "The key will work without a code until its owner sets up two-factor again. Use this when the phone was lost.": "Çelësi do të punojë pa kod derisa pronari ta konfigurojë sërish 2FA. Përdoreni kur humbet telefoni.",
   "Reset two-factor": "Rivendos 2FA", "Two-factor reset": "2FA u rivendos", "Reset 2FA": "Rivendos 2FA",
+  "Online payments aren't available yet. Contact us to top up your wallet.": "Pagesat online nuk janë ende të disponueshme. Na kontaktoni për të mbushur portofolin.",
 };
