@@ -19,6 +19,7 @@ KNOWN_TYPES = {
     "campaign.running", "campaign.paused", "campaign.completed", "campaign.cancelled",
     "consent.opted_out", "consent.opted_in", "webhook.ping",
     "invoice.issued", "invoice.paid", "payment.succeeded", "payment.failed",
+    "wallet.low_balance",
 }  # fmt: skip
 
 

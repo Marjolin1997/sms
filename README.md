@@ -43,6 +43,12 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **Humbi telefoni:** një superadmin (me kodin e vet) ose bootstrap: `POST /v1/admin/api-keys/{id}/reset-2fa`; regjistrohet në audit.
 - **Konsola:** faqja “Siguria” (konfigurim me sekret/link + kod konfirmimi) dhe dialog që kërkon kodin automatikisht kur një veprim e kërkon.
 
+## Raporte dhe njoftime (Faza 15)
+- **Përdorimi:** `GET /v1/reports/usage?from=YYYY-MM-DD&to=YYYY-MM-DD` (parazgjedhje 30 ditët e fundit, maksimumi 366): numërim ditor (UTC) për SMS (dërguar/dorëzuar/dështuar, pjesë, kosto e dorëzuarave) dhe email (dorëzuar/kthyer/dështuar), me ditët pa aktivitet si zero dhe totalet.
+- **Eksport CSV:** `GET /v1/reports/messages.csv` dhe `/v1/reports/emails.csv` (deri në 100 000 rreshta, transmetohet, UTF-8 me BOM që Excel të hapë ë/ç). Qelizat që fillojnë me `= + - @` neutralizohen kundër formula-injection; çdo eksport regjistrohet në audit (`report.export`). Të dy janë të kufizuar te llogaria e thirrësit.
+- **Bilanc i ulët:** `PUT /v1/wallets/{id}/alert {"threshold": "5"}` (null = çaktivizo). Kur balanca e disponueshme bie nën prag del një event `wallet.low_balance` (një herë për çdo rënie; rifutet kur balanca ngrihet mbi prag) që shkon te webhook-et (`wallet.*` ose `*`).
+- **Konsola:** faqja “Raportet” (përdorim, sipas ditës, butonat CSV) dhe karta “Njoftim për bilanc të ulët” te Portofoli. Leje të reja: `reports:read` (klient, financë, mbështetje), `wallet:alert` (klient, financë).
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

@@ -132,7 +132,27 @@ async function request(method, path, { params = {}, body, headers = {}, attempt 
   return data;
 }
 
+// Shkarkon një përgjigje (p.sh. CSV) si skedar, me të njëjtin autentikim dhe llogari.
+async function download(path, params = {}, filename = "download") {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries({ ...(owner ? { owner_ref: owner } : {}), ...params }))
+    if (v !== undefined && v !== null && v !== "") qs.set(k, v);
+  let res;
+  try { res = await fetch(`${path}?${qs}`, { headers: { Authorization: `Bearer ${getKey()}` } }); }
+  catch { throw new ApiError(0, "network", t("Can't reach the server. Check your connection and try again.")); }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const d = data && data.detail;
+    throw new ApiError(res.status, d && d.code, (d && d.message) || t("Request failed (HTTP {status})", { status: res.status }));
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const el = document.createElement("a");
+  el.href = url; el.download = filename; el.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
+  download,
   get: (p, params) => request("GET", p, { params }),
   post: (p, body, opts = {}) => request("POST", p, { body, ...opts }),
   put: (p, body) => request("PUT", p, { body }),

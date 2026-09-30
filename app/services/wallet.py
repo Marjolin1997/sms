@@ -132,7 +132,40 @@ def _post(
     )
     db.add(entry)
     db.flush()
+    _check_low_balance(db, wallet_id, entry.available_after)
     return entry
+
+
+def _check_low_balance(db: Session, wallet_id: int, available: Decimal) -> None:
+    """Event një herë kur balanca bie nën prag; flamuri rifutet kur ngrihet mbi prag.
+    Thirret brenda transaksionit të lëvizjes (wallet-i është i kyçur)."""
+    w = db.get(Wallet, wallet_id)
+    if w is None or w.low_balance_threshold is None:
+        return
+    if available < w.low_balance_threshold and not w.low_balance_notified:
+        w.low_balance_notified = True
+        from app.services import events  # vonuar: shmang varësinë rrethore
+
+        events.emit(
+            db, w.owner_ref, "wallet.low_balance", "wallet", w.id,
+            {"currency": w.currency, "available": str(available),
+             "threshold": str(w.low_balance_threshold)},
+        )  # fmt: skip
+    elif available >= w.low_balance_threshold and w.low_balance_notified:
+        w.low_balance_notified = False
+
+
+def set_low_balance_threshold(db: Session, wallet_id: int, threshold) -> Wallet:
+    """None/0 e çaktivizon. Vlerësohet menjëherë kundrejt balancës aktuale."""
+    w = lock_wallet(db, wallet_id)
+    value = None if threshold is None else money(threshold)
+    if value is not None and value < 0:
+        raise InvalidAmount("threshold must not be negative")
+    w.low_balance_threshold = value or None
+    w.low_balance_notified = False
+    db.flush()
+    _check_low_balance(db, wallet_id, balances(db, wallet_id)[0])
+    return w
 
 
 # --- Top-up -----------------------------------------------------------------

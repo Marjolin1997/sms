@@ -172,6 +172,28 @@ def confirm_topup(
     return _topup_out(_run(db, go))
 
 
+class AlertIn(BaseModel):
+    threshold: Decimal | None = Field(default=None, ge=0, max_digits=20, decimal_places=6)
+
+
+@router.put("/wallets/{wallet_id}/alert")
+def set_alert(
+    wallet_id: int,
+    body: AlertIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("wallet:alert")),
+):
+    """Pragu i njoftimit për bilancë të ulët (null/0 = pa njoftim)."""
+    w = _own_wallet(db, wallet_id, p)
+
+    def go():
+        svc.set_low_balance_threshold(db, w.id, body.threshold)
+        audit(db, p, "wallet.set_alert", "wallet", w.id, {"threshold": str(body.threshold)})
+        return {"id": w.id, "low_balance_threshold": w.low_balance_threshold}
+
+    return _run(db, go)
+
+
 @router.post("/wallets/{wallet_id}/adjustments", response_model=EntryOut, status_code=201)
 def adjust(
     wallet_id: int,

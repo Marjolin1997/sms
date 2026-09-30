@@ -12,6 +12,7 @@ from app.api import (
     portal,
     public,
     rates,
+    reports,
     wallets,
     webhooks,
 )
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(portal.router)
     app.include_router(billing.router)
     app.include_router(console.router)
+    app.include_router(reports.router)
 
     @app.get("/healthz")
     def healthz():

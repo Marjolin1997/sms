@@ -22,20 +22,21 @@ ROLE_PERMS: dict[str, set[str]] = {
     "finance": {
         "wallet:read", "wallet:write", "wallet:adjust", "topup:write", "topup:confirm",
         "audit:read", "monitor:read", "billing:read", "billing:admin",
+        "reports:read", "wallet:alert",
     },
     "pricing": {"rates:read", "rates:write", "routes:write", "plans:write", "monitor:read"},
     "approver": {"sender:review", "template:review", "monitor:read"},
     "support": {
         "wallet:read", "messages:read", "monitor:read", "audit:read", "switch:write",
         "contacts:read", "campaigns:read", "email:read",
-        "webhooks:read", "events:read", "portal:read", "billing:read",
+        "webhooks:read", "events:read", "portal:read", "billing:read", "reports:read",
     },
     "client": {
         "wallet:read", "messages:send", "messages:read", "sender:request",
         "template:write", "template:render", "contacts:read", "contacts:write", "consent:write",
         "campaigns:read", "campaigns:write", "email:send", "email:read", "email:write",
         "webhooks:read", "webhooks:write", "events:read", "keys:self", "portal:read",
-        "billing:read", "billing:pay", "billing:profile",
+        "billing:read", "billing:pay", "billing:profile", "reports:read", "wallet:alert",
     },
 }  # fmt: skip
 STAFF_ROLES = set(ROLE_PERMS) - {"client"}

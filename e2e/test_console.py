@@ -261,6 +261,17 @@ def client_flow(b):
     with p.expect_download() as dl:
         p.locator("tbody tr").first.locator("button:has-text('Export data')").click()
     check(dl.value.suggested_filename.startswith("contact-"), "contact export downloads a file")
+    # raporte: përdorim + CSV
+    go(p, "reports", 1200)
+    check(has("SMS sent", p.inner_text("main")), "reports page shows usage totals")
+    with p.expect_download() as dl2:
+        p.click("button:has-text('Export SMS (CSV)')")
+    check(dl2.value.suggested_filename.startswith("messages-"), "messages CSV downloads")
+    # njoftim për bilanc të ulët
+    go(p, "wallet", 1200)
+    p.fill("input[placeholder='5.00']", "3")
+    p.locator(".card:has-text('Low-balance alert') button.primary").click()
+    toast(p, "Alert saved")
     ctx.close()
 
 

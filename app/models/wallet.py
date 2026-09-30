@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -24,6 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
 )
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -48,6 +50,12 @@ class Wallet(Base):
     owner_ref: Mapped[str] = mapped_column(String(64), index=True)
     currency: Mapped[str] = mapped_column(String(3))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Njoftim kur balanca e disponueshme bie nën këtë prag (event wallet.low_balance, një herë
+    # për çdo rënie; rifutet kur balanca ngrihet sërish mbi prag).
+    low_balance_threshold: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    low_balance_notified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false()
+    )
 
     __table_args__ = (UniqueConstraint("owner_ref", "currency"),)
 

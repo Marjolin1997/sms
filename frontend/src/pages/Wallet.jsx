@@ -41,6 +41,24 @@ function TopUp({ wallet, onDone }) {
   );
 }
 
+function LowBalance({ wallet, onDone }) {
+  const [v, setV] = useState(wallet.low_balance_threshold ? String(Number(wallet.low_balance_threshold)) : "");
+  const a = useAction();
+  const bad = v !== "" && !/^\d+(\.\d{1,6})?$/.test(v);
+  return (
+    <Card title={t("Low-balance alert")} subtitle={t("We send a webhook event (wallet.low_balance) once when your balance drops below this amount.")}>
+      <div className="row wrap">
+        <Field label={t("Alert below ({currency})", { currency: wallet.currency })} hint={t("Leave empty to turn off")} error={bad ? t("Enter a number, e.g. 5 or 12.50") : null}>
+          <input inputMode="decimal" value={v} onChange={(e) => setV(e.target.value)} placeholder="5.00" />
+        </Field>
+        <Button variant="primary" busy={a.busy} disabled={bad} onClick={async () => { await a.run(() => api.put(`/v1/wallets/${wallet.id}/alert`, { threshold: v === "" ? null : v }), t("Alert saved")); onDone(); }}>{t("Save")}</Button>
+      </div>
+      {wallet.low_balance && <div className="alert warn"><span>{t("Your balance is below the alert level. Top up to keep sending.")}</span></div>}
+      <ErrorBox error={a.error} />
+    </Card>
+  );
+}
+
 export default function Wallet() {
   const wallets = useLoad(() => api.get("/v1/wallets"), [], 8000);
   const [idx, setIdx] = useState(0);
@@ -59,6 +77,7 @@ export default function Wallet() {
             <Stat label={t("Available to spend")} value={`${money(w.available)} ${w.currency}`} tone={Number(w.available) < 5 ? "warn" : "good"} sub={Number(w.available) < 5 ? t("Running low") : undefined} />
             <Stat label={t("Reserved")} value={`${money(w.held)} ${w.currency}`} sub={t("Held for messages being sent. Returned if they fail.")} />
           </div>
+          <LowBalance key={`${w.id}:${w.low_balance_threshold}`} wallet={w} onDone={wallets.reload} />
           <TopUp wallet={w} onDone={() => { pays.reload(); tops.reload(); }} />
           <Card title={t("Movements")} subtitle={t("Every change to your balance, newest first. Nothing on this list can be edited or deleted.")}><Ledger wallet={w} /></Card>
           <div className="grid two">

@@ -9,5 +9,6 @@ import setup from "./setup.js";
 import money from "./money.js";
 import staff from "./staff.js";
 import security from "./security.js";
+import reports from "./reports.js";
 
-export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security };
+export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports };

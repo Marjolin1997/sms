@@ -269,7 +269,12 @@ def list_wallets(
     out = []
     for w in db.scalars(select(Wallet).where(Wallet.owner_ref == owner).order_by(Wallet.id)):
         avail, held = wallets.balances(db, w.id)
-        out.append({"id": w.id, "currency": w.currency, "available": str(avail), "held": str(held)})
+        out.append({
+            "id": w.id, "currency": w.currency, "available": str(avail), "held": str(held),
+            "low_balance_threshold": str(w.low_balance_threshold)
+            if w.low_balance_threshold is not None else None,
+            "low_balance": bool(w.low_balance_notified),
+        })  # fmt: skip
     return out
 
 
