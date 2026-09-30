@@ -5,6 +5,7 @@ import hmac
 import ipaddress
 import json
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -50,6 +51,7 @@ class Principal:
     role: str
     owner_ref: str | None = None  # i vendosur vetëm për role=client
     key_id: int | None = None
+    enterprise_id: uuid.UUID | None = None  # M1c: identiteti canonical i tenant-it (nga çelësi)
 
     def has(self, perm: str) -> bool:
         perms = ROLE_PERMS.get(self.role, set())
@@ -142,7 +144,7 @@ def _from_key(db: Session, token: str, ip: str) -> Principal:
     if last is None or now - last > timedelta(minutes=5):
         key.last_used_at = now
         db.commit()
-    return Principal(f"key:{key.prefix}", key.role, key.owner_ref, key.id)
+    return Principal(f"key:{key.prefix}", key.role, key.owner_ref, key.id, key.enterprise_id)
 
 
 def current_principal(

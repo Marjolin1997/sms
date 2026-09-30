@@ -199,6 +199,20 @@ def _insert_if_absent(db: Session, owner_ref: str) -> None:
     db.execute(ins(Enterprise.__table__).values(**values).on_conflict_do_nothing())
 
 
+def lookup_id(db: Session, owner_ref) -> uuid.UUID | None:
+    """`enterprise.id` vetëm-lexim (M1c): nuk krijon asgjë. `None` nëse mungon ose është anomali."""
+    if not valid_owner_ref(owner_ref):
+        return None
+    cache: dict[str, uuid.UUID | None] = db.info.setdefault("_enterprise_ids", {})
+    if cache.get(owner_ref) is not None:
+        return cache[owner_ref]
+    with db.no_autoflush:
+        found = db.scalar(select(Enterprise.id).where(Enterprise.owner_ref == owner_ref))
+    if found is not None:
+        cache[owner_ref] = found
+    return found
+
+
 def _from_loaded_rows(db: Session, owner_ref: str) -> uuid.UUID | None:
     """`enterprise_id` nga një rresht tenant-owned i të njëjtit `owner_ref` që sesioni e ka tashmë të
     ngarkuar (p.sh. Message që workeri sapo e lexoi, kur krijon Event). Mbështetet te invarianti
