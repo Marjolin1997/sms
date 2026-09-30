@@ -216,3 +216,16 @@ textarea { resize: vertical; }
   td:empty { display: none; }
   .toasts { left: 16px; }
 }
+
+/* Raporte */
+.chart-wrap { width: 100%; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 11px; }
+.chart .seg.delivered, .sw.delivered { fill: var(--good); background: var(--good); }
+.chart .seg.pending, .sw.pending { fill: var(--info); background: var(--info); }
+.chart .seg.failed, .sw.failed { fill: var(--bad); background: var(--bad); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.stat-s .good { color: var(--good); }
+.stat-s .bad { color: var(--bad); }

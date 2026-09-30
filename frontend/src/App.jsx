@@ -16,6 +16,7 @@ import Approvals from "./pages/Approvals.jsx";
 import Accounts from "./pages/Accounts.jsx";
 import Rates from "./pages/Rates.jsx";
 import Finance from "./pages/Finance.jsx";
+import Reports from "./pages/Reports.jsx";
 import Admin from "./pages/Admin.jsx";
 
 // perm: string ose "a|b" (mjafton një); global: faqe që s'kërkon llogari të zgjedhur (staf)
@@ -24,6 +25,7 @@ const NAV = [
   { group: "Messaging", items: [
     { id: "send", label: "Send", icon: "➤", perm: "messages:send", el: Send, desc: "Send an SMS or an email. You see the price before you send." },
     { id: "messages", label: "Message history", icon: "☷", perm: "messages:read", el: Messages, desc: "Everything you've sent and what happened to it." },
+    { id: "reports", label: "Reports", icon: "▥", perm: "messages:read", el: Reports, desc: "How your messages perform: delivery, spend and what went wrong." },
     { id: "campaigns", label: "Campaigns", icon: "✉", perm: "campaigns:read", el: Campaigns, desc: "Send to a whole list on a schedule, with a budget cap." },
   ] },
   { group: "Audience", items: [

@@ -78,3 +78,18 @@ export async function openHtml(path) {
 }
 
 export const uuid = () => crypto.randomUUID();
+
+// CSV i mbrojtur: merret me Authorization dhe shkarkohet si skedar.
+export async function downloadFile(path, params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries({ ...(owner ? { owner_ref: owner } : {}), ...params })) if (v) qs.set(k, v);
+  let res;
+  try { res = await fetch(`${path}?${qs}`, { headers: { Authorization: `Bearer ${getKey()}` } }); }
+  catch { throw new ApiError(0, "network", "Can't reach the server. Check your connection and try again."); }
+  if (!res.ok) throw new ApiError(res.status, "error", `Couldn't download the file (HTTP ${res.status})`);
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || "export.csv";
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
