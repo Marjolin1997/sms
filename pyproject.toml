@@ -35,6 +35,7 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "tests/*" = ["E501"]
 "app/services/invoice_render.py" = ["E501"]
 "app/core/openapi.py" = ["E501"]
+"scripts/bench.py" = ["E501"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
