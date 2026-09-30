@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.email import (
@@ -53,7 +54,7 @@ def _move(db: Session, e: Email, to: EmailStatus, detail: str | None = None) -> 
         data = {"email_id": e.public_id, "status": to.value}
         if to in (EmailStatus.FAILED, EmailStatus.BOUNCED, EmailStatus.COMPLAINED):
             data["reason"] = detail
-        events.emit(db, e.owner_ref, f"email.{to.value}", "email", e.public_id, data)
+        events.emit(db, worker_owner(db, e), f"email.{to.value}", "email", e.public_id, data)
 
 
 def submit(
@@ -174,7 +175,8 @@ def unsubscribe(db: Session, token: str) -> Email:
     if e is None:
         raise NotFound("invalid unsubscribe link")
     consent.record(
-        db, e.owner_ref, "email", e.to_email, "opt_out", "unsubscribe", "email_link", "recipient",
+        db, worker_owner(db, e), "email", e.to_email, "opt_out", "unsubscribe", "email_link",
+        "recipient",
         evidence=f"one-click unsubscribe from email {public_id}",
     )  # fmt: skip
     return e
@@ -214,7 +216,7 @@ def process_one(db: Session, now: datetime | None = None) -> Email | None:
         return None
     db.commit()
     try:
-        domain = email_domains.verified_domain_for(db, e.owner_ref, e.from_email)
+        domain = email_domains.verified_domain_for(db, worker_owner(db, e), e.from_email)
         if domain is None:  # DNS u hoq ndërkohë
             raise ProviderError("domain_unverified", temporary=False)
         token = unsubscribe_token(e.public_id) if e.category == "marketing" else None
@@ -282,7 +284,7 @@ def apply_event(
     _move(db, e, target, code)
     if target in (EmailStatus.BOUNCED, EmailStatus.COMPLAINED):
         reason = "bounce_hard" if target == EmailStatus.BOUNCED else "complaint"
-        consent.record(db, e.owner_ref, "email", e.to_email, "opt_out", reason,
+        consent.record(db, worker_owner(db, e), "email", e.to_email, "opt_out", reason,
                        "provider_webhook", "system", evidence=code)  # fmt: skip
     return e
 

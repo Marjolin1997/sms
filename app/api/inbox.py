@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import tenant
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.inbound import InboundMessage
 from app.services import inbox as svc
@@ -52,9 +53,9 @@ def list_inbox(
     p: Principal = Depends(require("inbox:read")),
 ):
     """Më të rejat së pari; `next_before_id` për faqen tjetër; `unread` = numri i palexuarave."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     lim = max(1, min(limit, 200))
-    stmt = select(InboundMessage).where(InboundMessage.owner_ref == owner)
+    stmt = select(InboundMessage).where(owned(InboundMessage, owner))
     if unread:
         stmt = stmt.where(InboundMessage.read_at.is_(None))
     if q:
@@ -81,7 +82,7 @@ def unread(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("inbox:read")),
 ):
-    return {"unread": svc.unread_count(db, owner_for(p, owner_ref))}
+    return {"unread": svc.unread_count(db, tenant(db, p, owner_ref))}
 
 
 class ReadIn(BaseModel):
@@ -95,7 +96,7 @@ def mark_read(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("inbox:write")),
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref)
     return {"marked": _run(db, lambda: svc.mark_read(db, owner, body.ids))}
 
 
@@ -120,7 +121,7 @@ def list_keywords(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("inbox:read")),
 ):
-    return [_kw_out(k) for k in svc.list_keywords(db, owner_for(p, owner_ref))]
+    return [_kw_out(k) for k in svc.list_keywords(db, tenant(db, p, owner_ref))]
 
 
 @router.put("/keywords")
@@ -130,11 +131,13 @@ def put_keyword(
     p: Principal = Depends(require("inbox:write")),
 ):
     """Krijon ose ndryshon një fjalë kyçe. Me `reply_text` dërgohet përgjigje automatike."""
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
         k = svc.set_keyword(db, owner, body.keyword, body.reply_text)
-        audit(db, p, "keyword.set", "keyword", k.id, {"owner": owner, "keyword": k.keyword})
+        audit(
+            db, p, "keyword.set", "keyword", k.id, {"owner": owner.owner_ref, "keyword": k.keyword}
+        )
         return _kw_out(k)
 
     return _run(db, go)
@@ -147,10 +150,10 @@ def delete_keyword(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("inbox:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         svc.delete_keyword(db, owner, keyword_id)
-        audit(db, p, "keyword.delete", "keyword", keyword_id, {"owner": owner})
+        audit(db, p, "keyword.delete", "keyword", keyword_id, {"owner": owner.owner_ref})
 
     _run(db, go)

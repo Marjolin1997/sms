@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import tenant
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.campaigns import Campaign, CampaignRecipient, RecipientStatus
 from app.services import campaigns as svc
@@ -70,12 +71,19 @@ def create(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:write")),
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
     fields = body.model_dump(exclude={"owner_ref"})
 
     def go():
         c = svc.create(db, owner, created_by=p.actor, **fields)
-        audit(db, p, "campaign.create", "campaign", c.id, {"owner": owner, "list": c.list_id})
+        audit(
+            db,
+            p,
+            "campaign.create",
+            "campaign",
+            c.id,
+            {"owner": owner.owner_ref, "list": c.list_id},
+        )
         return c
 
     return _out(_run(db, go))
@@ -87,10 +95,8 @@ def list_campaigns(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:read")),
 ):
-    owner = owner_for(p, owner_ref)
-    rows = db.scalars(
-        select(Campaign).where(Campaign.owner_ref == owner).order_by(Campaign.id.desc())
-    )
+    owner = tenant(db, p, owner_ref)
+    rows = db.scalars(select(Campaign).where(owned(Campaign, owner)).order_by(Campaign.id.desc()))
     return [_out(c) for c in rows.fetchmany(200)]
 
 
@@ -101,7 +107,7 @@ def get_campaign(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     c = _run(db, lambda: svc._get(db, owner, campaign_id))
     return {**_out(c), "stats": svc.stats(db, c)}
 
@@ -113,7 +119,7 @@ def estimate(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     e = _run(db, lambda: svc.estimate(db, owner, campaign_id))
     return {"recipients": e.recipients, "excluded": e.excluded, "segments": e.segments,
             "total": str(e.total), "currency": e.currency}  # fmt: skip
@@ -126,11 +132,11 @@ def _transition(name: str, fn):
         db: Session = Depends(get_db),
         p: Principal = Depends(require("campaigns:write")),
     ):
-        owner = owner_for(p, owner_ref)
+        owner = tenant(db, p, owner_ref)
 
         def go():
             c = fn(db, owner, campaign_id)
-            audit(db, p, f"campaign.{name}", "campaign", c.id, {"owner": owner})
+            audit(db, p, f"campaign.{name}", "campaign", c.id, {"owner": owner.owner_ref})
             return c
 
         return _out(_run(db, go))
@@ -150,7 +156,7 @@ def schedule(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         c = svc.schedule(db, owner, campaign_id, body.scheduled_at)
@@ -170,7 +176,7 @@ def recipients(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     _run(db, lambda: svc._get(db, owner, campaign_id))
     q = select(CampaignRecipient).where(
         CampaignRecipient.campaign_id == campaign_id, CampaignRecipient.id > after_id

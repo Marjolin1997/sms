@@ -3,8 +3,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import scoped, tenant
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.email import Email, EmailDomain, EmailEvent
 from app.services import email_domains as domains
@@ -49,7 +50,7 @@ def _domain_out(d: EmailDomain, with_records: bool = False) -> dict:
 def add_domain(
     body: DomainIn, db: Session = Depends(get_db), p: Principal = Depends(require("email:write"))
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
         d = domains.create(db, owner, body.domain)
@@ -65,10 +66,8 @@ def list_domains(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("email:read")),
 ):
-    owner = owner_for(p, owner_ref)
-    rows = db.scalars(
-        select(EmailDomain).where(EmailDomain.owner_ref == owner).order_by(EmailDomain.id)
-    )
+    owner = tenant(db, p, owner_ref)
+    rows = db.scalars(select(EmailDomain).where(owned(EmailDomain, owner)).order_by(EmailDomain.id))
     return [_domain_out(d, with_records=d.status.value == "pending") for d in rows]
 
 
@@ -79,7 +78,7 @@ def verify_domain(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("email:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         d = domains.verify(db, owner, domain_id)
@@ -116,7 +115,7 @@ def send(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("email:send")),
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
     return _email_out(
         _run(
             db,
@@ -137,10 +136,9 @@ def send(
 
 
 def _own(db: Session, public_id: str, p: Principal) -> Email:
-    e = db.scalar(select(Email).where(Email.public_id == public_id))
+    e = db.scalar(scoped(db, p, Email, select(Email).where(Email.public_id == public_id)))
     if e is None:
         raise HTTPException(404, {"code": "not_found", "message": "email not found"})
-    p.check_owner(e.owner_ref)
     return e
 
 

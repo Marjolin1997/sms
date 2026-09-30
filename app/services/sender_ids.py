@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, SenderId, SenderKind
 from app.services import approvals
@@ -105,15 +106,15 @@ def assert_usable(db: Session, owner: Owner, country: str, value: str) -> Sender
     return s
 
 
-def owners_of_number(db: Session, number: str) -> set[str]:
-    """Kush ka të miratuar këtë numër si sender (për SMS hyrës → STOP/START)."""
+def owners_of_number(db: Session, number: str) -> list:
+    """Kush ka miratuar këtë numër si sender (SMS hyrës → STOP/START). WORKER/webhook: identiteti
+    i tenant-it vjen nga rreshti SenderId i numrit, jo nga kërkesa. Një pronar për `owner_ref`."""
     norm = number.lstrip("+")
-    return set(
-        db.scalars(
-            select(SenderId.owner_ref).where(
-                SenderId.value == norm,
-                SenderId.kind == SenderKind.NUMERIC,
-                SenderId.status == ApprovalStatus.APPROVED,
-            )
+    rows = db.scalars(
+        select(SenderId).where(
+            SenderId.value == norm,
+            SenderId.kind == SenderKind.NUMERIC,
+            SenderId.status == ApprovalStatus.APPROVED,
         )
     )
+    return list({r.owner_ref: worker_owner(db, r) for r in rows}.values())

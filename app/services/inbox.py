@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
+from app.core.context import worker_owner
 from app.core.scope import Owner, belongs, owned, ref
 from app.models.contacts import Contact, ContactStatus
 from app.models.inbound import InboundMessage, Keyword
@@ -79,7 +80,7 @@ def receive(
     owners = sender_ids.owners_of_number(db, to)
     if len(owners) != 1:
         return "unrouted", None  # asnjë ose shumë pronarë: nuk hamendësojmë kujt i përket
-    owner = next(iter(owners))
+    owner = owners[0]
     if provider_message_id:
         dup = db.scalar(
             select(InboundMessage).where(
@@ -98,12 +99,10 @@ def receive(
     if action is None:
         word = first_word(text)
         if word:
-            rule = db.scalar(
-                select(Keyword).where(Keyword.owner_ref == owner, Keyword.keyword == word)
-            )
+            rule = db.scalar(select(Keyword).where(owned(Keyword, owner), Keyword.keyword == word))
     contact_id = db.scalar(
         select(Contact.id).where(
-            Contact.owner_ref == owner,
+            owned(Contact, owner),
             Contact.phone == norm_from,
             Contact.status == ContactStatus.ACTIVE,
         )
@@ -134,7 +133,7 @@ def _auto_reply(db: Session, row: InboundMessage, text: str) -> None:
         select(func.count())
         .select_from(InboundMessage)
         .where(
-            InboundMessage.owner_ref == row.owner_ref,
+            owned(InboundMessage, worker_owner(db, row)),
             InboundMessage.from_number == row.from_number,
             InboundMessage.reply_message_id.is_not(None),
             InboundMessage.created_at > since,
@@ -147,7 +146,7 @@ def _auto_reply(db: Session, row: InboundMessage, text: str) -> None:
     try:
         with db.begin_nested():
             m = msg_svc.submit(
-                db, row.owner_ref, f"mo-reply-{row.public_id}", "+" + row.from_number,
+                db, worker_owner(db, row), f"mo-reply-{row.public_id}", "+" + row.from_number,
                 row.to_number, text=text,
             )  # fmt: skip
         row.reply_message_id = m.public_id

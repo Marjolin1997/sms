@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import scoped, system, tenant
+from app.core import scope
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import Principal, require, require_any
 from app.models.billing import BillingProfile, Subscription
 from app.models.contacts import Contact, ContactStatus
@@ -39,15 +41,15 @@ def _like(text: str) -> str:
     return f"%{esc}%"
 
 
-def _owner_or_all(p: Principal, owner_ref: str | None, perm: str) -> str | None:
-    """Klienti: llogaria e vet. Stafi: llogaria e zgjedhur, ose (me leje) të gjitha."""
-    if p.owner_ref:
-        p.check_owner(owner_ref or p.owner_ref)
-        return p.owner_ref
-    if owner_ref:
-        return owner_ref
+def _owner_or_all(db: Session, p: Principal, owner_ref: str | None, perm: str, resource: str):
+    """TENANT: klienti punon në Enterprise-in e vet; stafi me `owner_ref` → atë tenant.
+    SYSTEM: stafi pa `owner_ref` (me leje) lexon ndër-tenant, e shprehur dhe e audituar → None."""
+    if p.owner_ref or owner_ref:
+        return tenant(db, p, owner_ref)
     if not p.has(perm):
         raise HTTPException(403, {"code": "forbidden", "message": f"missing {perm}"})
+    scope.cross_tenant(db, system(p, f"{resource} review queue"), resource, "list")
+    db.commit()
     return None
 
 
@@ -65,9 +67,9 @@ def list_messages(
     p: Principal = Depends(require("messages:read")),
 ):
     """Më të rejat së pari; `next_before_id` për faqen tjetër."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     lim = _page(limit)
-    stmt = select(Message).where(Message.owner_ref == owner)
+    stmt = select(Message).where(owned(Message, owner))
     if status:
         stmt = stmt.where(Message.status == status)
     if q:
@@ -98,9 +100,9 @@ def list_emails(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("email:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     lim = _page(limit)
-    stmt = select(Email).where(Email.owner_ref == owner)
+    stmt = select(Email).where(owned(Email, owner))
     if status:
         stmt = stmt.where(Email.status == status)
     if q:
@@ -138,9 +140,9 @@ def quote_message(
     body: QuoteIn, db: Session = Depends(get_db), p: Principal = Depends(require("messages:send"))
 ):
     """Sa kushton ky mesazh dhe në sa segmente ndahet, para se ta dërgosh."""
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref)
     try:
-        plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner))
+        plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
         if plan is None or not plan.enabled:
             raise msg_svc.AccountDisabled("your account cannot send yet; contact support")
         if not rates_svc.E164.match(body.to):
@@ -168,10 +170,10 @@ def list_sender_ids(
     db: Session = Depends(get_db),
     p: Principal = Depends(require_any("sender:request", "sender:review")),
 ):
-    owner = _owner_or_all(p, owner_ref, "sender:review")
+    owner = _owner_or_all(db, p, owner_ref, "sender:review", "sender_ids")
     stmt = select(SenderId)
     if owner:
-        stmt = stmt.where(SenderId.owner_ref == owner)
+        stmt = stmt.where(owned(SenderId, owner))
     if status:
         stmt = stmt.where(SenderId.status == status)
     rows = db.scalars(stmt.order_by(SenderId.id.desc()).limit(300))
@@ -197,10 +199,10 @@ def list_templates(
 ):
     """Klienti: template-t e veta me versionet. Stafi pa llogari: vetëm versionet që kërkojnë
     shqyrtim (ose sipas `status`)."""
-    owner = _owner_or_all(p, owner_ref, "template:review")
+    owner = _owner_or_all(db, p, owner_ref, "template:review", "templates")
     stmt = select(Template)
     if owner:
-        stmt = stmt.where(Template.owner_ref == owner)
+        stmt = stmt.where(owned(Template, owner))
     templates = db.scalars(stmt.order_by(Template.id.desc()).limit(300)).all()
     out = []
     for t in templates:
@@ -265,9 +267,9 @@ def list_wallets(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("wallet:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     out = []
-    for w in db.scalars(select(Wallet).where(Wallet.owner_ref == owner).order_by(Wallet.id)):
+    for w in db.scalars(select(Wallet).where(owned(Wallet, owner)).order_by(Wallet.id)):
         avail, held = wallets.balances(db, w.id)
         out.append({
             "id": w.id, "currency": w.currency, "available": str(avail), "held": str(held),
@@ -289,10 +291,9 @@ def _topup_out(t: Topup, owner: str | None = None) -> dict:
 def wallet_topups(
     wallet_id: int, db: Session = Depends(get_db), p: Principal = Depends(require("wallet:read"))
 ):
-    w = db.get(Wallet, wallet_id)
+    w = db.scalar(scoped(db, p, Wallet, select(Wallet).where(Wallet.id == wallet_id)))
     if w is None:
         raise HTTPException(404, {"code": "not_found", "message": "wallet not found"})
-    p.check_owner(w.owner_ref)
     rows = db.scalars(
         select(Topup).where(Topup.wallet_id == w.id).order_by(Topup.id.desc()).limit(100)
     )
@@ -303,9 +304,11 @@ def wallet_topups(
 def pending_topups(
     status: TopupStatus = TopupStatus.PENDING,
     db: Session = Depends(get_db),
-    _: Principal = Depends(require("topup:confirm")),
+    p: Principal = Depends(require("topup:confirm")),
 ):
-    """Radha e financës: top-up-et që presin konfirmim (cash / transfertë)."""
+    """Radha e financës: top-up-et që presin konfirmim (cash / transfertë). SYSTEM, e audituar."""
+    scope.cross_tenant(db, system(p, "top-up confirmation queue"), "topups", "list")
+    db.commit()
     rows = db.execute(
         select(Topup, Wallet.owner_ref, Wallet.currency)
         .join(Wallet, Wallet.id == Topup.wallet_id)
@@ -320,8 +323,11 @@ def pending_topups(
 
 
 @router.get("/admin/accounts")
-def accounts(db: Session = Depends(get_db), _: Principal = Depends(require("monitor:read"))):
-    """Lista e llogarive që stafi të zgjedhë në vend që ta shkruajë owner_ref."""
+def accounts(db: Session = Depends(get_db), p: Principal = Depends(require("monitor:read"))):
+    """Lista e llogarive që stafi të zgjedhë në vend që ta shkruajë owner_ref. SYSTEM: numëron
+    tenant-ët sipas dizajnit (ndër-tenant, i audituar)."""
+    scope.cross_tenant(db, system(p, "account directory"), "accounts", "list")
+    db.commit()
     owners: set[str] = set()
     for model in (Wallet, AccountPlan, Subscription):
         owners.update(db.scalars(select(model.owner_ref)))
@@ -353,7 +359,7 @@ def set_vat(
     owner: str, body: VatIn, db: Session = Depends(get_db),
     p: Principal = Depends(require("billing:admin")),
 ):  # fmt: skip
-    prof = db.scalar(select(BillingProfile).where(BillingProfile.owner_ref == owner))
+    prof = db.scalar(select(BillingProfile).where(owned(BillingProfile, owner)))
     if prof is None:
         raise HTTPException(
             422,
@@ -377,7 +383,7 @@ def onboarding(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("portal:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def has(stmt) -> bool:
         return bool(db.scalar(stmt))
@@ -386,35 +392,35 @@ def onboarding(
         select(func.count())
         .select_from(LedgerEntry)
         .join(Wallet, Wallet.id == LedgerEntry.wallet_id)
-        .where(Wallet.owner_ref == owner, LedgerEntry.entry_type == EntryType.TOPUP)
+        .where(owned(Wallet, owner), LedgerEntry.entry_type == EntryType.TOPUP)
     )  # fmt: skip
-    sent_any = has(
-        select(func.count()).select_from(Message).where(Message.owner_ref == owner)
-    ) or has(select(func.count()).select_from(Email).where(Email.owner_ref == owner))
+    sent_any = has(select(func.count()).select_from(Message).where(owned(Message, owner))) or has(
+        select(func.count()).select_from(Email).where(owned(Email, owner))
+    )
     steps = [
         {"id": "wallet", "title": "Add funds to your wallet", "done": funded, "link": "wallet",
          "hint": "SMS is prepaid. Top up online or ask us for a bank transfer."},
         {"id": "sender", "title": "Get a sender ID approved", "link": "compose", "done": has(
             select(func.count()).select_from(SenderId).where(
-                SenderId.owner_ref == owner, SenderId.status == ApprovalStatus.APPROVED)),
+                owned(SenderId, owner), SenderId.status == ApprovalStatus.APPROVED)),
          "hint": "The name recipients see, e.g. your brand. We review it before you can use it."},
         {"id": "contacts", "title": "Import your contacts", "link": "contacts", "done": has(
             select(func.count()).select_from(Contact).where(
-                Contact.owner_ref == owner, Contact.status == ContactStatus.ACTIVE)),
+                owned(Contact, owner), Contact.status == ContactStatus.ACTIVE)),
          "hint": "Upload a list, or add people one by one."},
         {"id": "message", "title": "Send your first message", "link": "send", "done": sent_any,
          "hint": "Try a single SMS to yourself first."},
         {"id": "domain", "title": "Verify an email domain", "link": "email", "optional": True,
          "done": has(select(func.count()).select_from(EmailDomain).where(
-             EmailDomain.owner_ref == owner, EmailDomain.status == DomainStatus.VERIFIED)),
+             owned(EmailDomain, owner), EmailDomain.status == DomainStatus.VERIFIED)),
          "hint": "Only needed if you send email."},
         {"id": "webhook", "title": "Connect a webhook", "link": "webhooks", "optional": True,
          "done": has(select(func.count()).select_from(WebhookEndpoint).where(
-             WebhookEndpoint.owner_ref == owner, WebhookEndpoint.status == EndpointStatus.ACTIVE)),
+             owned(WebhookEndpoint, owner), WebhookEndpoint.status == EndpointStatus.ACTIVE)),
          "hint": "Get delivery updates pushed to your own system."},
         {"id": "billing", "title": "Add your billing details", "link": "billing", "optional": True,
          "done": has(select(func.count()).select_from(BillingProfile).where(
-             BillingProfile.owner_ref == owner)),
+             owned(BillingProfile, owner))),
          "hint": "Needed for invoices."},
     ]  # fmt: skip
     required = [s for s in steps if not s.get("optional")]

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.tenant import scoped, tenant
 from app.core.db import get_db
 from app.core.security import Principal, require
 from app.models.sending import Message, MessageEvent
@@ -45,10 +46,9 @@ class MessageOut(BaseModel):
 
 
 def _own_message(db: Session, public_id: str, p: Principal) -> Message:
-    m = db.scalar(select(Message).where(Message.public_id == public_id))
+    m = db.scalar(scoped(db, p, Message, select(Message).where(Message.public_id == public_id)))
     if m is None:
         raise HTTPException(404, {"code": "not_found", "message": "message not found"})
-    p.check_owner(m.owner_ref)
     return m
 
 
@@ -68,10 +68,10 @@ def send(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("messages:send")),
 ):
-    p.check_owner(body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
     try:
         m = svc.submit(
-            db, body.owner_ref, idempotency_key, body.to, body.sender,
+            db, owner, idempotency_key, body.to, body.sender,
             text=body.text, template_id=body.template_id, values=body.values,
             category=body.category,
         )  # fmt: skip

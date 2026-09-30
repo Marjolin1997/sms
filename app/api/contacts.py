@@ -29,16 +29,6 @@ def _run(db: Session, fn):
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
 
 
-def owner_for(p: Principal, owner_ref: str | None) -> str:
-    """Klienti punon gjithmonë në llogarinë e vet; stafi duhet ta specifikojë."""
-    if p.owner_ref:
-        p.check_owner(owner_ref or p.owner_ref)
-        return p.owner_ref
-    if not owner_ref:
-        raise HTTPException(422, {"code": "invalid", "message": "owner_ref is required"})
-    return owner_ref
-
-
 class ContactIn(BaseModel):
     owner_ref: str | None = None
     phone: str | None = Field(default=None, max_length=20)

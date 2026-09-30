@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import scoped, tenant
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.billing import (
     Invoice,
@@ -84,7 +85,7 @@ def get_profile(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("billing:read")),
 ):
-    prof = svc.get_profile(db, owner_for(p, owner_ref))
+    prof = svc.get_profile(db, tenant(db, p, owner_ref))
     if prof is None:
         return None
     return {"legal_name": prof.legal_name, "address": prof.address, "country": prof.country,
@@ -99,11 +100,12 @@ def put_profile(
     p: Principal = Depends(require("billing:profile")),
 ):
     """Klienti përditëson vetëm të dhënat ligjore; norma e TVSH-së vendoset nga stafi."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref, write=True)
 
     def go():
         prof = svc.set_profile(db, owner, **body.model_dump())
-        audit(db, p, "billing.profile", "billing_profile", owner, {"country": prof.country})
+        detail = {"country": prof.country}
+        audit(db, p, "billing.profile", "billing_profile", owner.owner_ref, detail)
         return prof
 
     prof = _run(db, go)
@@ -116,8 +118,8 @@ def get_subscription(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("billing:read")),
 ):
-    owner = owner_for(p, owner_ref)
-    sub = db.scalar(select(Subscription).where(Subscription.owner_ref == owner))
+    owner = tenant(db, p, owner_ref)
+    sub = db.scalar(select(Subscription).where(owned(Subscription, owner)))
     if sub is None:
         return None
     plan = db.get(Plan, sub.plan_id)
@@ -142,18 +144,18 @@ def list_invoices(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("billing:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     rows = db.scalars(
-        select(Invoice).where(Invoice.owner_ref == owner).order_by(Invoice.id.desc()).limit(200)
+        select(Invoice).where(owned(Invoice, owner)).order_by(Invoice.id.desc()).limit(200)
     )
     return [_inv_out(i) for i in rows]
 
 
 def _own_invoice(db: Session, invoice_id: int, p: Principal, owner_ref: str | None) -> Invoice:
-    inv = db.get(Invoice, invoice_id)
+    stmt = scoped(db, p, Invoice, select(Invoice).where(Invoice.id == invoice_id))
+    inv = db.scalar(stmt)
     if inv is None:
         raise HTTPException(404, {"code": "not_found", "message": "invoice not found"})
-    p.check_owner(inv.owner_ref)
     return inv
 
 
@@ -195,7 +197,7 @@ def pay_from_wallet(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("billing:pay")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         inv = svc.pay_from_wallet(db, owner, invoice_id)
@@ -220,7 +222,7 @@ def create_payment(
     p: Principal = Depends(require("billing:pay")),
 ):
     """Shuma e faturës merret nga serveri; klienti s'mund ta ndryshojë."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         pay = payments.start_payment(
@@ -238,9 +240,9 @@ def list_payments(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("billing:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     rows = db.scalars(
-        select(Payment).where(Payment.owner_ref == owner).order_by(Payment.id.desc()).limit(200)
+        select(Payment).where(owned(Payment, owner)).order_by(Payment.id.desc()).limit(200)
     )
     return [_pay_out(x) for x in rows]
 

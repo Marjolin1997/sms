@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import tenant
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.scope import owned
 from app.core.security import ROLE_PERMS, Principal, current_principal, require
 from app.models.admin import ApiKey
 from app.models.campaigns import Campaign
@@ -126,13 +127,13 @@ def create_endpoint(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:write")),
 ):
-    owner = owner_for(p, body.owner_ref)
+    owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
         ep, secret = webhooks.create_endpoint(
             db, owner, body.url, body.event_types, body.description
         )
-        audit(db, p, "webhook.create", "webhook", ep.id, {"owner": owner, "url": ep.url})
+        audit(db, p, "webhook.create", "webhook", ep.id, {"owner": owner.owner_ref, "url": ep.url})
         return ep, secret
 
     ep, secret = _run(db, go)
@@ -145,11 +146,9 @@ def list_endpoints(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     rows = db.scalars(
-        select(WebhookEndpoint)
-        .where(WebhookEndpoint.owner_ref == owner)
-        .order_by(WebhookEndpoint.id)
+        select(WebhookEndpoint).where(owned(WebhookEndpoint, owner)).order_by(WebhookEndpoint.id)
     )
     return [_ep_out(ep) for ep in rows]
 
@@ -162,7 +161,7 @@ def patch_endpoint(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     fields = body.model_dump(exclude_unset=True)
 
     def go():
@@ -180,7 +179,7 @@ def delete_endpoint(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         webhooks.delete_endpoint(db, owner, endpoint_id)
@@ -197,7 +196,7 @@ def rotate_secret(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
 
     def go():
         ep, secret = webhooks.rotate_secret(db, owner, endpoint_id)
@@ -215,7 +214,7 @@ def test_endpoint(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     ev = _run(db, lambda: webhooks.send_test(db, owner, endpoint_id))
     return {"event_id": f"evt_{ev.id}", "type": ev.type}
 
@@ -230,12 +229,12 @@ def list_deliveries(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     q = (
         select(WebhookDelivery, Event.type)
         .join(WebhookEndpoint, WebhookEndpoint.id == WebhookDelivery.endpoint_id)
         .join(Event, Event.id == WebhookDelivery.event_id)
-        .where(WebhookEndpoint.owner_ref == owner, WebhookDelivery.id > after_id)
+        .where(owned(WebhookEndpoint, owner), WebhookDelivery.id > after_id)
     )
     if endpoint_id:
         q = q.where(WebhookDelivery.endpoint_id == endpoint_id)
@@ -257,7 +256,7 @@ def redeliver(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("webhooks:write")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     d = _run(db, lambda: webhooks.redeliver(db, owner, delivery_id))
     return {"id": d.id, "status": d.status.value}
 
@@ -275,8 +274,8 @@ def list_events(
     p: Principal = Depends(require("events:read")),
 ):
     """Alternativë pull ndaj webhook-eve: kursori `after_id`, renditje rritëse."""
-    owner = owner_for(p, owner_ref)
-    q = select(Event).where(Event.owner_ref == owner, Event.id > after_id)
+    owner = tenant(db, p, owner_ref)
+    q = select(Event).where(owned(Event, owner), Event.id > after_id)
     if type:
         q = q.where(Event.type == type)
     rows = db.scalars(q.order_by(Event.id).limit(max(1, min(limit, 500))))
@@ -309,25 +308,25 @@ def _key_out(k, secret: str | None = None) -> dict:
     return out
 
 
-def _client_only(p: Principal) -> str:
+def _client_only(db: Session, p: Principal):
     if not p.owner_ref:
         raise HTTPException(
             403, {"code": "forbidden", "message": "self-service keys are for client accounts"}
         )
-    return p.owner_ref
+    return tenant(db, p)
 
 
 @router.post("/portal/api-keys", status_code=201)
 def create_own_key(
     body: KeyIn, db: Session = Depends(get_db), p: Principal = Depends(require("keys:self"))
 ):
-    owner = _client_only(p)
+    owner = _client_only(db, p)
 
     def go():
         k, full = apikeys.create_own_key(
             db, owner, body.name, p.actor, body.expires_at, body.allowed_cidrs
         )
-        audit(db, p, "apikey.self_create", "apikey", k.id, {"owner": owner})
+        audit(db, p, "apikey.self_create", "apikey", k.id, {"owner": owner.owner_ref})
         return k, full
 
     k, full = _run(db, go)
@@ -336,7 +335,7 @@ def create_own_key(
 
 @router.get("/portal/api-keys")
 def list_own_keys(db: Session = Depends(get_db), p: Principal = Depends(require("keys:self"))):
-    return [_key_out(k) for k in apikeys.list_own_keys(db, _client_only(p))]
+    return [_key_out(k) for k in apikeys.list_own_keys(db, _client_only(db, p))]
 
 
 @router.post("/portal/api-keys/{key_id}/rotate", status_code=201)
@@ -346,12 +345,14 @@ def rotate_own_key(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("keys:self")),
 ):
-    owner = _client_only(p)
+    owner = _client_only(db, p)
     grace = (body or RotateIn()).grace_minutes
 
     def go():
         old, new, full = apikeys.rotate_own_key(db, owner, key_id, p.actor, grace)
-        audit(db, p, "apikey.self_rotate", "apikey", old.id, {"new": new.id, "owner": owner})
+        audit(
+            db, p, "apikey.self_rotate", "apikey", old.id, {"new": new.id, "owner": owner.owner_ref}
+        )
         return old, new, full
 
     old, new, full = _run(db, go)
@@ -362,11 +363,11 @@ def rotate_own_key(
 def revoke_own_key(
     key_id: int, db: Session = Depends(get_db), p: Principal = Depends(require("keys:self"))
 ):
-    owner = _client_only(p)
+    owner = _client_only(db, p)
 
     def go():
         k = apikeys.revoke_own_key(db, owner, key_id)
-        audit(db, p, "apikey.self_revoke", "apikey", k.id, {"owner": owner})
+        audit(db, p, "apikey.self_revoke", "apikey", k.id, {"owner": owner.owner_ref})
         return k
 
     return _key_out(_run(db, go))
@@ -381,7 +382,7 @@ def overview(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("portal:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     since = datetime.now(UTC) - timedelta(days=30)
     day = datetime.now(UTC) - timedelta(hours=24)
 
@@ -390,27 +391,27 @@ def overview(
         return {getattr(s, "value", s): n for s, n in rows}
 
     wallet_rows = []
-    for w in db.scalars(select(Wallet).where(Wallet.owner_ref == owner).order_by(Wallet.id)):
+    for w in db.scalars(select(Wallet).where(owned(Wallet, owner)).order_by(Wallet.id)):
         avail, held = wallets.balances(db, w.id)
         wallet_rows.append({"id": w.id, "currency": w.currency, "available": str(avail),
                             "held": str(held)})  # fmt: skip
     return {
         "wallets": wallet_rows,
-        "sms_last_30d": counts(Message, Message.status, Message.owner_ref == owner,
+        "sms_last_30d": counts(Message, Message.status, owned(Message, owner),
                                Message.created_at >= since),  # fmt: skip
-        "email_last_30d": counts(Email, Email.status, Email.owner_ref == owner,
+        "email_last_30d": counts(Email, Email.status, owned(Email, owner),
                                  Email.created_at >= since),  # fmt: skip
-        "campaigns": counts(Campaign, Campaign.status, Campaign.owner_ref == owner),
+        "campaigns": counts(Campaign, Campaign.status, owned(Campaign, owner)),
         "webhooks": {
             "active_endpoints": db.scalar(
                 select(func.count()).select_from(WebhookEndpoint).where(
-                    WebhookEndpoint.owner_ref == owner,
+                    owned(WebhookEndpoint, owner),
                     WebhookEndpoint.status == EndpointStatus.ACTIVE)
             ),
             "failed_deliveries_24h": db.scalar(
                 select(func.count()).select_from(WebhookDelivery)
                 .join(WebhookEndpoint, WebhookEndpoint.id == WebhookDelivery.endpoint_id)
-                .where(WebhookEndpoint.owner_ref == owner,
+                .where(owned(WebhookEndpoint, owner),
                        WebhookDelivery.status == DeliveryStatus.FAILED,
                        WebhookDelivery.created_at >= day)
             ),

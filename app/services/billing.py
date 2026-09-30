@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.billing import (
@@ -240,12 +241,12 @@ def generate_invoice(
     start, end = period(sub)
     if end > now:
         return None
-    prof = get_profile(db, sub.owner_ref)
+    prof = get_profile(db, worker_owner(db, sub))
     if prof is None:
         log.warning("no billing profile for %s; invoice postponed", sub.owner_ref)
         return None
     plan = db.get(Plan, sub.plan_id)
-    lines = _invoice_lines(plan, email_usage(db, sub.owner_ref, start, end))
+    lines = _invoice_lines(plan, email_usage(db, worker_owner(db, sub), start, end))
     inv = None
     if lines:
         subtotal = sum((ln[3] for ln in lines), Decimal(0))
@@ -273,13 +274,13 @@ def generate_invoice(
         sub.status = SubStatus.CANCELLED
     db.flush()
     if inv is not None:
-        events.emit(db, inv.owner_ref, "invoice.issued", "invoice", inv.number,
+        events.emit(db, worker_owner(db, inv), "invoice.issued", "invoice", inv.number,
                     {"invoice_id": inv.number, "total": str(inv.total), "currency": inv.currency,
                      "due_at": inv.due_at.isoformat()})  # fmt: skip
         if sub.auto_pay:
             try:
                 with db.begin_nested():
-                    pay_from_wallet(db, inv.owner_ref, inv.id, now)
+                    pay_from_wallet(db, worker_owner(db, inv), inv.id, now)
             except (wallets.InsufficientFunds, NotFound):
                 pass  # mbetet e hapur; klienti e paguan pas top-up ose online
     return inv
@@ -325,7 +326,7 @@ def _get_invoice(db: Session, owner: Owner | None, invoice_id: int, lock: bool =
 def _mark_paid(db: Session, inv: Invoice, via: str, now: datetime) -> None:
     inv.status, inv.paid_at, inv.paid_via = InvoiceStatus.PAID, now, via
     db.flush()
-    events.emit(db, inv.owner_ref, "invoice.paid", "invoice", inv.number,
+    events.emit(db, worker_owner(db, inv), "invoice.paid", "invoice", inv.number,
                 {"invoice_id": inv.number, "total": str(inv.total), "via": via})  # fmt: skip
 
 

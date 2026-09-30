@@ -16,6 +16,7 @@ from decimal import Decimal
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, object_session
 
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.campaigns import (
@@ -155,7 +156,7 @@ def _touch(c: Campaign, status: CampaignStatus | None = None, now: datetime | No
                   CampaignStatus.CANCELLED):  # fmt: skip
         db = object_session(c)
         if db is not None:
-            events.emit(db, c.owner_ref, f"campaign.{status.value}", "campaign", c.id,
+            events.emit(db, worker_owner(db, c), f"campaign.{status.value}", "campaign", c.id,
                         {"campaign_id": c.id, "name": c.name, "status": status.value,
                          "pause_reason": c.pause_reason})  # fmt: skip
 
@@ -278,7 +279,9 @@ def _needed_vars(db: Session, c: Campaign) -> list[str]:
         return list(found)
     if not c.template_id:  # SMS me tekst të lirë: variabla {{emri}} direkt në tekst
         return list(dict.fromkeys(templates.VAR.findall(c.text or "")))
-    return templates.variables(templates.usable_version(db, c.owner_ref, c.template_id).body)
+    return templates.variables(
+        templates.usable_version(db, worker_owner(db, c), c.template_id).body
+    )
 
 
 # --- Përgatitja e audiencës -----------------------------------------------------
@@ -286,7 +289,13 @@ def _needed_vars(db: Session, c: Campaign) -> list[str]:
 
 def _prepare_step(db: Session, c: Campaign, now: datetime) -> None:
     rows = contacts.audience_batch(
-        db, c.owner_ref, c.list_id, c.channel, c.category, after_id=c.prep_cursor, limit=PREP_BATCH
+        db,
+        worker_owner(db, c),
+        c.list_id,
+        c.channel,
+        c.category,
+        after_id=c.prep_cursor,
+        limit=PREP_BATCH,
     )
     if not rows:
         _touch(c, CampaignStatus.RUNNING, now)
@@ -343,13 +352,13 @@ def _submit_sms(db, c, r, values, plan, reserved, now):
     """→ kostoja e mesazhit ose ngre përjashtim; kontrollon buxhetin para dërgimit."""
     text = _subst(c.text, values) if c.text else None  # tekst i lirë: personalizim {{emri}}
     if c.max_cost is not None and plan is not None:
-        quote_text = text or templates.render(db, c.owner_ref, c.template_id, values).text
+        quote_text = text or templates.render(db, worker_owner(db, c), c.template_id, values).text
         q = rates.quote(db, plan.rate_card_id, r.address, quote_text, now)
         if reserved + q.total > c.max_cost:
             raise _BudgetExhausted
     with db.begin_nested():
         m = msg.submit(
-            db, c.owner_ref, f"camp:{c.id}:{r.contact_id}", r.address, c.sender,
+            db, worker_owner(db, c), f"camp:{c.id}:{r.contact_id}", r.address, c.sender,
             text=text, template_id=c.template_id,
             values=(values or None) if c.template_id else None,
             category=c.category, now=now,
@@ -361,7 +370,7 @@ def _submit_sms(db, c, r, values, plan, reserved, now):
 def _submit_email(db, c, r, values, now):
     with db.begin_nested():
         e = emails.submit(
-            db, c.owner_ref, f"camp:{c.id}:{r.contact_id}", c.from_email, r.address,
+            db, worker_owner(db, c), f"camp:{c.id}:{r.contact_id}", c.from_email, r.address,
             _subst(c.subject, values), _subst(c.text, values),
             _subst(c.html_body, values, escape=True) if c.html_body else None,
             c.from_name, c.category, now=now,
@@ -402,7 +411,7 @@ def _dispatch_step(db: Session, c: Campaign, now: datetime) -> None:
         c.completed_at = now
         return
     needed = _needed_vars(db, c)
-    plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == c.owner_ref))
+    plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, worker_owner(db, c))))
     reserved = _reserved_cost(db, c.id) if c.max_cost is not None else Decimal(0)
     for r in pending:
         contact = db.get(Contact, r.contact_id)

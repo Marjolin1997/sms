@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.context import SystemContext, TenantContext, TenantUnresolved, for_owner
-from app.core.scope import belongs
+from app.core.scope import belongs, owned
 from app.core.security import Principal
 
 
@@ -49,3 +49,11 @@ def access_or_404(db: Session, p: Principal, row) -> None:
     zbulim); stafi (me lejen e rrugës) ka qasje të shprehur ndër-tenant."""
     if p.owner_ref is not None and not belongs(row, tenant(db, p)):
         raise HTTPException(404, {"code": "not_found", "message": "resource not found"})
+
+
+def scoped(db: Session, p: Principal, model, stmt):
+    """Klienti: shton skopimin e Enterprise-it të vet në SELECT; stafi: pa filtër (qasje e shprehur,
+    e kufizuar nga leja e rrugës). Përdoret për kërkim sipas ID/çelësi publik."""
+    if p.owner_ref is None:
+        return stmt
+    return stmt.where(owned(model, tenant(db, p)))

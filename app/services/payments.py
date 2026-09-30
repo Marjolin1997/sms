@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.billing import (
@@ -99,7 +100,7 @@ def complete(
             raise Conflict("payment already succeeded")
         if p.status != PaymentStatus.FAILED:
             p.status, p.failure_reason, p.completed_at = PaymentStatus.FAILED, "gateway_failed", now
-            events.emit(db, p.owner_ref, "payment.failed", "payment", p.id,
+            events.emit(db, worker_owner(db, p), "payment.failed", "payment", p.id,
                         {"payment_id": p.id, "purpose": p.purpose.value})  # fmt: skip
         return p
     if p.status == PaymentStatus.SUCCEEDED:
@@ -116,7 +117,7 @@ def complete(
         raise Conflict("amount or currency does not match the payment; needs manual reconciliation")
     _apply(db, p, now)
     p.status, p.completed_at = PaymentStatus.SUCCEEDED, now
-    events.emit(db, p.owner_ref, "payment.succeeded", "payment", p.id,
+    events.emit(db, worker_owner(db, p), "payment.succeeded", "payment", p.id,
                 {"payment_id": p.id, "purpose": p.purpose.value, "amount": str(p.amount),
                  "currency": p.currency})  # fmt: skip
     return p
@@ -130,10 +131,10 @@ def _apply(db: Session, p: Payment, now: datetime) -> None:
             return
         # fatura u pagua ose u anulua ndërkohë: paraja kalon në wallet, s'humbet
         wallet = db.scalar(
-            select(Wallet).where(Wallet.owner_ref == p.owner_ref, Wallet.currency == p.currency)
+            select(Wallet).where(owned(Wallet, worker_owner(db, p)), Wallet.currency == p.currency)
         )
         if wallet is None:
-            wallet = wallets.create_wallet(db, p.owner_ref, p.currency)
+            wallet = wallets.create_wallet(db, worker_owner(db, p), p.currency)
         wallet_id = wallet.id
         p.failure_reason = "invoice_already_settled"
     else:

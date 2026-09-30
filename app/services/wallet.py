@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.models.wallet import (
     EntryType,
@@ -146,7 +147,7 @@ def _check_low_balance(db: Session, wallet_id: int, available: Decimal) -> None:
         from app.services import events  # vonuar: shmang varësinë rrethore
 
         events.emit(
-            db, w.owner_ref, "wallet.low_balance", "wallet", w.id,
+            db, worker_owner(db, w), "wallet.low_balance", "wallet", w.id,
             {"currency": w.currency, "available": str(available),
              "threshold": str(w.low_balance_threshold)},
         )  # fmt: skip

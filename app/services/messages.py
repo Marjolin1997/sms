@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.context import worker_owner
 from app.core.scope import Owner, owned, ref
 from app.models.sending import (
     TERMINAL,
@@ -84,7 +85,7 @@ def _move(db: Session, m: Message, to: MessageStatus, detail: str | None = None)
         data = {"message_id": m.public_id, "status": to.value, "segments": m.segments}
         if to == MessageStatus.FAILED:
             data["error_code"] = detail
-        events.emit(db, m.owner_ref, f"message.{to.value}", "message", m.public_id, data)
+        events.emit(db, worker_owner(db, m), f"message.{to.value}", "message", m.public_id, data)
 
 
 def submit(

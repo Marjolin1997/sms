@@ -12,8 +12,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.api.contacts import owner_for
+from app.api.tenant import tenant
 from app.core.db import SessionLocal, get_db
+from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.email import Email, EmailStatus
 from app.models.sending import Message, MessageStatus
@@ -51,7 +52,7 @@ def usage(
     p: Principal = Depends(require("reports:read")),
 ):
     """Numërim ditor (UTC). Kostoja = ajo e tarifuar për mesazhet e dorëzuara."""
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     start, end = _range(from_, to)
     lo, hi = _bounds(start, end)
     days: dict[str, dict] = {}
@@ -73,7 +74,7 @@ def usage(
             func.sum(Message.segments),
             func.sum(case((delivered, Message.total_price), else_=0)),
         )
-        .where(Message.owner_ref == owner, Message.created_at >= lo, Message.created_at < hi)
+        .where(owned(Message, owner), Message.created_at >= lo, Message.created_at < hi)
         .group_by(day)
     ).all()
     for d, n, ok, bad, segs, cost in rows:
@@ -89,7 +90,7 @@ def usage(
             func.sum(case((Email.status == EmailStatus.BOUNCED, 1), else_=0)),
             func.sum(case((Email.status == EmailStatus.FAILED, 1), else_=0)),
         )
-        .where(Email.owner_ref == owner, Email.created_at >= lo, Email.created_at < hi)
+        .where(owned(Email, owner), Email.created_at >= lo, Email.created_at < hi)
         .group_by(eday)
     ).all()
     for d, n, ok, bounced, bad in erows:
@@ -150,14 +151,14 @@ def export_messages(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("reports:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     start, end = _range(from_, to)
     lo, hi = _bounds(start, end)
-    audit(db, p, "report.export", "messages", owner, {"from": str(start), "to": str(end)})
+    audit(db, p, "report.export", "messages", owner.owner_ref, {"from": str(start), "to": str(end)})
     db.commit()
     stmt = (
         select(Message)
-        .where(Message.owner_ref == owner, Message.created_at >= lo, Message.created_at < hi)
+        .where(owned(Message, owner), Message.created_at >= lo, Message.created_at < hi)
         .order_by(Message.id)
         .limit(MAX_EXPORT_ROWS)
         .execution_options(yield_per=1000)
@@ -182,14 +183,14 @@ def export_emails(
     db: Session = Depends(get_db),
     p: Principal = Depends(require("reports:read")),
 ):
-    owner = owner_for(p, owner_ref)
+    owner = tenant(db, p, owner_ref)
     start, end = _range(from_, to)
     lo, hi = _bounds(start, end)
-    audit(db, p, "report.export", "emails", owner, {"from": str(start), "to": str(end)})
+    audit(db, p, "report.export", "emails", owner.owner_ref, {"from": str(start), "to": str(end)})
     db.commit()
     stmt = (
         select(Email)
-        .where(Email.owner_ref == owner, Email.created_at >= lo, Email.created_at < hi)
+        .where(owned(Email, owner), Email.created_at >= lo, Email.created_at < hi)
         .order_by(Email.id)
         .limit(MAX_EXPORT_ROWS)
         .execution_options(yield_per=1000)

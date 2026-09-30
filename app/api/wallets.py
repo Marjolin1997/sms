@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.tenant import scoped, tenant
 from app.core.db import get_db
 from app.core.security import Principal, require
 from app.models.wallet import EntryType, LedgerEntry, Topup, TopupMethod, Wallet
@@ -79,10 +80,9 @@ def _http(e: svc.WalletError) -> HTTPException:
 
 
 def _own_wallet(db: Session, wallet_id: int, p: Principal) -> Wallet:
-    w = db.get(Wallet, wallet_id)
+    w = db.scalar(scoped(db, p, Wallet, select(Wallet).where(Wallet.id == wallet_id)))
     if w is None:
         raise HTTPException(404, {"code": "not_found", "message": "wallet not found"})
-    p.check_owner(w.owner_ref)
     return w
 
 
@@ -106,8 +106,10 @@ class AdjustIn(BaseModel):
 def create_wallet(
     body: WalletIn, db: Session = Depends(get_db), p: Principal = Depends(require("wallet:write"))
 ):
+    owner = tenant(db, p, body.owner_ref, write=True)
+
     def go():
-        w = svc.create_wallet(db, body.owner_ref, body.currency)
+        w = svc.create_wallet(db, owner, body.currency)
         audit(db, p, "wallet.create", "wallet", w.id, body.model_dump())
         return w
 

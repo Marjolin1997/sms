@@ -57,6 +57,16 @@ def for_owner(db: Session, owner_ref: str, *, create: bool = False, origin: str 
     return TenantContext(eid, owner_ref, origin)
 
 
+def worker_owner(db: Session, row):
+    """WORKER: pronari (TenantContext) i një rreshti që po procesohet. Anomali pa identitet
+    Enterprise (owner_ref i pavlefshëm) → rruga legacy e shprehur (`str`), që SMS-i të mos
+    ndalet: sjellja e domenit nuk ndryshon."""
+    try:
+        return for_row(db, row)
+    except TenantUnresolved:
+        return row.owner_ref
+
+
 def for_row(db: Session, row, *, origin: str = "worker") -> TenantContext:
     """WORKER: identiteti vjen nga rreshti që procesohet (`enterprise_id`); rreshtat legacy pa të
     zgjidhen me `owner_ref` të vetë rreshtit (vetëm për përputhshmëri prapa)."""

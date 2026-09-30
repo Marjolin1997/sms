@@ -16,6 +16,7 @@ from sqlalchemy import and_
 from app.core.context import SystemContext, TenantContext
 
 log = logging.getLogger("sms.scope")
+DEDUP_MINUTES = 5
 LEGACY_READS: Counter = Counter()  # tabela → sa herë u skopua vetëm me owner_ref (diagnostikim)
 
 Owner = TenantContext | str
@@ -51,6 +52,23 @@ def cross_tenant(db, ctx: SystemContext, resource: str, action: str, detail: dic
 
     if not isinstance(ctx, SystemContext):
         raise TypeError("cross-tenant access requires an explicit SystemContext")
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    action_name = f"cross_tenant.{action}"
+    recent = datetime.now(UTC) - timedelta(minutes=DEDUP_MINUTES)
+    if db.scalar(  # e njëjta qasje e të njëjtit aktor brenda dritares: një rresht
+        select(AuditLog.id)
+        .where(
+            AuditLog.actor == ctx.actor,
+            AuditLog.action == action_name,
+            AuditLog.target_type == resource,
+            AuditLog.created_at >= recent,
+        )
+        .limit(1)
+    ):
+        return
     db.add(
         AuditLog(
             actor=ctx.actor, role="system", action=f"cross_tenant.{action}", target_type=resource,
