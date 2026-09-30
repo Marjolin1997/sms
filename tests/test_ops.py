@@ -69,18 +69,20 @@ def test_readyz_ok_without_alembic(client):
 
 def test_readyz_detects_schema_behind(client):
     with engine.begin() as c:
-        c.execute(text("create table alembic_version (version_num varchar(32) not null)"))
-        c.execute(text("insert into alembic_version values ('0001')"))
+        c.execute(text("create table sms_alembic_version (version_num varchar(32) not null)"))
+        c.execute(text("insert into sms_alembic_version values ('0001')"))
     try:
         r = client.get("/readyz")
         assert r.status_code == 503 and r.json()["status"] == "not_ready"
         assert "migrations" in r.json()["reason"] and "0001" not in r.text  # pa detaje të brendshme
         with engine.begin() as c:
-            c.execute(text("update alembic_version set version_num = :v"), {"v": readiness._head()})
+            c.execute(
+                text("update sms_alembic_version set version_num = :v"), {"v": readiness._head()}
+            )
         assert client.get("/readyz").status_code == 200
     finally:
         with engine.begin() as c:
-            c.execute(text("drop table alembic_version"))
+            c.execute(text("drop table sms_alembic_version"))
 
 
 def test_request_id_generated_and_echoed(client):
@@ -131,3 +133,25 @@ def test_online_payments_can_be_disabled(db, monkeypatch):
     db.commit()
     with _pytest.raises(payments.PaymentsDisabled):
         payments.start_payment(db, "c1", "topup", "10", wallet_id=w.id)
+
+
+def test_readiness_version_table_matches_alembic_env():
+    """Rregullim: /readyz kontrollonte `alembic_version` por env.py përdor `sms_alembic_version`,
+    ndaj kontrolli i skemës nuk zbatohej kurrë në prodhim."""
+    import re
+    from pathlib import Path
+
+    env = (Path(__file__).resolve().parents[1] / "alembic/env.py").read_text()
+    assert re.search(r'version_table="([^"]+)"', env).group(1) == readiness.VERSION_TABLE
+
+
+def test_readyz_is_not_ready_when_a_real_migrated_schema_is_behind(client):
+    """Rasti real: tabela e versionit me emrin që përdor Alembic, me version më të vjetër."""
+    with engine.begin() as c:
+        c.execute(text("create table sms_alembic_version (version_num varchar(32) not null)"))
+        c.execute(text("insert into sms_alembic_version values ('0001')"))
+    try:
+        assert client.get("/readyz").status_code == 503
+    finally:
+        with engine.begin() as c:
+            c.execute(text("drop table sms_alembic_version"))

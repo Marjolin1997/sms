@@ -6,6 +6,9 @@ from sqlalchemy import inspect, text
 
 from app.core.db import SessionLocal, engine
 
+# Duhet të përputhet me `version_table` te alembic/env.py (kontrolluar nga testi).
+VERSION_TABLE = "sms_alembic_version"
+
 
 def _head() -> str | None:
     from alembic.config import Config
@@ -25,9 +28,9 @@ def check() -> str | None:
     try:
         with SessionLocal() as db:
             db.execute(text("select 1"))
-            if not inspect(engine).has_table("alembic_version"):
+            if not inspect(engine).has_table(VERSION_TABLE):
                 return None  # dev/test pa Alembic (create_all)
-            current = db.execute(text("select version_num from alembic_version")).scalar()
+            current = db.execute(text(f"select version_num from {VERSION_TABLE}")).scalar()  # noqa: S608
     except Exception:
         return "database unavailable"
     head = _head()
