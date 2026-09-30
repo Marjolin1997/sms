@@ -76,3 +76,16 @@ Metodë: `scripts/bench_ab.py` (dataset identik nga TEMPLATE PG **me backfill** 
 | SQL për `POST /v1/messages` | 23 | 24 | rikthimi bën 1 SELECT shtesë te `sms_enterprises` |
 
 Një A/B i parë 3+3 dha A2 −7.7% (brenda 5–10%): u analizua me 10 runs të balancuara + matje në proces; nuk u riprodhua (shih tabelën), prandaj konsiderohet zhurmë e makinës (OFF ndryshon ±10% mes runs). Para/pas M1c me të njëjtin harnes: ON 226.5 → 211.4 msg/s por edhe OFF 235.0 → 217.6 (zhvendosje e përbashkët e makinës); raporti ON/OFF 0.964 → 0.972, pra M1c s'ka regres të vetin. Kufij: një makinë, provider `fake`.
+
+## M2-b: `DispatchQueue` për SMS: para/pas (interleaved BASE/NEW, 5+5, dual-write ON, enterprise scoping)
+
+| Matje | BASE (para) | NEW (pas) | NEW vs BASE |
+|---|---|---|---|
+| A1 accept, një wallet (req/s, mesatare) | 56.5 | 55.5 | −1.8% (mediana +1.8%) |
+| A2 accept, 20 llogari (req/s) | 80.2 | 79.3 | −1.1% (mediana −0.4%) |
+| CPU aplikacioni gjatë accept (s) | 12.7 | 12.8 | +1.0% |
+| Drain, 2 workers (msg/s) | 224.8 | 223.1 | −0.8% (mediana +1.9%) |
+| CPU workers gjatë drain (s) | 34.1 | 34.2 | +0.3% |
+| SQL: submit+commit / process_one / retry | 21 / 8 / 8 | 21 / 8 / 8 | identik (100 statements, teksti i normalizuar identik) |
+
+Runs të ndërthurura BASE/NEW (worktree i commit-it paraardhës), integriteti 0 probleme. Brenda pragut 5%.
