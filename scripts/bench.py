@@ -174,30 +174,47 @@ def show(name: str, r: dict) -> None:  # noqa: D103
 
 
 def main() -> int:
+    import json
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--accounts", type=int, default=20)
     ap.add_argument("--messages", type=int, default=4000)
     ap.add_argument("--concurrency", type=int, default=32)
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument(
-        "--base",
-        default="http://127.0.0.1:8000",
-        help="API-ja që po punon (uvicorn) mbi të njëjtën bazë",
+        "--base", default="http://127.0.0.1:8000", help="API-ja (uvicorn) mbi të njëjtën bazë"
     )
+    ap.add_argument("--phase", choices=["all", "setup", "accept", "drain"], default="all")
+    ap.add_argument("--keys-file", help="ruaj/lexo çelësat (për dataset identik mes ekzekutimeve)")
+    ap.add_argument("--json-out", help="shkruaj rezultatet si JSON")
     a = ap.parse_args()
     guard()
-    keys = setup(a.accounts)
-    print(f"→ {a.accounts} llogari, {a.messages} mesazhe/skenar, konkurrencë {a.concurrency}")
-    r1 = asyncio.run(accept_phase(a.base, keys[:1], a.messages, a.concurrency, "hot"))
-    show("A1 pranim: një wallet (hot)", r1)
-    r2 = asyncio.run(accept_phase(a.base, keys, a.messages, a.concurrency, "spread"))
-    show(f"A2 pranim: {a.accounts} llogari", r2)
-    print(f"→ radha: {queue_depth()} mesazhe; nis {a.workers} workers…")
-    d = drain_phase(a.workers)
-    print(
-        f"B  dërgim (fake): {d['messages']} mesazhe / {d['seconds']:.1f}s = {d['per_second']:.0f} mesazhe/s me {d['workers']} worker(s)"
-    )
-    print("Integriteti:", integrity())
+    out: dict = {}
+    if a.keys_file and os.path.exists(a.keys_file):
+        keys = [tuple(k) for k in json.load(open(a.keys_file))]
+    else:
+        keys = setup(a.accounts)
+        if a.keys_file:
+            json.dump(keys, open(a.keys_file, "w"))
+    if a.phase == "setup":
+        return 0
+    print(f"→ {len(keys)} llogari, {a.messages} mesazhe/skenar, konkurrencë {a.concurrency}")
+    if a.phase in ("all", "accept"):
+        out["A1"] = asyncio.run(accept_phase(a.base, keys[:1], a.messages, a.concurrency, "hot"))
+        show("A1 pranim: një wallet (hot)", out["A1"])
+        out["A2"] = asyncio.run(accept_phase(a.base, keys, a.messages, a.concurrency, "spread"))
+        show(f"A2 pranim: {len(keys)} llogari", out["A2"])
+    if a.phase in ("all", "drain"):
+        print(f"→ radha: {queue_depth()} mesazhe; nis {a.workers} workers…")
+        out["B"] = drain_phase(a.workers)
+        d = out["B"]
+        print(
+            f"B  dërgim (fake): {d['messages']} mesazhe / {d['seconds']:.1f}s = {d['per_second']:.0f} mesazhe/s me {d['workers']} worker(s)"
+        )
+    out["integrity"] = integrity()
+    print("Integriteti:", out["integrity"])
+    if a.json_out:
+        json.dump(out, open(a.json_out, "w"))
     return 0
 
 
