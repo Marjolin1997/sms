@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, uuid } from "../api.js";
-import { Badge, Button, Card, Empty, ErrorBox, Field, Tabs, Table, Time, money, smsInfo, useAction, useDebounced, useLoad } from "../ui.jsx";
+import { t, tn } from "../i18n.jsx";
+import { Badge, Button, Card, Empty, ErrorBox, Field, Tabs, Table, money, smsInfo, useAction, useDebounced, useLoad } from "../ui.jsx";
 
 function Timeline({ path }) {
   const ev = useLoad(() => api.get(path), [path], 3000);
-  return <Table rows={ev.data || []} loading={ev.loading} empty="Waiting for the first update…" cols={[{ label: "Was", render: (r) => r.from ? <Badge>{r.from}</Badge> : "-" }, { label: "Became", render: (r) => <Badge>{r.to}</Badge> }, { label: "Detail", render: (r) => r.detail || "" }]} />;
+  return <Table rows={ev.data || []} loading={ev.loading} empty={t("Waiting for the first update…")} cols={[{ label: t("Was"), render: (r) => r.from ? <Badge>{r.from}</Badge> : "-" }, { label: t("Became"), render: (r) => <Badge>{r.to}</Badge> }, { label: t("Detail"), render: (r) => r.detail || "" }]} />;
 }
 
 function Sms() {
@@ -20,7 +21,7 @@ function Sms() {
 
   const approved = [...new Set((senders.data || []).map((s) => s.value))];
   useEffect(() => { if (!f.sender && approved.length) setF((x) => ({ ...x, sender: approved[0] })); }, [approved.length]); // eslint-disable-line
-  const tpl = (templates.data || []).find((t) => String(t.id) === f.templateId);
+  const tpl = (templates.data || []).find((x) => String(x.id) === f.templateId);
   const tplVersion = tpl?.versions?.[0];
   const text = tplVersion ? tplVersion.body.replace(/\{\{([a-z_][a-z0-9_]*)\}\}/g, (_, k) => values[k] || `{{${k}}}`) : f.text;
   const info = smsInfo(text);
@@ -42,36 +43,36 @@ function Sms() {
     e.preventDefault();
     const body = { to: f.to, sender: f.sender, category: f.category };
     if (tplVersion) { body.template_id = tpl.id; body.values = values; } else body.text = f.text;
-    const r = await a.run(() => api.post("/v1/messages", body, { headers: { "Idempotency-Key": uuid() } }), "Message accepted for delivery");
+    const r = await a.run(() => api.post("/v1/messages", body, { headers: { "Idempotency-Key": uuid() } }), t("Message accepted for delivery"));
     if (r && r.id) setSent(r);
   };
 
   if (senders.data && approved.length === 0)
     return (
-      <Card title="One step before you can send SMS">
-        <Empty icon="✦" title="You need an approved sender ID" action={<a className="btn primary" href="#senders">Request a sender ID</a>}>
-          A sender ID is the name recipients see, like your brand. We review each one, usually within a business day.
+      <Card title={t("One step before you can send SMS")}>
+        <Empty icon="✦" title={t("You need an approved sender ID")} action={<a className="btn primary" href="#senders">{t("Request a sender ID")}</a>}>
+          {t("A sender ID is the name recipients see, like your brand. We review each one, usually within a business day.")}
         </Empty>
       </Card>
     );
 
   return (
     <>
-      <Card title="New SMS">
+      <Card title={t("New SMS")}>
         <form onSubmit={submit} className="form" noValidate>
           <div className="grid two">
-            <Field label="To" hint="International format, for example +355691234567" error={f.to && !numberOk ? "Start with + and the country code, digits only." : null}>
-              <input required inputMode="tel" autoComplete="off" placeholder="+355691234567" value={f.to} onChange={set("to")} />
+            <Field label={t("To")} hint={t("International format, for example +355691234567")} error={f.to && !numberOk ? t("Start with + and the country code, digits only.") : null}>
+              <input required inputMode="tel" autoComplete="off" placeholder={"+355691234567"} value={f.to} onChange={set("to")} />
             </Field>
-            <Field label="From" hint="Only approved sender IDs are listed">
+            <Field label={t("From")} hint={t("Only approved sender IDs are listed")}>
               <select value={f.sender} onChange={set("sender")}>{approved.map((s) => <option key={s}>{s}</option>)}</select>
             </Field>
           </div>
           {(templates.data || []).length > 0 && (
-            <Field label="Message source">
+            <Field label={t("Message source")}>
               <select value={f.templateId} onChange={(e) => { setF({ ...f, templateId: e.target.value }); setValues({}); }}>
-                <option value="">Write my own text</option>
-                {templates.data.map((t) => <option key={t.id} value={t.id}>Template: {t.name}</option>)}
+                <option value="">{t("Write my own text")}</option>
+                {templates.data.map((x) => <option key={x.id} value={x.id}>{t("Template: {name}", { name: x.name })}</option>)}
               </select>
             </Field>
           )}
@@ -80,34 +81,34 @@ function Sms() {
               {tplVersion.variables.map((v) => <Field key={v} label={v}><input value={values[v] || ""} onChange={(e) => setValues({ ...values, [v]: e.target.value })} /></Field>)}
             </div>
           ) : (
-            <Field label="Message">
-              <textarea required rows={4} value={f.text} onChange={set("text")} placeholder="Type your message" />
+            <Field label={t("Message")}>
+              <textarea required rows={4} value={f.text} onChange={set("text")} placeholder={t("Type your message")} />
             </Field>
           )}
-          <div className={`meter ${info.segments > 3 ? "warn" : ""}`}>
-            <span>{info.length} characters · {info.encoding}{info.encoding === "Unicode" && " (accents or emoji shorten each part)"}</span>
-            <span>{info.segments} part{info.segments === 1 ? "" : "s"} · {info.perSegment} per part</span>
+          <div className={`meter ${info.segments > 3 || info.ucs ? "warn" : ""}`}>
+            <span>{t("{n} characters", { n: info.length })} · {info.encoding}{info.ucs && ` ${t("(letters like ë, ç or emoji make each part shorter)")}`}</span>
+            <span>{tn(info.segments, "{n} part", "{n} parts")} · {t("{n} per part", { n: info.perSegment })}</span>
           </div>
-          {tplVersion && <div className="help"><b>Preview:</b> {text}</div>}
-          <Field label="Type" hint={f.category === "marketing" ? "Promotions. Only people who agreed to receive them will get it." : "Codes, receipts, alerts. Sent even if someone declined promotions."}>
-            <select value={f.category} onChange={set("category")}><option value="transactional">Transactional (one-to-one info)</option><option value="marketing">Marketing (promotions)</option></select>
+          {tplVersion && <div className="help"><b>{t("Preview:")}</b> {text}</div>}
+          <Field label={t("Type")} hint={f.category === "marketing" ? t("Promotions. Only people who agreed to receive them will get it.") : t("Codes, receipts, alerts. Sent even if someone declined promotions.")}>
+            <select value={f.category} onChange={set("category")}><option value="transactional">{t("Transactional (one-to-one info)")}</option><option value="marketing">{t("Marketing (promotions)")}</option></select>
           </Field>
           {quote?.ok && (
             <div className="quote" aria-live="polite">
-              <span>To <b>{quote.ok.country}</b></span><span>{quote.ok.segments} part(s) × {money(quote.ok.unit_price)}</span><span>Cost <b>{money(quote.ok.total)} {quote.ok.currency}</b></span>
-              {balance && <span className="muted">Balance {money(balance.available)}</span>}
+              <span>{t("To")} <b>{quote.ok.country}</b></span><span>{t("{n} part(s) × {price}", { n: quote.ok.segments, price: money(quote.ok.unit_price) })}</span><span>{t("Cost")} <b>{money(quote.ok.total)} {quote.ok.currency}</b></span>
+              {balance && <span className="muted">{t("Balance {amount}", { amount: money(balance.available) })}</span>}
             </div>
           )}
           {quote?.error && <div className="quote bad" role="alert">{quote.error.message}</div>}
-          {short && <div className="alert warn"><span>Your balance is lower than the cost of this message.</span><a className="btn small primary" href="#wallet">Top up</a></div>}
+          {short && <div className="alert warn"><span>{t("Your balance is lower than the cost of this message.")}</span><a className="btn small primary" href="#wallet">{t("Top up")}</a></div>}
           <ErrorBox error={a.error} />
-          <div><Button variant="primary" busy={a.busy} disabled={!ready}>Send SMS</Button></div>
+          <div><Button variant="primary" busy={a.busy} disabled={!ready}>{t("Send SMS")}</Button></div>
         </form>
       </Card>
       {sent && (
-        <Card title="Sent" subtitle={`Reference ${sent.id}`} actions={<><Badge>{sent.status}</Badge><a className="btn small" href="#messages">Message history</a></>}>
-          <div className="kvlist"><dt>Parts</dt><dd>{sent.segments}</dd><dt>Price</dt><dd>{money(sent.total_price)} {sent.currency}</dd></div>
-          <h4>Progress</h4>
+        <Card title={t("Sent")} subtitle={t("Reference {id}", { id: sent.id })} actions={<><Badge>{sent.status}</Badge><a className="btn small" href="#messages">{t("Message history")}</a></>}>
+          <div className="kvlist"><dt>{t("Parts")}</dt><dd>{sent.segments}</dd><dt>{t("Price")}</dt><dd>{money(sent.total_price)} {sent.currency}</dd></div>
+          <h4>{t("Progress")}</h4>
           <Timeline path={`/v1/messages/${sent.id}/events`} />
         </Card>
       )}
@@ -125,31 +126,31 @@ function EmailTab() {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = async (e) => {
     e.preventDefault();
-    const r = await a.run(() => api.post("/v1/email/messages", f, { headers: { "Idempotency-Key": uuid() } }), "Email queued");
+    const r = await a.run(() => api.post("/v1/email/messages", f, { headers: { "Idempotency-Key": uuid() } }), t("Email queued"));
     if (r && r.id) setSent(r);
   };
   if (domains.data && verified.length === 0)
     return (
-      <Card title="Verify a domain first">
-        <Empty icon="@" title="No verified sending domain" action={<a className="btn primary" href="#email">Set up a domain</a>}>Email can only be sent from a domain you've proven you own. It takes a few DNS records and a few minutes.</Empty>
+      <Card title={t("Verify a domain first")}>
+        <Empty icon="@" title={t("No verified sending domain")} action={<a className="btn primary" href="#email">{t("Set up a domain")}</a>}>{t("Email can only be sent from a domain you've proven you own. It takes a few DNS records and a few minutes.")}</Empty>
       </Card>
     );
   return (
     <>
-      <Card title="New email">
+      <Card title={t("New email")}>
         <form onSubmit={submit} className="form">
           <div className="grid two">
-            <Field label="From" hint={`Verified domains: ${verified.map((d) => d.domain).join(", ")}`}><input required type="email" value={f.from_email} onChange={set("from_email")} /></Field>
-            <Field label="To"><input required type="email" value={f.to} onChange={set("to")} placeholder="name@example.com" /></Field>
+            <Field label={t("From")} hint={t("Verified domains: {list}", { list: verified.map((d) => d.domain).join(", ") })}><input required type="email" value={f.from_email} onChange={set("from_email")} /></Field>
+            <Field label={t("To")}><input required type="email" value={f.to} onChange={set("to")} placeholder={"name@example.com"} /></Field>
           </div>
-          <Field label="Subject"><input required maxLength={200} value={f.subject} onChange={set("subject")} /></Field>
-          <Field label="Message" hint="Plain text. Marketing emails get an unsubscribe link automatically."><textarea required rows={6} value={f.text} onChange={set("text")} /></Field>
-          <Field label="Type"><select value={f.category} onChange={set("category")}><option value="transactional">Transactional</option><option value="marketing">Marketing (needs recipient consent)</option></select></Field>
+          <Field label={t("Subject")}><input required maxLength={200} value={f.subject} onChange={set("subject")} /></Field>
+          <Field label={t("Message")} hint={t("Plain text. Marketing emails get an unsubscribe link automatically.")}><textarea required rows={6} value={f.text} onChange={set("text")} /></Field>
+          <Field label={t("Type")}><select value={f.category} onChange={set("category")}><option value="transactional">{t("Transactional")}</option><option value="marketing">{t("Marketing (needs recipient consent)")}</option></select></Field>
           <ErrorBox error={a.error} />
-          <div><Button variant="primary" busy={a.busy}>Send email</Button></div>
+          <div><Button variant="primary" busy={a.busy}>{t("Send email")}</Button></div>
         </form>
       </Card>
-      {sent && <Card title="Queued" actions={<><Badge>{sent.status}</Badge><a className="btn small" href="#messages">Message history</a></>}><Timeline path={`/v1/email/messages/${sent.id}/events`} /></Card>}
+      {sent && <Card title={t("Queued")} actions={<><Badge>{sent.status}</Badge><a className="btn small" href="#messages">{t("Message history")}</a></>}><Timeline path={`/v1/email/messages/${sent.id}/events`} /></Card>}
     </>
   );
 }

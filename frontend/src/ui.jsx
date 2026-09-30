@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { locale, t } from "./i18n.jsx";
 
 /* ---------- Njoftime (toast) dhe dialog konfirmimi ---------- */
 const Ctx = createContext(null);
@@ -11,8 +12,8 @@ export function UiProvider({ children }) {
 
   const toast = useCallback((message, kind = "good") => {
     const n = ++id.current;
-    setToasts((t) => [...t, { id: n, message, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== n)), kind === "bad" ? 7000 : 3800);
+    setToasts((list) => [...list, { id: n, message, kind }]);
+    setTimeout(() => setToasts((list) => list.filter((x) => x.id !== n)), kind === "bad" ? 7000 : 3800);
   }, []);
   const confirm = useCallback((opts) => new Promise((resolve) => setDialog({ ...opts, resolve })), []);
   const close = (v) => { dialog.resolve(v); setDialog(null); };
@@ -21,10 +22,10 @@ export function UiProvider({ children }) {
     <Ctx.Provider value={{ toast, confirm }}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.kind}`}>
-            <span>{t.kind === "good" ? "✓" : t.kind === "bad" ? "!" : "i"}</span>{t.message}
-            <button aria-label="Dismiss" onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}>×</button>
+        {toasts.map((x) => (
+          <div key={x.id} className={`toast ${x.kind}`}>
+            <span>{x.kind === "good" ? "✓" : x.kind === "bad" ? "!" : "i"}</span>{x.message}
+            <button aria-label={t("Dismiss")} onClick={() => setToasts((l) => l.filter((y) => y.id !== x.id))}>×</button>
           </div>
         ))}
       </div>
@@ -53,10 +54,10 @@ function Dialog({ dialog, close }) {
             <input data-autofocus value={text} onChange={(e) => setText(e.target.value)} placeholder={dialog.placeholder || ""} /></label>
         )}
         <div className="row end">
-          <button className="btn" onClick={() => close(false)}>Cancel</button>
+          <button className="btn" onClick={() => close(false)}>{t("Cancel")}</button>
           <button className={`btn ${dialog.danger ? "danger-solid" : "primary"}`} data-autofocus={!dialog.input || undefined}
             disabled={dialog.input && dialog.inputRequired && text.trim().length < (dialog.minLength || 1)}
-            onClick={() => close(dialog.input ? text.trim() : true)}>{dialog.confirmLabel || "Confirm"}</button>
+            onClick={() => close(dialog.input ? text.trim() : true)}>{dialog.confirmLabel || t("Confirm")}</button>
         </div>
       </div>
     </div>
@@ -78,8 +79,8 @@ export function useLoad(fn, deps = [], refreshMs = 0) {
     set((s) => ({ ...s, loading: s.data === null }));
     load();
     if (!refreshMs) return;
-    const t = setInterval(() => !document.hidden && load(), refreshMs);
-    return () => clearInterval(t);
+    const timer = setInterval(() => !document.hidden && load(), refreshMs);
+    return () => clearInterval(timer);
   }, [load, refreshMs]);
   return { ...state, reload: load };
 }
@@ -125,7 +126,10 @@ const TONES = {
   pending: "warn", paused: "warn", draft: "muted", cancelled: "muted", skipped: "muted", expired: "muted", void: "muted", retired: "muted",
   failed: "bad", bounced: "bad", complained: "bad", disabled: "bad", opted_out: "bad", rejected: "bad", revoked: "bad",
 };
-export const Badge = ({ children }) => <span className={`badge ${TONES[String(children).toLowerCase()] || "muted"}`}>{children}</span>;
+export const Badge = ({ children }) => {
+  const key = String(children).toLowerCase();
+  return <span className={`badge ${TONES[key] || "muted"}`}>{t(key)}</span>; // statuset përkthehen këtu
+};
 
 export const Button = ({ variant = "", busy, children, ...p }) => (
   <button {...p} disabled={p.disabled || busy} className={`btn ${variant} ${p.className || ""}`}>
@@ -154,18 +158,18 @@ export const ErrorBox = ({ error, retry }) =>
   error ? (
     <div className="alert bad" role="alert">
       <span>{error.message || String(error)}</span>
-      {retry && <button className="link" onClick={retry}>Try again</button>}
+      {retry && <button className="link" onClick={retry}>{t("Try again")}</button>}
     </div>
   ) : null;
 export const Notice = ({ error }) => <ErrorBox error={error} />;
 
 export const Skeleton = ({ rows = 3 }) => (
-  <div className="skeleton" aria-busy="true" aria-label="Loading">
+  <div className="skeleton" aria-busy="true" aria-label={t("Loading")}>
     {Array.from({ length: rows }, (_, i) => <div key={i} style={{ width: `${92 - i * 11}%` }} />)}
   </div>
 );
 
-export function Table({ cols, rows, empty = "Nothing here yet.", loading, emptyTitle, emptyAction, footer }) {
+export function Table({ cols, rows, empty = t("Nothing here yet."), loading, emptyTitle, emptyAction, footer }) {
   if (loading && !rows?.length) return <Skeleton rows={4} />;
   if (!rows || rows.length === 0) return <Empty title={emptyTitle} action={emptyAction}>{empty}</Empty>;
   return (
@@ -186,9 +190,9 @@ export function Table({ cols, rows, empty = "Nothing here yet.", loading, emptyT
   );
 }
 
-export function CopyButton({ text, label = "Copy" }) {
+export function CopyButton({ text, label = t("Copy") }) {
   const { toast } = useUi();
-  return <button type="button" className="btn small" onClick={async () => { try { await navigator.clipboard.writeText(text); toast("Copied to clipboard"); } catch { toast("Couldn't copy, select and copy manually", "bad"); } }}>{label}</button>;
+  return <button type="button" className="btn small" onClick={async () => { try { await navigator.clipboard.writeText(text); toast(t("Copied to clipboard")); } catch { toast(t("Couldn't copy, select and copy manually"), "bad"); } }}>{label}</button>;
 }
 
 // Vlerë e ndjeshme që shfaqet një herë (çelës API, sekret webhook)
@@ -197,7 +201,7 @@ export function SecretBanner({ title, value, note, onClose }) {
     <div className="secret" role="alert">
       <div><b>{title}</b><div className="muted">{note}</div></div>
       <code>{value}</code>
-      <div className="row"><CopyButton text={value} /><Button onClick={onClose}>I've saved it</Button></div>
+      <div className="row"><CopyButton text={value} /><Button onClick={onClose}>{t("I've saved it")}</Button></div>
     </div>
   );
 }
@@ -205,25 +209,26 @@ export function SecretBanner({ title, value, note, onClose }) {
 export function Tabs({ tabs, value, onChange }) {
   return (
     <div className="tabs" role="tablist">
-      {tabs.map((t) => (
-        <button key={t.id} role="tab" aria-selected={value === t.id} className={value === t.id ? "on" : ""} onClick={() => onChange(t.id)}>
-          {t.label}{t.count ? <span className="count">{t.count}</span> : null}
+      {tabs.map((tab) => (
+        <button key={tab.id} role="tab" aria-selected={value === tab.id} className={value === tab.id ? "on" : ""} onClick={() => onChange(tab.id)}>
+          {tab.label}{tab.count ? <span className="count">{tab.count}</span> : null}
         </button>
       ))}
     </div>
   );
 }
 
-export const money = (v) => (v == null ? "-" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
-export const when = (v) => (v ? new Date(v).toLocaleString() : "-");
+export const money = (v) => (v == null ? "-" : Number(v).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+export const when = (v) => (v ? new Date(v).toLocaleString(locale()) : "-");
+export const dateOnly = (v) => (v ? new Date(v).toLocaleDateString(locale()) : "-");
 export function ago(v) {
   if (!v) return "-";
   const s = Math.max(0, (Date.now() - new Date(v).getTime()) / 1000);
-  if (s < 45) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  if (s < 86400 * 14) return `${Math.round(s / 86400)} d ago`;
-  return new Date(v).toLocaleDateString();
+  if (s < 45) return t("just now");
+  if (s < 3600) return t("{n} min ago", { n: Math.round(s / 60) });
+  if (s < 86400) return t("{n} h ago", { n: Math.round(s / 3600) });
+  if (s < 86400 * 14) return t("{n} d ago", { n: Math.round(s / 86400) });
+  return dateOnly(v);
 }
 export const Time = ({ value }) => <time title={when(value)} dateTime={value}>{ago(value)}</time>;
 
@@ -234,11 +239,11 @@ export function smsInfo(text) {
   for (const ch of text) { if (GSM.includes(ch)) len += 1; else if ("^{}\\[~]|€".includes(ch)) len += 2; else { ucs = true; break; } }
   if (ucs) len = [...text].reduce((n, c) => n + (c.codePointAt(0) > 0xffff ? 2 : 1), 0);
   const [single, multi] = ucs ? [70, 67] : [160, 153];
-  return { encoding: ucs ? "Unicode" : "GSM-7", length: len, segments: len === 0 ? 0 : len <= single ? 1 : Math.ceil(len / multi), perSegment: len <= single ? single : multi };
+  return { encoding: ucs ? "Unicode" : "GSM-7", ucs, length: len, segments: len === 0 ? 0 : len <= single ? 1 : Math.ceil(len / multi), perSegment: len <= single ? single : multi };
 }
 
 export function useDebounced(value, ms = 350) {
   const [v, setV] = useState(value);
-  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  useEffect(() => { const timer = setTimeout(() => setV(value), ms); return () => clearTimeout(timer); }, [value, ms]);
   return v;
 }

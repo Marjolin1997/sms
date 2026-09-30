@@ -216,3 +216,9 @@ textarea { resize: vertical; }
   td:empty { display: none; }
   .toasts { left: 16px; }
 }
+
+/* Ndërruesi i gjuhës */
+.langsw { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; align-self: flex-start; }
+.langsw button { border: 0; background: transparent; color: var(--muted); padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.langsw button.on { background: var(--brand); color: var(--brand-ink); }
+.langsw button:focus-visible { outline: 2px solid var(--brand, #4f46e5); outline-offset: -2px; }
