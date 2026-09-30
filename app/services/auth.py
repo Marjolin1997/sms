@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, update
@@ -22,6 +23,9 @@ TOKEN_TTL = timedelta(hours=72)  # ftesa nga stafi
 RESET_TTL = timedelta(hours=1)  # rivendosje vetë-shërbyese
 RESET_COOLDOWN = timedelta(minutes=2)
 RESET_MAX_PER_HOUR = 5
+MFA_TTL = timedelta(minutes=5)
+LINK_KINDS = ("invite", "reset")
+MFA_KINDS = ("mfa", "mfa_r")  # 'mfa_r' = me 'më mbaj të hyrë'
 MAX_FAILED = 5
 LOCK_FOR = timedelta(minutes=15)
 MAX_SESSIONS = 20  # më të vjetrat revokohen, që një pajisje e harruar të mos grumbullohet
@@ -103,9 +107,12 @@ def normalize_email(email: str) -> str:
 def _token(db: Session, user: User, kind: str, ttl: timedelta = TOKEN_TTL) -> str:
     """Anulon tokenat e pa-përdorur të mëparshëm dhe krijon një të ri (kthehet vetëm një herë)."""
     now = datetime.now(UTC)
+    family = MFA_KINDS if kind in MFA_KINDS else LINK_KINDS  # një familje s'anulon tjetrën
     db.execute(
         update(UserToken)
-        .where(UserToken.user_id == user.id, UserToken.used_at.is_(None))
+        .where(
+            UserToken.user_id == user.id, UserToken.used_at.is_(None), UserToken.kind.in_(family)
+        )
         .values(used_at=now)
     )
     raw = secrets.token_urlsafe(32)
@@ -207,9 +214,43 @@ def _new_session(
     return s, f"{SESSION_PREFIX}_{prefix}_{secret}"
 
 
+@dataclass
+class LoginResult:
+    """Sesion i plotë, ose (me 2FA) vetëm një token i shkurtër për kodin."""
+
+    user: User
+    session: UserSession | None = None
+    token: str | None = None
+    mfa_token: str | None = None
+
+
+def register_failure(u: User, now: datetime) -> None:
+    """Numëruesi i përbashkët (fjalëkalim dhe kod 2FA): 5 dështime → bllokim 15 minuta."""
+    u.failed_logins += 1
+    if u.failed_logins >= MAX_FAILED:
+        u.failed_logins, u.locked_until = 0, now + LOCK_FOR
+
+
+def is_locked(u: User) -> bool:
+    return u.locked_until is not None and as_utc(u.locked_until) > datetime.now(UTC)
+
+
+def start_session(
+    db: Session, u: User, remember: bool, user_agent: str | None, mfa_done: bool = False
+) -> LoginResult:
+    """Me 2FA aktive nuk hap sesion: jep token 5-minutësh për kodin. Numëruesi i dështimeve NUK
+    zerohet me fjalëkalimin e saktë, që hapi i dytë të mos merret me tentativa të pafundme."""
+    if u.totp_enabled_at is not None and not mfa_done:
+        return LoginResult(u, mfa_token=_token(db, u, "mfa_r" if remember else "mfa", MFA_TTL))
+    u.failed_logins, u.locked_until = 0, None
+    u.last_login_at = datetime.now(UTC)
+    s, token = _new_session(db, u, REMEMBER_TTL if remember else SESSION_TTL, user_agent)
+    return LoginResult(u, s, token)
+
+
 def login(
     db: Session, email: str, password: str, remember: bool = False, user_agent: str | None = None
-) -> tuple[User, UserSession, str] | None:
+) -> LoginResult | None:
     """None kur kredencialet s'vlejnë (mesazh i njëjtë për email të panjohur, fjalëkalim të gabuar
     ose llogari të bllokuar, që të mos zbulohet cilat email ekzistojnë). Thirrësi bën commit
     edhe pas None, që numëruesi i dështimeve të ruhet."""
@@ -219,16 +260,11 @@ def login(
     now = datetime.now(UTC)
     if u is None:
         return None
-    locked = u.locked_until is not None and as_utc(u.locked_until) > now
-    if not ok or locked or u.status != UserStatus.ACTIVE:
-        if not locked and u.status == UserStatus.ACTIVE and u.password_hash:
-            u.failed_logins += 1
-            if u.failed_logins >= MAX_FAILED:
-                u.failed_logins, u.locked_until = 0, now + LOCK_FOR
+    if not ok or is_locked(u) or u.status != UserStatus.ACTIVE:
+        if not is_locked(u) and u.status == UserStatus.ACTIVE and u.password_hash:
+            register_failure(u, now)
         return None
-    u.failed_logins, u.locked_until, u.last_login_at = 0, None, now
-    s, token = _new_session(db, u, REMEMBER_TTL if remember else SESSION_TTL, user_agent)
-    return u, s, token
+    return start_session(db, u, remember, user_agent)
 
 
 def purge_expired(db: Session, days: int = 30) -> int:
@@ -243,10 +279,6 @@ def purge_expired(db: Session, days: int = 30) -> int:
         delete(UserToken).where((UserToken.expires_at < cutoff) | (UserToken.used_at < cutoff))
     ).rowcount
     return n
-
-
-def is_locked(u: User) -> bool:
-    return u.locked_until is not None and as_utc(u.locked_until) > datetime.now(UTC)
 
 
 def revoke_all(db: Session, user_id: int, except_id: int | None = None) -> None:
@@ -292,11 +324,16 @@ def change_password(db: Session, user_id: int, current: str, new: str, keep_sess
 # --- Ftesa / rivendosje ---------------------------------------------------------------
 
 
-def _valid_token(db: Session, raw: str) -> UserToken:
+def _valid_token(db: Session, raw: str, kinds: tuple[str, ...] = LINK_KINDS) -> UserToken:
     t = db.scalar(
         select(UserToken).where(UserToken.token_hash == hash_secret(raw)).with_for_update()
     )
-    if t is None or t.used_at is not None or as_utc(t.expires_at) <= datetime.now(UTC):
+    if (
+        t is None
+        or t.kind not in kinds
+        or t.used_at is not None
+        or as_utc(t.expires_at) <= datetime.now(UTC)
+    ):
         raise InvalidToken("This link has expired or was already used. Ask for a new one.")
     return t
 
@@ -311,7 +348,7 @@ def token_info(db: Session, raw: str) -> dict:
 
 def accept_token(
     db: Session, raw: str, password: str, user_agent: str | None = None
-) -> tuple[User, UserSession, str]:
+) -> LoginResult:
     t = _valid_token(db, raw)
     u = get_user(db, t.user_id)
     if u.status != UserStatus.ACTIVE:
@@ -321,6 +358,5 @@ def accept_token(
     u.failed_logins, u.locked_until = 0, None
     t.used_at = datetime.now(UTC)
     revoke_all(db, u.id)  # rivendosja mbyll çdo sesion të vjetër
-    u.last_login_at = datetime.now(UTC)
-    s, token = _new_session(db, u, SESSION_TTL, user_agent)
-    return u, s, token
+    # Me 2FA, email-i vetëm s'mjafton për të hyrë: kodi kërkohet prapë.
+    return start_session(db, u, False, user_agent)

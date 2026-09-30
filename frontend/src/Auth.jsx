@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, setKey } from "./api.js";
-import { Button, ErrorBox, Field } from "./ui.jsx";
+import { Button, ErrorBox, Field, useUi } from "./ui.jsx";
 
 function PasswordInput({ value, onChange, autoComplete, autoFocus, placeholder }) {
   const [show, setShow] = useState(false);
@@ -58,9 +58,61 @@ function Forgot({ onBack }) {
   );
 }
 
+// Hapi i dytë i hyrjes: kodi nga aplikacioni (6 shifra) ose një kod rikuperimi.
+function MfaStep({ mfa, onLogin, onBack }) {
+  const { toast } = useUi();
+  const [code, setCode] = useState("");
+  const [recovery, setRecovery] = useState(false);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (value = code) => {
+    if (busy || !value.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await api.post("/v1/auth/login/mfa", { mfa_token: mfa.token, code: value });
+      setKey(r.token, mfa.remember);
+      if (r.used_recovery) toast(`Recovery code used. ${r.recovery_left} left. Make new ones in My account.`, "warn");
+      onLogin(await api.get("/v1/me"));
+    } catch (err) {
+      setKey("");
+      if (err.code === "mfa_expired") return onBack(err.message);
+      setError(err); setCode("");
+    } finally { setBusy(false); }
+  };
+  const onChange = (v) => {
+    const clean = recovery ? v : v.replace(/\D/g, "").slice(0, 6);
+    setCode(clean);
+    if (!recovery && clean.length === 6) submit(clean); // sapo shkruhen 6 shifrat
+  };
+
+  return (
+    <div className="login">
+      <form className="card login-card" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <Brand />
+        <p className="muted">{recovery ? "Enter one of your recovery codes. Each works once." : "Open your authenticator app and enter the 6-digit code for this account."}</p>
+        <Field label={recovery ? "Recovery code" : "6-digit code"}>
+          <input autoFocus value={code} onChange={(e) => onChange(e.target.value)} disabled={busy}
+            inputMode={recovery ? "text" : "numeric"} autoComplete="one-time-code" placeholder={recovery ? "xxxx-xxxx-xxxx-xxxx" : "123456"}
+            style={recovery ? undefined : { letterSpacing: "0.4em", fontSize: 20, textAlign: "center" }} />
+        </Field>
+        <ErrorBox error={error} />
+        <Button variant="primary" busy={busy} disabled={recovery ? !code.trim() : code.length !== 6}>Verify</Button>
+        <button type="button" className="link" onClick={() => { setRecovery(!recovery); setCode(""); setError(null); }}>
+          {recovery ? "Use my authenticator app instead" : "Lost your phone? Use a recovery code"}
+        </button>
+        <button type="button" className="link" onClick={() => onBack("")}>Back to sign in</button>
+      </form>
+    </div>
+  );
+}
+export { MfaStep };
+
 export function Login({ onLogin, notice }) {
   const [mode, setMode] = useState("password");
   const [forgot, setForgot] = useState(false);
+  const [mfa, setMfa] = useState(null);
+  const [note, setNote] = useState("");
   const [canReset, setCanReset] = useState(false);
   useEffect(() => { api.get("/v1/auth/config").then((c) => setCanReset(!!c.self_service_reset)).catch(() => {}); }, []);
   const [f, setF] = useState({ email: "", password: "", key: "", remember: false });
@@ -74,6 +126,7 @@ export function Login({ onLogin, notice }) {
     try {
       if (mode === "password") {
         const r = await api.post("/v1/auth/login", { email: f.email, password: f.password, remember: f.remember });
+        if (r.mfa_required) { setMfa({ token: r.mfa_token, remember: f.remember }); setF((x) => ({ ...x, password: "" })); return; }
         setKey(r.token, f.remember);
       } else setKey(f.key.trim());
       onLogin(await api.get("/v1/me"));
@@ -84,11 +137,12 @@ export function Login({ onLogin, notice }) {
   };
 
   if (forgot) return <Forgot onBack={() => setForgot(false)} />;
+  if (mfa) return <MfaStep mfa={mfa} onLogin={onLogin} onBack={(msg) => { setMfa(null); setNote(msg); }} />;
   return (
     <div className="login">
       <form className="card login-card" onSubmit={submit}>
         <Brand />
-        {notice && <div className="alert warn" role="status">{notice}</div>}
+        {(note || notice) && <div className="alert warn" role="status">{note || notice}</div>}
         {mode === "password" ? (
           <>
             <p className="muted">Sign in to your account.</p>
@@ -117,6 +171,7 @@ export function Login({ onLogin, notice }) {
 // Faqja e hapur nga lidhja e ftesës ose e rivendosjes: #accept/<token>
 export function Accept({ token, onLogin }) {
   const [info, setInfo] = useState(null);
+  const [mfa, setMfa] = useState(null);
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [error, setError] = useState(null);
@@ -128,6 +183,7 @@ export function Accept({ token, onLogin }) {
     setBusy(true); setError(null);
     try {
       const r = await api.post(`/v1/auth/invite/${token}`, { password: pw });
+      if (r.mfa_required) { setMfa({ token: r.mfa_token, remember: false }); return; } // fjalëkalimi u vendos, mungon kodi
       setKey(r.token);
       history.replaceState(null, "", "#");
       onLogin(await api.get("/v1/me"));
@@ -135,6 +191,7 @@ export function Accept({ token, onLogin }) {
   };
 
   const reset = info?.kind === "reset";
+  if (mfa) return <MfaStep mfa={mfa} onLogin={onLogin} onBack={() => { history.replaceState(null, "", "#"); location.reload(); }} />;
   return (
     <div className="login">
       <form className="card login-card" onSubmit={submit}>

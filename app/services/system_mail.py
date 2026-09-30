@@ -85,3 +85,16 @@ def send_password_changed(to: str) -> None:
         "immediately.</p>"
     )
     _send(to, f"{settings.system_from_name}: your password was changed", text, html)
+
+
+def send_security_notice(to: str, what: str) -> None:
+    """Njoftim i shkurtër kur ndryshon diçka e ndjeshme te llogaria."""
+    text = (
+        f"On your {settings.system_from_name} account, {what}.\n\n"
+        "If this was you, nothing else to do. If not, contact your administrator right away."
+    )
+    html = _html(
+        f"<p>On your {settings.system_from_name} account, {what}.</p>"
+        "<p>If this was you, nothing else to do. If not, contact your administrator right away.</p>"
+    )
+    _send(to, f"{settings.system_from_name}: security notice", text, html)

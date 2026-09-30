@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,9 +11,10 @@ from app.core.security import Principal, require
 from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, AuditLog, Switch
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageStatus, Route
-from app.services import apikeys, switches
+from app.services import apikeys, switches, system_mail
 from app.services import auth as auth_svc
 from app.services import messages as msg_svc
+from app.services import mfa as mfa_svc
 from app.services.audit import audit
 from app.services.wallet import WalletError
 
@@ -97,8 +98,8 @@ def _user_out(u, token: str | None = None) -> dict:
     out = {
         "id": u.id, "email": u.email, "role": u.role, "owner_ref": u.owner_ref,
         "status": u.status.value, "invited": u.password_hash is None,
-        "locked": auth_svc.is_locked(u), "last_login_at": u.last_login_at,
-        "created_at": u.created_at,
+        "locked": auth_svc.is_locked(u), "mfa": u.totp_enabled_at is not None,
+        "last_login_at": u.last_login_at, "created_at": u.created_at,
     }  # fmt: skip
     if token:
         out["invite_token"] = token  # shfaqet vetëm një herë
@@ -134,6 +135,29 @@ def reset_user(
 
     token = _run(db, go)
     return {"invite_token": token}
+
+
+@router.post("/users/{user_id}/reset-2fa")
+def reset_user_2fa(
+    user_id: int,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("keys:manage")),
+):
+    """Pajisje e humbur pa kode rikuperimi: heq 2FA dhe mbyll sesionet. Njofton përdoruesin."""
+
+    def go():
+        u = mfa_svc.admin_reset(db, user_id)
+        audit(db, p, "user.2fa_reset", "user", u.id)
+        return u
+
+    u = _run(db, go)
+    tasks.add_task(
+        system_mail.send_security_notice,
+        u.email,
+        "two-factor sign-in was reset by an administrator",
+    )
+    return _user_out(u)
 
 
 @router.post("/users/{user_id}/{action}")

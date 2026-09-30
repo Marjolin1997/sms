@@ -48,10 +48,12 @@ export default function Users() {
           { label: "Role", key: "role" },
           { label: "Account", render: (r) => r.owner_ref || "-" },
           { label: "Status", render: (r) => r.locked ? <Badge>locked</Badge> : r.invited ? <Badge>pending</Badge> : <Badge>{r.status}</Badge> },
+          { label: "2FA", render: (r) => (r.mfa ? <Badge>on</Badge> : <span className="muted">off</span>) },
           { label: "Last sign-in", render: (r) => (r.last_login_at ? <Time value={r.last_login_at} /> : "never") },
           { label: "", render: (r) => (
             <div className="row wrap">
               {r.status === "active" && <Button className="small" busy={b.busy} onClick={async () => { const x = await b.run(() => api.post(`/v1/admin/users/${r.id}/reset`)); if (x?.invite_token) show(r.email, x.invite_token, !r.invited); }}>{r.invited ? "New invite link" : "Reset password"}</Button>}
+              {r.mfa && <Button className="small" busy={b.busy} onClick={async () => { if (await confirm({ title: `Reset two-factor for ${r.email}?`, body: "Use this when they lost their phone and their recovery codes. Their 2FA is switched off and they're signed out everywhere. They can set it up again after signing in.", confirmLabel: "Reset 2FA", danger: true })) { await b.run(() => api.post(`/v1/admin/users/${r.id}/reset-2fa`), "Two-factor reset"); users.reload(); } }}>Reset 2FA</Button>}
               {r.status === "active"
                 ? <Button variant="danger" className="small" busy={b.busy} onClick={async () => { if (await confirm({ title: `Disable ${r.email}?`, body: "They are signed out everywhere right away and can't sign in until you enable them again.", danger: true, confirmLabel: "Disable" })) { await b.run(() => api.post(`/v1/admin/users/${r.id}/disable`), "User disabled"); users.reload(); } }}>Disable</Button>
                 : <Button className="small" busy={b.busy} onClick={async () => { await b.run(() => api.post(`/v1/admin/users/${r.id}/enable`), "User enabled"); users.reload(); }}>Enable</Button>}

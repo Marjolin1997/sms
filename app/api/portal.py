@@ -47,6 +47,7 @@ def me(p: Principal = Depends(current_principal), db: Session = Depends(get_db))
     user = db.get(User, int(p.actor.split(":")[1])) if p.session_id else None
     return {"actor": p.actor, "role": p.role, "owner_ref": p.owner_ref,
             "email": user.email if user else None, "via": "password" if user else "api_key",
+            "mfa_enabled": bool(user and user.totp_enabled_at),
             "permissions": sorted(ROLE_PERMS.get(p.role, set()))}  # fmt: skip
 
 

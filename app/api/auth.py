@@ -8,12 +8,20 @@ from app.core.db import get_db
 from app.core.security import Principal, current_principal
 from app.models.users import User, UserSession
 from app.services import auth as svc
+from app.services import mfa as mfa_svc
 from app.services import system_mail
 from app.services.audit import audit
 from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1/auth")
-_STATUS = {"invalid_credentials": 401, "invalid_token": 404, "not_found": 404, "conflict": 409}
+_STATUS = {
+    "invalid_credentials": 401,
+    "invalid_code": 401,
+    "mfa_expired": 401,
+    "invalid_token": 404,
+    "not_found": 404,
+    "conflict": 409,
+}
 
 
 def _run(db: Session, fn):
@@ -24,6 +32,13 @@ def _run(db: Session, fn):
     except WalletError as e:
         db.rollback()
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
+
+
+def _login_out(res: svc.LoginResult) -> dict:
+    """Sesion i plotë, ose kërkesë për kodin 2FA."""
+    if res.mfa_token:
+        return {"mfa_required": True, "mfa_token": res.mfa_token}
+    return _session_out(res.user, res.session, res.token)
 
 
 def _session_out(user: User, s: UserSession, token: str) -> dict:
@@ -57,10 +72,42 @@ def login(body: LoginIn, db: Session = Depends(get_db), user_agent: str = Header
                 "too many attempts. Try again in a few minutes.",
             },
         )
-    u, s, token = res
-    audit(db, _actor(u), "auth.login", "user", u.id)
+    if res.session:  # me 2FA, hyrja regjistrohet pas kodit
+        audit(db, _actor(res.user), "auth.login", "user", res.user.id)
     db.commit()
-    return _session_out(u, s, token)
+    return _login_out(res)
+
+
+class MfaLoginIn(BaseModel):
+    mfa_token: str = Field(max_length=100)
+    code: str = Field(max_length=32)
+
+
+@router.post("/login/mfa")
+def login_mfa(
+    body: MfaLoginIn, db: Session = Depends(get_db), user_agent: str = Header(default="")
+):
+    """Hapi i dytë: kodi nga aplikacioni ose një kod rikuperimi."""
+    try:
+        res = mfa_svc.complete_login(db, body.mfa_token, body.code, user_agent)
+    except WalletError as e:
+        db.rollback()
+        raise HTTPException(401, {"code": e.code, "message": str(e)}) from e
+    if res is None:
+        db.commit()
+        raise HTTPException(
+            401,
+            {
+                "code": "invalid_code",
+                "message": "That code isn't right, or the account is temporarily locked after too "
+                "many attempts. Try again in a few minutes.",
+            },
+        )
+    out, method = res
+    audit(db, _actor(out.user), "auth.login", "user", out.user.id, {"mfa": method})
+    left = mfa_svc.recovery_left(db, out.user.id) if method == "recovery" else None
+    db.commit()
+    return {**_login_out(out), "used_recovery": method == "recovery", "recovery_left": left}
 
 
 def _session_principal(p: Principal = Depends(current_principal)) -> Principal:
@@ -167,11 +214,94 @@ def accept_invite(
 ):
     def go():
         was_reset = svc.token_info(db, token)["kind"] == "reset"
-        u, s, tok = svc.accept_token(db, token, body.password, user_agent)
-        audit(db, _actor(u), "auth.password_set", "user", u.id)
-        return _session_out(u, s, tok), u.email, was_reset
+        res = svc.accept_token(db, token, body.password, user_agent)
+        audit(db, _actor(res.user), "auth.password_set", "user", res.user.id)
+        return _login_out(res), res.user.email, was_reset
 
     out, email, was_reset = _run(db, go)
     if was_reset:
         tasks.add_task(system_mail.send_password_changed, email)
     return out
+
+
+# --- 2FA ------------------------------------------------------------------------------------
+
+
+def _uid(p: Principal) -> int:
+    return int(p.actor.split(":")[1])
+
+
+@router.get("/2fa")
+def two_factor_status(db: Session = Depends(get_db), p: Principal = Depends(_session_principal)):
+    return mfa_svc.status(db, db.get(User, _uid(p)))
+
+
+class SetupIn(BaseModel):
+    password: str = Field(max_length=256)
+
+
+@router.post("/2fa/setup")
+def two_factor_setup(
+    body: SetupIn, db: Session = Depends(get_db), p: Principal = Depends(_session_principal)
+):
+    """Krijon sekretin (ende jo aktiv) dhe kthen kodin për aplikacionin. Kërkon fjalëkalimin."""
+    try:
+        return _run(db, lambda: mfa_svc.begin_setup(db, _uid(p), body.password))
+    except RuntimeError as e:  # SMS_SECRETS_KEY mungon
+        raise HTTPException(
+            503, {"code": "not_configured", "message": "Two-factor isn't set up on this server."}
+        ) from e
+
+
+class CodeIn(BaseModel):
+    code: str = Field(max_length=32)
+
+
+@router.post("/2fa/enable")
+def two_factor_enable(
+    body: CodeIn,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(_session_principal),
+):
+    def go():
+        codes = mfa_svc.enable(db, _uid(p), body.code, p.session_id)
+        audit(db, p, "auth.2fa_enabled", "user", _uid(p))
+        return codes, db.get(User, _uid(p)).email
+
+    codes, email = _run(db, go)
+    tasks.add_task(system_mail.send_security_notice, email, "two-factor sign-in was turned on")
+    return {"recovery_codes": codes}
+
+
+class ConfirmIn(BaseModel):
+    password: str = Field(max_length=256)
+    code: str = Field(max_length=32)
+
+
+@router.post("/2fa/disable", status_code=204)
+def two_factor_disable(
+    body: ConfirmIn,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(_session_principal),
+):
+    def go():
+        mfa_svc.disable(db, _uid(p), body.password, body.code, p.session_id)
+        audit(db, p, "auth.2fa_disabled", "user", _uid(p))
+        return db.get(User, _uid(p)).email
+
+    email = _run(db, go)
+    tasks.add_task(system_mail.send_security_notice, email, "two-factor sign-in was turned off")
+
+
+@router.post("/2fa/recovery-codes")
+def two_factor_new_recovery_codes(
+    body: ConfirmIn, db: Session = Depends(get_db), p: Principal = Depends(_session_principal)
+):
+    def go():
+        codes = mfa_svc.regenerate_recovery(db, _uid(p), body.password, body.code)
+        audit(db, p, "auth.2fa_recovery_regenerated", "user", _uid(p))
+        return codes
+
+    return {"recovery_codes": _run(db, go)}
