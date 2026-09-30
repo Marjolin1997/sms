@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     # refuzon të nisë me konfigurim të pasigurt.
     env: Literal["development", "production"] = "development"
 
+    # M1b: enterprise_id plotësohet automatikisht nga owner_ref (app/core/tenancy.py).
+    enterprise_dual_write: bool = True
+    enterprise_dual_write_strict: bool = False  # True: anomali owner_ref → gabim (jo NULL)
+
     # Gjuha e teksteve për përdoruesit fundorë (faturë, faqja e çregjistrimit, fundi i emailit).
     default_language: Literal["sq", "en"] = "sq"
 

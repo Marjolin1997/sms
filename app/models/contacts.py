@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import utcnow
 
 
@@ -28,7 +29,7 @@ class ContactStatus(enum.StrEnum):
     ERASED = "erased"  # PII e fshirë (GDPR); rreshti mbetet vetëm si mbajtës referencash
 
 
-class Contact(Base):
+class Contact(TenantOwned, Base):
     __tablename__ = "sms_contacts"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -57,7 +58,7 @@ class Contact(Base):
     )
 
 
-class ContactList(Base):
+class ContactList(TenantOwned, Base):
     __tablename__ = "sms_contact_lists"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -83,7 +84,7 @@ class ConsentAction(enum.StrEnum):
     OPT_OUT = "opt_out"
 
 
-class ConsentEvent(Base):
+class ConsentEvent(TenantOwned, Base):
     """Prova ligjore: kush, kur, nga cili burim, me çfarë evidence. Vetëm-shtim.
     Adresa nuk ruhet kurrë në tekst të hapur, vetëm HMAC-i i saj."""
 
@@ -105,7 +106,7 @@ class ConsentEvent(Base):
     )
 
 
-class ConsentState(Base):
+class ConsentState(TenantOwned, Base):
     """Gjendja aktuale (e nxjerrshme nga ConsentEvent), për kontroll të shpejtë para dërgimit."""
 
     __tablename__ = "sms_consent_state"

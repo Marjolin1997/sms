@@ -22,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import MONEY, utcnow
 
 
@@ -59,7 +60,7 @@ class SubStatus(enum.StrEnum):
     CANCELLED = "cancelled"
 
 
-class Subscription(Base):
+class Subscription(TenantOwned, Base):
     __tablename__ = "sms_subscriptions"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -80,7 +81,7 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class BillingProfile(Base):
+class BillingProfile(TenantOwned, Base):
     __tablename__ = "sms_billing_profiles"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -112,7 +113,7 @@ class InvoiceCounter(Base):
     last_number: Mapped[int] = mapped_column(Integer, default=0)
 
 
-class Invoice(Base):
+class Invoice(TenantOwned, Base):
     __tablename__ = "sms_invoices"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -168,7 +169,7 @@ class PaymentStatus(enum.StrEnum):
     EXPIRED = "expired"
 
 
-class Payment(Base):
+class Payment(TenantOwned, Base):
     """Seancë pagese online. Shuma vendoset NGA SERVERI kur krijohet; webhook-u i gateway-t
     verifikohet kundrejt kësaj shume, kurrë kundrejt asaj që dërgon klienti."""
 

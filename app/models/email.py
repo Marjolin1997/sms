@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import utcnow
 
 
@@ -27,7 +28,7 @@ class DomainStatus(enum.StrEnum):
     VERIFIED = "verified"
 
 
-class EmailDomain(Base):
+class EmailDomain(TenantOwned, Base):
     __tablename__ = "sms_email_domains"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -77,7 +78,7 @@ EMAIL_TRANSITIONS = {
 }
 
 
-class Email(Base):
+class Email(TenantOwned, Base):
     __tablename__ = "sms_emails"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)

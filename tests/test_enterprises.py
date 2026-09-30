@@ -104,7 +104,7 @@ def fetch(eng, sql):
 
 def test_each_existing_owner_ref_becomes_exactly_one_enterprise(legacy):
     eng = seed(legacy, ["acme", "globex", "Initech"])
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     rows = fetch(
         eng,
         "select owner_ref, status, legal_name, short_name, external_id from sms_enterprises order by owner_ref",
@@ -122,24 +122,24 @@ def test_invariant_distinct_valid_owner_refs_equal_enterprises(legacy):
         "select count(*) from (select owner_ref from sms_wallets union select owner_ref from sms_api_keys "
         "union select owner_ref from sms_keywords union select owner_ref from sms_contact_lists) x where owner_ref is not null",
     )[0][0]
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     assert fetch(eng, "select count(*) from sms_enterprises")[0][0] == distinct == 4
 
 
 def test_null_owner_ref_of_staff_keys_is_ignored_not_an_enterprise(legacy):
     eng = seed(legacy, ["acme"], staff_keys=2)
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     assert fetch(eng, "select owner_ref from sms_enterprises") == [("acme",)]
 
 
 def test_empty_database_migrates_with_zero_enterprises(legacy):
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     assert fetch(create_engine(legacy), "select count(*) from sms_enterprises")[0][0] == 0
 
 
 def test_uuids_are_persisted_and_unique(legacy):
     eng = seed(legacy, ["acme", "globex"])
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     ids = [r[0] for r in fetch(eng, "select id from sms_enterprises")]
     assert len(set(map(str, ids))) == 2 and all(i is not None for i in ids)
 
@@ -166,7 +166,7 @@ def test_migration_touches_only_the_new_table(legacy):
 
     seed(legacy, ["acme"])
     before = snapshot()
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     assert snapshot() == before
     assert "sms_enterprises" in inspect(eng).get_table_names()
 
@@ -174,19 +174,19 @@ def test_migration_touches_only_the_new_table(legacy):
 def test_data_of_legacy_tables_is_untouched(legacy):
     eng = seed(legacy, ["acme", "globex"])
     before = fetch(eng, "select * from sms_wallets order by id")
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     assert fetch(eng, "select * from sms_wallets order by id") == before
 
 
 def test_downgrade_and_upgrade_again(legacy):
     eng = seed(legacy, ["acme"])
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     alembic(legacy, "downgrade", "0017")
     assert "sms_enterprises" not in inspect(create_engine(legacy)).get_table_names()
     assert fetch(eng, "select owner_ref from sms_wallets") == [
         ("acme",)
     ]  # të dhënat legacy të paprekura
-    alembic(legacy, "upgrade", "head")
+    alembic(legacy, "upgrade", "0018")
     assert fetch(eng, "select owner_ref from sms_enterprises") == [("acme",)]
 
 
@@ -212,7 +212,7 @@ def test_anomalies_stop_the_migration_without_changing_anything(legacy, bad, nee
             text("insert into sms_keywords (owner_ref, keyword, created_at) values (:o, 'x', :t)"),
             {"o": bad, "t": NOW},
         )
-    r = alembic(legacy, "upgrade", "head", expect_ok=False)
+    r = alembic(legacy, "upgrade", "0018", expect_ok=False)
     assert r.returncode != 0 and "NDALOI" in r.stderr and needle in r.stderr
     assert "sms_enterprises" not in inspect(eng).get_table_names()  # asgjë nuk u krijua
     assert fetch(eng, "select count(*) from sms_wallets")[0][0] == 1
@@ -227,7 +227,7 @@ def test_case_variants_are_never_merged_automatically(legacy):
             ),
             {"t": NOW},
         )
-    r = alembic(legacy, "upgrade", "head", expect_ok=False)
+    r = alembic(legacy, "upgrade", "0018", expect_ok=False)
     assert (
         r.returncode != 0
         and "shkronjat" in r.stderr
@@ -239,7 +239,7 @@ def test_case_variants_are_never_merged_automatically(legacy):
 
 def test_separator_collisions_only_warn_and_do_not_stop(legacy):
     seed(legacy, ["client-a", "client_a"])
-    r = alembic(legacy, "upgrade", "head")
+    r = alembic(legacy, "upgrade", "0018")
     assert "WARNING" in r.stdout and "client-a" in r.stdout
     eng = create_engine(legacy)
     assert {x[0] for x in fetch(eng, "select owner_ref from sms_enterprises")} == {
@@ -263,7 +263,7 @@ def test_migration_runs_the_same_audit_as_the_service(legacy):
     with Session(eng) as db:
         audit = svc.audit_owner_refs(db)
     assert not audit.ok and any("shkronjat" in e for e in audit.errors)
-    assert alembic(legacy, "upgrade", "head", expect_ok=False).returncode != 0
+    assert alembic(legacy, "upgrade", "0018", expect_ok=False).returncode != 0
 
 
 # --- Shërbimi (mbi bazën e testeve) ------------------------------------------------------
@@ -296,8 +296,13 @@ def test_blank_null_or_padded_owner_ref_is_rejected_explicitly(db, bad):
         svc.require_for_owner_ref(db, bad)
 
 
-def test_backfill_is_idempotent_and_keeps_uuids(db):
+def test_backfill_is_idempotent_and_keeps_uuids(db, monkeypatch):
+    from app.core.config import settings
     from app.services import wallet as wallets
+
+    monkeypatch.setattr(
+        settings, "enterprise_dual_write", False
+    )  # simulon të dhëna legacy (para M1b)
 
     for o in ("acme", "globex"):
         wallets.create_wallet(db, o, "EUR")
@@ -320,8 +325,11 @@ def test_backfill_is_idempotent_and_keeps_uuids(db):
     assert svc.count(db) == 3
 
 
-def test_backfill_refuses_when_anomalies_exist_and_writes_nothing(db):
+def test_backfill_refuses_when_anomalies_exist_and_writes_nothing(db, monkeypatch):
+    from app.core.config import settings
     from app.services import wallet as wallets
+
+    monkeypatch.setattr(settings, "enterprise_dual_write", False)
 
     wallets.create_wallet(db, "Acme", "EUR")
     wallets.create_wallet(db, "acme", "EUR")
@@ -380,19 +388,17 @@ def test_legacy_table_list_matches_the_models():
     assert set(mod.TABLES) == in_models
 
 
-def test_enterprise_model_is_not_referenced_by_the_request_path():
-    """M1a është additiv: asnjë modul i rrugës së kërkesave/dërgimit nuk e importon regjistrin."""
-    import re
+def test_enterprise_id_is_written_only_by_the_centralized_hook():
+    """M1b: asnjë shërbim/API nuk e shkruan `enterprise_id`; vetëm hook-u `core/tenancy.py`, resolveri
+    `services/enterprises.py` dhe modelet. Asnjë modul nuk e LEXON ende për sjellje (M1c)."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "app"
-    offenders = []
-    for p in root.rglob("*.py"):
-        rel = p.relative_to(root).as_posix()
-        if rel in {"models/enterprise.py", "models/__init__.py", "services/enterprises.py"}:
-            continue
-        if re.search(
-            r"\benterprises?\b.*import|import.*\benterprises?\b|models\.enterprise", p.read_text()
-        ):
-            offenders.append(rel)
+    allowed = {"core/tenancy.py", "services/enterprises.py", "models/tenant.py", "models/enterprise.py",
+               "models/__init__.py", "core/config.py"}  # fmt: skip
+    offenders = [
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*.py")
+        if p.relative_to(root).as_posix() not in allowed and "enterprise_id" in p.read_text()
+    ]
     assert offenders == []

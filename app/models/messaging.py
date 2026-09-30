@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import utcnow
 
 
@@ -38,7 +39,7 @@ def _status():
     return Enum(ApprovalStatus, native_enum=False, length=16)
 
 
-class SenderId(Base):
+class SenderId(TenantOwned, Base):
     __tablename__ = "sms_sender_ids"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
@@ -58,7 +59,7 @@ class SenderId(Base):
     __table_args__ = (UniqueConstraint("owner_ref", "country", "value"),)
 
 
-class Template(Base):
+class Template(TenantOwned, Base):
     __tablename__ = "sms_templates"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)

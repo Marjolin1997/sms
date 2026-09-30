@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import MONEY, utcnow
 
 
@@ -36,7 +37,7 @@ class CampaignStatus(enum.StrEnum):
 ACTIVE = {CampaignStatus.SCHEDULED, CampaignStatus.PREPARING, CampaignStatus.RUNNING}
 
 
-class Campaign(Base):
+class Campaign(TenantOwned, Base):
     __tablename__ = "sms_campaigns"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)

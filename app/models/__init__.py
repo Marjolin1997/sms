@@ -1,3 +1,4 @@
+import app.core.tenancy  # noqa: E402,F401  (regjistron dual-write të centralizuar)
 from app.models.admin import ApiKey, AuditLog, Switch  # noqa: F401
 from app.models.billing import (  # noqa: F401
     BillingProfile,
@@ -23,4 +24,5 @@ from app.models.inbound import InboundMessage, Keyword  # noqa: F401
 from app.models.messaging import SenderId, Template, TemplateVersion  # noqa: F401
 from app.models.rates import Rate, RateCard, RateCardVersion  # noqa: F401
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageEvent, Route  # noqa: F401
+from app.models.tenant import TenantOwned  # noqa: F401
 from app.models.wallet import Hold, LedgerEntry, Topup, Wallet  # noqa: F401

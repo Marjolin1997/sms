@@ -7,10 +7,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import utcnow
 
 
-class InboundMessage(Base):
+class InboundMessage(TenantOwned, Base):
     """Mesazh i marrë në një numër të klientit. `text` dhe `from_number` janë PII: fshihen
     (zëvendësohen) kur kontakti fshihet sipas GDPR."""
 
@@ -39,7 +40,7 @@ class InboundMessage(Base):
     )
 
 
-class Keyword(Base):
+class Keyword(TenantOwned, Base):
     """Fjalë kyçe e klientit (fjala e parë e mesazhit hyrës), me përgjigje automatike opsionale."""
 
     __tablename__ = "sms_keywords"

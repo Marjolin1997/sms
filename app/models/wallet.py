@@ -29,6 +29,7 @@ from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.models.tenant import TenantOwned
 
 MONEY = Numeric(20, 6)
 
@@ -37,7 +38,7 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-class Wallet(Base):
+class Wallet(TenantOwned, Base):
     """Rreshti që kyçet (SELECT ... FOR UPDATE) për të serializuar lëvizjet e parave.
     Nuk mban balancë; balanca jeton vetëm në ledger."""
 

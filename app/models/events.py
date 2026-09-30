@@ -17,10 +17,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import utcnow
 
 
-class Event(Base):
+class Event(TenantOwned, Base):
     """Fakt i ndodhur për një klient. Data përmban vetëm id dhe statuse, jo PII
     (përjashtim: consent.* mban adresën, që klienti të sinkronizojë CRM-në). Ruhet
     `event_retention_days`, pastaj pastrohet."""
@@ -46,7 +47,7 @@ class EndpointStatus(enum.StrEnum):
     DISABLED = "disabled"
 
 
-class WebhookEndpoint(Base):
+class WebhookEndpoint(TenantOwned, Base):
     __tablename__ = "sms_webhook_endpoints"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)

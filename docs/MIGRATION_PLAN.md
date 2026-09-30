@@ -75,6 +75,16 @@ Varësi të ngurta: **M1 → M6, M7, M9**; **M3 → M4 → M5 → M7 → (M8, M9
 - **Kyçje:** migrimi bën vetëm `SELECT DISTINCT owner_ref` (kyçje `ACCESS SHARE`, pa shkrime) mbi 21 tabelat dhe një `CREATE TABLE`; për tabela shumë të mëdha kjo është skanim vetëm-lexim.
 - **Pranimi:** invariant `COUNT(DISTINCT owner_ref të vlefshëm) == COUNT(sms_enterprises)`; suita ekzistuese e pandryshuar.
 
+### M1b — ZBATUAR (aditiv; dual-write i centralizuar)
+- **Migrimi `0019`:** shton `enterprise_id UUID NULL` + indeks `ix_<tabela>_enterprise_id` te të 21 tabelat me `owner_ref`. **Pa FK, pa NOT NULL, pa backfill brenda migrimit** (M1c). PostgreSQL: `SET LOCAL lock_timeout='5s'` (dështon shpejt në vend që të bllokojë trafikun), kolonat janë vetëm metadata, indekset me `CREATE INDEX CONCURRENTLY IF NOT EXISTS` jashtë transaksionit.
+- **`sms_consent_events` (i pandryshueshëm me trigger):** trigger-i zëvendësohet me `sms_consent_guard()` që lejon **vetëm** UPDATE që ndryshon vetëm `enterprise_id` nga NULL në vlerë (backfill); çdo ndryshim tjetër, kthimi/ndërrimi i vlerës dhe çdo DELETE mbeten të ndaluara (provuar në PostgreSQL). Rikthimi rikthen trigger-in origjinal.
+- **Dual-write i centralizuar (një vend, jo në shërbime):** mixin `TenantOwned` (`app/models/tenant.py`) + listener `before_flush` (`app/core/tenancy.py`) + resolver i vetëm `enterprises.resolve_id()` (`INSERT … ON CONFLICT DO NOTHING` i sigurt në konkurrencë; cache për sesion). Tenant i ri → Enterprise i krijuar automatikisht. `enterprise_id` i dhënë që nuk i përket `owner_ref` → `TenantMismatch` (gabim programimi). Ndryshimi i `owner_ref` rezolvohet sërish. Asnjë shërbim/API nuk e shkruan `enterprise_id` (test i detyron).
+- **Anomalitë s'ndryshojnë sjelljen:** `owner_ref` bosh/me hapësira/të gjatë/variant shkronjash → rreshti ruhet si më parë me `enterprise_id` NULL dhe raportohet (`SMS_ENTERPRISE_DUAL_WRITE_STRICT=true` i kthen në gabim). **Çelës rikthimi:** `SMS_ENTERPRISE_DUAL_WRITE=false` çaktivizon plotësisht shkrimin.
+- **Backfill në batch (i rifillueshëm, idempotent):** `python -m scripts.backfill_enterprise_id [--batch 5000] [--table …]` (commit për batch, kursor `id`, kurrë UPDATE gjigant); refuzon nëse auditi ka anomali. `--check` vetëm raporton.
+- **Invariant:** `enterprises.check_consistency()` / `scripts.enterprises_audit --check [--strict]`: për çdo rresht `record.owner_ref == enterprise.owner_ref` për `record.enterprise_id`; jo-përputhje DUHET të jenë 0; rreshta pa `enterprise_id` raportohen (`--strict` i trajton si dështim).
+- **Rikthimi:** `alembic downgrade 0018` heq indekset, kolonat dhe rikthen trigger-in; `owner_ref` i paprekur. Nëse ka nevojë vetëm të ndalet shkrimi: `SMS_ENTERPRISE_DUAL_WRITE=false`.
+- **Radha e rekomanduar në një mjedis me të dhëna:** `enterprises_audit` → `alembic upgrade head` (0018+0019) → aplikacioni me dual-write → `backfill_enterprise_id` → `enterprises_audit --check --strict` = 0/0. Vetëm pastaj M1c.
+
 ## M2 · Kontrata `MessageQueue` (e pavarur nga M1)
 - **Objective:** domain-i nuk di për PostgreSQL; brokeri mund të ndërrohet më vonë.
 - **Tables:** asnjë e re (outbox ekzistues mbetet).

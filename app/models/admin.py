@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import utcnow
 
 
@@ -17,7 +18,7 @@ class KeyStatus(enum.StrEnum):
     REVOKED = "revoked"
 
 
-class ApiKey(Base):
+class ApiKey(TenantOwned, Base):
     """Sekreti nuk ruhet kurrë; vetëm SHA-256 (sekreti ka 256 bit entropi, prandaj
     hash i shpejtë mjafton). `prefix` është pjesa publike që gjen rreshtin."""
 

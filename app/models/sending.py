@@ -21,10 +21,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.models.rates import PK
+from app.models.tenant import TenantOwned
 from app.models.wallet import MONEY, utcnow
 
 
-class AccountPlan(Base):
+class AccountPlan(TenantOwned, Base):
     """Lidh një klient me rate card-in e tij; `enabled` është kill switch për llogarinë."""
 
     __tablename__ = "sms_account_plans"
@@ -69,7 +70,7 @@ TRANSITIONS = {
 }
 
 
-class Message(Base):
+class Message(TenantOwned, Base):
     __tablename__ = "sms_messages"
 
     id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
