@@ -85,6 +85,9 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **Skanime në CI:** `bandit` (medium+), `pip-audit` dhe `npm audit` (varësitë e prodhimit). Në këtë version: 0 gjetje bandit, 0 dobësi te varësitë Python dhe te ato npm të prodhimit.
 - Konkurrenca e parave (mbi-shpenzim, dyfish-konfirmim, idempotencë, workers paralelë) mbulohet nga testet në PostgreSQL te `tests/test_postgres.py`.
 
+## Twilio (provider SMS)
+`app/providers/twilio.py` + `app/api/twilio.py`: dërgim, statusi i dorëzimit (`/webhooks/twilio/status`) dhe SMS hyrës (`/webhooks/twilio/inbound`) me verifikim `X-Twilio-Signature`; pa dyfishim mesazhesh pas gabimesh rrjeti me rezultat të paqartë. Aktivizohet me `SMS_TWILIO_ACCOUNT_SID` + `SMS_TWILIO_AUTH_TOKEN`. **Ende e pa provuar kundër Twilio të vërtetë**: udhëzuesi, `scripts/twilio_smoke.py` dhe lista e kontrollit janë te **`docs/TWILIO.md`**.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

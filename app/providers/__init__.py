@@ -42,6 +42,18 @@ def register_configured() -> None:
                 settings.smtp_password, settings.smtp_starttls,
             )
         )  # fmt: skip
+    if settings.twilio_account_sid and settings.twilio_auth_token:
+        from app.providers.twilio import TwilioProvider
+
+        register(
+            TwilioProvider(
+                settings.twilio_account_sid,
+                settings.twilio_auth_token,
+                f"{settings.public_base_url.rstrip('/')}/webhooks/twilio/status",
+                settings.twilio_messaging_service_sid,
+                settings.twilio_timeout,
+            )
+        )
     if settings.http_provider_url:
         register(
             HttpProvider(

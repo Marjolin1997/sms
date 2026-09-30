@@ -17,6 +17,7 @@ from app.api import (
     public,
     rates,
     reports,
+    twilio,
     wallets,
     webhooks,
 )
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(console.router)
     app.include_router(reports.router)
     app.include_router(inbox.router)
+    app.include_router(twilio.router)
 
     from fastapi import Depends
 

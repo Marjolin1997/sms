@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     http_provider_url: str = ""
     http_provider_key: str = ""
     http_provider_timeout: float = 10.0
+    # Twilio (bosh = i çaktivizuar). Auth token-i përdoret edhe për të verifikuar nënshkrimin
+    # X-Twilio-Signature të callback-eve (URL-ja publike = SMS_PUBLIC_BASE_URL).
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_messaging_service_sid: str = ""  # opsionale: në vend të From
+    twilio_timeout: float = 10.0
     # Sekret HMAC për webhook-un DLR, për provider: {"http": "sekreti"}. Pa sekret → 401.
     dlr_secrets: dict[str, str] = {}
     # Sa kohë presim DLR pas SENT para se ta konsiderojmë të humbur.
