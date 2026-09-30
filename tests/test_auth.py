@@ -170,3 +170,131 @@ def test_password_hash_format():
     assert not svc.verify_password(PW, None) and not svc.verify_password(PW, "garbage")
     with pytest.raises(svc.WeakPassword):
         svc.check_password_policy("aaaaaaaaaaaa")
+
+
+# --- Rivendosja me email ---------------------------------------------------------------
+
+
+@pytest.fixture
+def mailbox(monkeypatch):
+    from app import providers
+    from app.core.config import settings
+    from app.providers.email import FakeEmailProvider
+
+    p = FakeEmailProvider()
+    monkeypatch.setitem(providers._email_registry, "fake", p)
+    monkeypatch.setattr(settings, "email_provider", "fake")
+    monkeypatch.setattr(settings, "system_from_email", "no-reply@platform.example")
+    monkeypatch.setattr(settings, "panel_url", "https://panel.example.com/")
+    return p
+
+
+def _link(mail) -> str:
+    import re
+    from email import message_from_bytes, policy
+
+    msg = message_from_bytes(mail.raw, policy=policy.default)
+    body = msg.get_body(preferencelist=("plain",)).get_content()
+    return re.search(r"https://panel\.example\.com/#accept/([\w-]+)", body).group(1)
+
+
+def test_forgot_password_end_to_end(raw_client, mailbox):  # noqa: F811
+    c = raw_client
+    onboard(c)
+    assert c.get("/v1/auth/config").json() == {"self_service_reset": True}
+    old = login(c).json()["token"]
+    mailbox.calls.clear()
+
+    r = c.post("/v1/auth/forgot", json={"email": " ANA@example.com "})
+    assert r.status_code == 202 and r.json() == {"ok": True}
+    assert len(mailbox.calls) == 1 and mailbox.calls[0].to_email == "ana@example.com"
+    tok = _link(mailbox.calls[0])
+    assert c.get(f"/v1/auth/invite/{tok}").json()["kind"] == "reset"
+
+    new = "a brand new passphrase"
+    done = c.post(f"/v1/auth/invite/{tok}", json={"password": new})
+    assert done.status_code == 200
+    assert c.get("/v1/me", headers=hdr(old)).status_code == 401  # sesionet e vjetra mbyllen
+    assert login(c, pw=new).status_code == 200 and login(c).status_code == 401
+    assert c.post(f"/v1/auth/invite/{tok}", json={"password": new}).status_code == 404  # një herë
+    assert len(mailbox.calls) == 2  # njoftimi "fjalëkalimi u ndryshua"
+    assert b"was just changed" in mailbox.calls[1].raw
+
+
+def test_forgot_password_does_not_reveal_accounts_and_is_rate_limited(raw_client, mailbox):  # noqa: F811
+    c = raw_client
+    onboard(c)
+    mailbox.calls.clear()
+    known = c.post("/v1/auth/forgot", json={"email": "ana@example.com"})
+    ghost = c.post("/v1/auth/forgot", json={"email": "nobody@example.com"})
+    assert known.status_code == ghost.status_code == 202 and known.json() == ghost.json()
+    assert [m.to_email for m in mailbox.calls] == ["ana@example.com"]
+    c.post("/v1/auth/forgot", json={"email": "ana@example.com"})  # brenda 2 minutave: injorohet
+    assert len(mailbox.calls) == 1
+
+
+def test_forgot_password_max_per_hour_and_disabled_user(raw_client, mailbox, db):  # noqa: F811
+    from app.models.users import UserToken
+
+    c = raw_client
+    onboard(c)
+    mailbox.calls.clear()
+    for _ in range(svc.RESET_MAX_PER_HOUR + 2):
+        for t in db.query(UserToken).all():  # kalon cooldown-in, jo kufirin orar
+            t.created_at = datetime.now(UTC) - timedelta(minutes=10)
+        db.commit()
+        c.post("/v1/auth/forgot", json={"email": "ana@example.com"})
+    assert len(mailbox.calls) == svc.RESET_MAX_PER_HOUR
+    uid = db.query(User).one().id
+    c.post(f"/v1/admin/users/{uid}/disable", headers=BOOT)
+    n = len(mailbox.calls)
+    assert c.post("/v1/auth/forgot", json={"email": "ana@example.com"}).status_code == 202
+    assert len(mailbox.calls) == n
+
+
+def test_pending_invite_gets_no_self_service_mail(raw_client, mailbox):  # noqa: F811
+    c = raw_client
+    invite(c)
+    assert c.post("/v1/auth/forgot", json={"email": "ana@example.com"}).status_code == 202
+    assert mailbox.calls == []
+
+
+def test_reset_link_expires_after_an_hour(raw_client, mailbox, db):  # noqa: F811
+    from app.models.users import UserToken
+
+    c = raw_client
+    onboard(c)
+    mailbox.calls.clear()
+    c.post("/v1/auth/forgot", json={"email": "ana@example.com"})
+    t = db.query(UserToken).filter_by(kind="reset").one()
+    assert (t.expires_at - t.created_at) <= timedelta(hours=1, seconds=5)
+    t.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert (
+        c.post(
+            f"/v1/auth/invite/{_link(mailbox.calls[0])}", json={"password": "x" * 12}
+        ).status_code
+        == 404
+    )
+
+
+def test_forgot_unavailable_without_system_sender(raw_client, monkeypatch):  # noqa: F811
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "system_from_email", "")
+    c = raw_client
+    assert c.get("/v1/auth/config").json() == {"self_service_reset": False}
+    assert c.post("/v1/auth/forgot", json={"email": "a@example.com"}).status_code == 503
+
+
+def test_change_password_sends_notice(raw_client, mailbox):  # noqa: F811
+    c = raw_client
+    onboard(c)
+    t = login(c).json()["token"]
+    mailbox.calls.clear()
+    r = c.post(
+        "/v1/auth/change-password",
+        json={"current_password": PW, "new_password": "another long passphrase"},
+        headers=hdr(t),
+    )
+    assert r.status_code == 204 and len(mailbox.calls) == 1

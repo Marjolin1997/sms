@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     secrets_key: str = ""
     spf_include: str = "spf.sms-platform.example"  # kërkohet në SPF të domenit të klientit
     public_base_url: str = "http://localhost:8000"  # për lidhjet e çregjistrimit
+    # Email i sistemit (rivendosje fjalëkalimi). Bosh = rivendosja vetë-shërbyese e çaktivizuar.
+    system_from_email: str = ""
+    system_from_name: str = "SMS Platform"
+    panel_url: str = "http://localhost:5173"  # ku hapet paneli; lidhjet në email tregojnë këtu
     email_provider: str = "fake"  # "smtp" në prodhim
     smtp_host: str = ""
     smtp_port: int = 587

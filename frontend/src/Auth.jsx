@@ -23,8 +23,46 @@ function Brand({ children }) {
   return <><div className="brand big">SMS<span>Platform</span></div>{children}</>;
 }
 
+function Forgot({ onBack }) {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { await api.post("/v1/auth/forgot", { email }); setSent(true); }
+    catch (err) { setError(err); } finally { setBusy(false); }
+  };
+  return (
+    <div className="login">
+      <form className="card login-card" onSubmit={submit}>
+        <Brand />
+        {sent ? (
+          <>
+            <div className="alert good" role="status"><span><b>Check your email.</b> If <b>{email}</b> has an account, we've sent a link to choose a new password. It works once and expires in 1 hour.</span></div>
+            <small className="muted">Nothing after a few minutes? Check spam, or try again in 2 minutes. Your administrator can also send you a link.</small>
+            <Button type="button" onClick={onBack}>Back to sign in</Button>
+          </>
+        ) : (
+          <>
+            <p className="muted">Enter your email and we'll send you a link to choose a new password.</p>
+            <Field label="Email"><input type="email" autoFocus autoComplete="username" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+            <ErrorBox error={error} />
+            <Button variant="primary" busy={busy} disabled={!email.trim()}>Send reset link</Button>
+            <button type="button" className="link" onClick={onBack}>Back to sign in</button>
+          </>
+        )}
+      </form>
+    </div>
+  );
+}
+
 export function Login({ onLogin, notice }) {
   const [mode, setMode] = useState("password");
+  const [forgot, setForgot] = useState(false);
+  const [canReset, setCanReset] = useState(false);
+  useEffect(() => { api.get("/v1/auth/config").then((c) => setCanReset(!!c.self_service_reset)).catch(() => {}); }, []);
   const [f, setF] = useState({ email: "", password: "", key: "", remember: false });
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -45,6 +83,7 @@ export function Login({ onLogin, notice }) {
     } finally { setBusy(false); }
   };
 
+  if (forgot) return <Forgot onBack={() => setForgot(false)} />;
   return (
     <div className="login">
       <form className="card login-card" onSubmit={submit}>
@@ -55,6 +94,7 @@ export function Login({ onLogin, notice }) {
             <p className="muted">Sign in to your account.</p>
             <Field label="Email"><input type="email" autoFocus autoComplete="username" placeholder="you@company.com" value={f.email} onChange={(e) => set("email")(e.target.value)} /></Field>
             <Field label="Password"><PasswordInput value={f.password} onChange={set("password")} autoComplete="current-password" /></Field>
+            {canReset && <button type="button" className="link" style={{ alignSelf: "flex-start" }} onClick={() => setForgot(true)}>Forgot your password?</button>}
             <label className="chip"><input type="checkbox" checked={f.remember} onChange={(e) => set("remember")(e.target.checked)} /> Keep me signed in for 30 days on this device</label>
           </>
         ) : (
@@ -68,7 +108,7 @@ export function Login({ onLogin, notice }) {
         <button type="button" className="link" onClick={() => { setMode(mode === "password" ? "key" : "password"); setError(null); }}>
           {mode === "password" ? "Use an API key instead" : "Use email and password instead"}
         </button>
-        <small className="muted">{mode === "password" ? "Forgot your password? Ask your account manager for a reset link." : "The key stays in this browser tab only and is sent securely with each request."}</small>
+        <small className="muted">{mode === "password" ? canReset ? "" : "Forgot your password? Ask your account manager for a reset link." : "The key stays in this browser tab only and is sent securely with each request."}</small>
       </form>
     </div>
   );

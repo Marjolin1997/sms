@@ -18,7 +18,10 @@ from app.services.wallet import Conflict, NotFound, WalletError
 SESSION_PREFIX = "sess"
 SESSION_TTL = timedelta(hours=12)
 REMEMBER_TTL = timedelta(days=30)
-TOKEN_TTL = timedelta(hours=72)
+TOKEN_TTL = timedelta(hours=72)  # ftesa nga stafi
+RESET_TTL = timedelta(hours=1)  # rivendosje vetë-shërbyese
+RESET_COOLDOWN = timedelta(minutes=2)
+RESET_MAX_PER_HOUR = 5
 MAX_FAILED = 5
 LOCK_FOR = timedelta(minutes=15)
 MAX_SESSIONS = 20  # më të vjetrat revokohen, që një pajisje e harruar të mos grumbullohet
@@ -97,7 +100,7 @@ def normalize_email(email: str) -> str:
     return e
 
 
-def _token(db: Session, user: User, kind: str) -> str:
+def _token(db: Session, user: User, kind: str, ttl: timedelta = TOKEN_TTL) -> str:
     """Anulon tokenat e pa-përdorur të mëparshëm dhe krijon një të ri (kthehet vetëm një herë)."""
     now = datetime.now(UTC)
     db.execute(
@@ -106,11 +109,7 @@ def _token(db: Session, user: User, kind: str) -> str:
         .values(used_at=now)
     )
     raw = secrets.token_urlsafe(32)
-    db.add(
-        UserToken(
-            user_id=user.id, kind=kind, token_hash=hash_secret(raw), expires_at=now + TOKEN_TTL
-        )
-    )
+    db.add(UserToken(user_id=user.id, kind=kind, token_hash=hash_secret(raw), expires_at=now + ttl))
     db.flush()
     return raw
 
@@ -146,6 +145,25 @@ def reset_token(db: Session, user_id: int) -> str:
     if u.status != UserStatus.ACTIVE:
         raise Conflict("The user is disabled. Enable them first.")
     return _token(db, u, "reset" if u.password_hash else "invite")
+
+
+def request_reset(db: Session, email: str) -> tuple[User, str] | None:
+    """Rivendosje vetë-shërbyese. None (pa asnjë gabim) kur s'ka përdorues aktiv ose kur kufiri
+    i kërkesave është arritur — thirrësi përgjigjet njësoj, që të mos zbulohen llogaritë."""
+    u = db.scalar(select(User).where(User.email == email.strip().lower()).with_for_update())
+    if u is None or u.status != UserStatus.ACTIVE or not u.password_hash:
+        return None  # ftesat që s'janë pranuar i rinovon stafi
+    now = datetime.now(UTC)
+    recent = db.scalars(
+        select(UserToken.created_at).where(
+            UserToken.user_id == u.id,
+            UserToken.kind == "reset",
+            UserToken.created_at > now - timedelta(hours=1),
+        )
+    ).all()
+    if len(recent) >= RESET_MAX_PER_HOUR or any(as_utc(c) > now - RESET_COOLDOWN for c in recent):
+        return None  # kundër bombardimit me email
+    return u, _token(db, u, "reset", RESET_TTL)
 
 
 def set_status(db: Session, user_id: int, enabled: bool) -> User:

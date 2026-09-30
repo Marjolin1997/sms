@@ -1,6 +1,6 @@
 """Hyrje me email + fjalëkalim: login, logout, sesione, ndryshim fjalëkalimi, ftesa."""
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.core.db import get_db
 from app.core.security import Principal, current_principal
 from app.models.users import User, UserSession
 from app.services import auth as svc
+from app.services import system_mail
 from app.services.audit import audit
 from app.services.wallet import WalletError
 
@@ -99,15 +100,51 @@ class PasswordIn(BaseModel):
 
 @router.post("/change-password", status_code=204)
 def change_password(
-    body: PasswordIn, db: Session = Depends(get_db), p: Principal = Depends(_session_principal)
+    body: PasswordIn,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(_session_principal),
 ):
     uid = int(p.actor.split(":")[1])
 
     def go():
         svc.change_password(db, uid, body.current_password, body.new_password, p.session_id)
         audit(db, p, "auth.password_changed", "user", uid)
+        return db.get(User, uid).email
 
-    _run(db, go)
+    tasks.add_task(system_mail.send_password_changed, _run(db, go))
+
+
+@router.get("/config")
+def auth_config():
+    """Çfarë ofron kjo instalim; paneli e përdor për të treguar 'Forgot password?'."""
+    return {"self_service_reset": system_mail.enabled()}
+
+
+class ForgotIn(BaseModel):
+    email: str = Field(max_length=254)
+
+
+@router.post("/forgot", status_code=202)
+def forgot_password(body: ForgotIn, tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Gjithmonë e njëjta përgjigje, ekziston email-i apo jo. Lidhja del vetëm me email."""
+    if not system_mail.enabled():
+        raise HTTPException(
+            503,
+            {
+                "code": "reset_unavailable",
+                "message": "Email reset isn't set up. Ask your administrator.",
+            },
+        )
+    res = svc.request_reset(db, body.email)
+    if res:
+        u, token = res
+        audit(db, _actor(u), "auth.reset_requested", "user", u.id)
+        tasks.add_task(
+            system_mail.send_reset, u.email, token, int(svc.RESET_TTL.total_seconds() // 60)
+        )
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/invite/{token}")
@@ -122,11 +159,19 @@ class AcceptIn(BaseModel):
 
 @router.post("/invite/{token}")
 def accept_invite(
-    token: str, body: AcceptIn, db: Session = Depends(get_db), user_agent: str = Header(default="")
+    token: str,
+    body: AcceptIn,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user_agent: str = Header(default=""),
 ):
     def go():
+        was_reset = svc.token_info(db, token)["kind"] == "reset"
         u, s, tok = svc.accept_token(db, token, body.password, user_agent)
         audit(db, _actor(u), "auth.password_set", "user", u.id)
-        return _session_out(u, s, tok)
+        return _session_out(u, s, tok), u.email, was_reset
 
-    return _run(db, go)
+    out, email, was_reset = _run(db, go)
+    if was_reset:
+        tasks.add_task(system_mail.send_password_changed, email)
+    return out
