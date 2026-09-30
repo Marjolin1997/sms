@@ -28,6 +28,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: ruff format --check .
+      - name: Static security scan (bandit, medium+)
+        run: pip install bandit && bandit -q -r app -ll
       - name: Tests on PostgreSQL
         run: pytest -q
       - name: Tests on SQLite (dev fallback)

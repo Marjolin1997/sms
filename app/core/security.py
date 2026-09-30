@@ -232,6 +232,7 @@ def require(perm: str):
         _step_up(db, request, p, (perm,), x_totp)
         return p
 
+    dep.perms = (perm,)  # për testin e matricës së autorizimit
     return dep
 
 
@@ -251,4 +252,5 @@ def require_any(*perms: str):
         _step_up(db, request, p, perms, x_totp)
         return p
 
+    dep.perms = perms
     return dep

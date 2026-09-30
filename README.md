@@ -79,6 +79,12 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 - **Faqe:** hyrja (çelës i pavlefshëm, sesioni ruhet/hiqet), menytë sipas rolit (klienti pa grupin Staff, stafi me Staff së pari), paralajmërimi 2FA, dhe **Send SMS** (numër i vlefshëm, çmim live, `Idempotency-Key`, kalimi në Unicode).
 - Ekzekutohet në CI para `npm run build`. E2E me shfletues i vërtetë mbetet te `e2e/test_console.py`.
 
+## Verifikimi i sigurisë (Faza 20)
+- **Matrica e autorizimit** (`tests/test_authz_matrix.py`), e nxjerrë automatikisht nga rrugët: çdo endpoint jo-publik varet nga autentikimi, çdo `/v1` deklaron një leje, pa kredenciale → 401, çdo rol pa lejen e kërkuar → 403 (5 role × të gjitha rrugët e mbrojtura), callback-et e provider-ave pa nënshkrim → 401. Kontrollon që zbulimi i rrugëve nuk dështon në heshtje (një endpoint i ri pa mbrojtje e ndez testin).
+- **Izolimi mes klientëve** (`tests/test_tenant_isolation.py`): 30 endpoint-e me `{id}` në rrugë kthejnë 404 për çelësin e një klienti tjetër (mesazhe, email, kontakte, lista, fushata, portofol, webhook, çelësa, fjalë kyçe), dhe `owner_ref` i huaj refuzohet.
+- **Skanime në CI:** `bandit` (medium+), `pip-audit` dhe `npm audit` (varësitë e prodhimit). Në këtë version: 0 gjetje bandit, 0 dobësi te varësitë Python dhe te ato npm të prodhimit.
+- Konkurrenca e parave (mbi-shpenzim, dyfish-konfirmim, idempotencë, workers paralelë) mbulohet nga testet në PostgreSQL te `tests/test_postgres.py`.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

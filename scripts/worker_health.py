@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-path = Path(os.environ.get("SMS_WORKER_HEARTBEAT", "/tmp/sms-worker-alive"))  # noqa: S108
+path = Path(os.environ.get("SMS_WORKER_HEARTBEAT", "/tmp/sms-worker-alive"))  # nosec B108: heartbeat pe /tmp (tmpfs i kontejnerit)
 max_age = float(sys.argv[1]) if len(sys.argv) > 1 else 90.0
 try:
     age = time.time() - path.stat().st_mtime
