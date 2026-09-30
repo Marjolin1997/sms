@@ -18,7 +18,7 @@ from app.services.campaigns import run_due
 from app.services.messages import expire_stale, process_one
 
 log = logging.getLogger("sms.worker")
-HEARTBEAT = Path(os.environ.get("SMS_WORKER_HEARTBEAT", "/tmp/sms-worker-alive"))  # nosec B108: heartbeat pe /tmp (tmpfs i kontejnerit)
+HEARTBEAT = Path(os.environ.get("SMS_WORKER_HEARTBEAT", "/tmp/sms-worker-alive"))  # nosec B108
 
 
 def heartbeat() -> None:
