@@ -1,0 +1,163 @@
+"""Regjistri i Enterprise-ve (M1a). Vetëm identitet dhe mapping `owner_ref → enterprise.id`;
+NUK ndikon në autorizim, query scoping, dërgim, ledger apo API. Asgjë këtu nuk thirret nga rruga e
+kërkesave (M1b do ta lidhë me shkrimin e centralizuar).
+
+Rregull: `owner_ref` krahasohet saktësisht siç është. Asnjë normalizim, bashkim apo hamendësim."""
+
+import re
+from collections import defaultdict
+from dataclasses import dataclass, field
+
+from sqlalchemy import func, inspect, select, text
+from sqlalchemy.orm import Session
+
+from app.models.enterprise import Enterprise
+from app.services.wallet import NotFound, WalletError
+
+# Tabelat që mbajnë `owner_ref` direkt. Kopja e ngrirë e kësaj liste është te migrimi 0018;
+# testi i driftit i detyron të përputhen me modelet.
+LEGACY_OWNER_TABLES = (
+    "sms_account_plans", "sms_api_keys", "sms_billing_profiles", "sms_campaigns",
+    "sms_consent_events", "sms_consent_state", "sms_contact_lists", "sms_contacts",
+    "sms_email_domains", "sms_emails", "sms_events", "sms_inbound_messages", "sms_invoices",
+    "sms_keywords", "sms_messages", "sms_payments", "sms_sender_ids", "sms_subscriptions",
+    "sms_templates", "sms_wallets", "sms_webhook_endpoints",
+)  # fmt: skip
+MAX_LEN = 64
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_SEPARATORS = re.compile(r"[\s_\-.]+")
+
+
+class InvalidOwnerRef(WalletError):
+    code = "invalid_owner_ref"
+
+
+class EnterpriseNotFound(NotFound):
+    code = "not_found"
+
+
+@dataclass
+class OwnerRefAudit:
+    """Rezultati i auditimit të `owner_ref` në të dhënat legacy (vetëm-lexim)."""
+
+    owners: list[str] = field(default_factory=list)  # të vlefshmit, të saktë, unikë
+    errors: list[str] = field(default_factory=list)  # ndalojnë migrimin
+    warnings: list[str] = field(default_factory=list)  # raportohen, s'ndalojnë
+    null_counts: dict[str, int] = field(default_factory=dict)  # p.sh. çelësat e stafit
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def report(self) -> str:
+        lines = [f"{len(self.owners)} owner_ref të vlefshëm"]
+        lines += [f"  ERROR: {e}" for e in self.errors]
+        lines += [f"  WARNING: {w}" for w in self.warnings]
+        if self.null_counts:
+            lines.append(f"  NULL (i pritur për staf): {self.null_counts}")
+        return "\n".join(lines)
+
+
+def _existing_tables(db: Session) -> list[str]:
+    have = set(inspect(db.get_bind()).get_table_names())
+    return [t for t in LEGACY_OWNER_TABLES if t in have]
+
+
+def audit_owner_refs(db: Session) -> OwnerRefAudit:
+    """Nxjerr `owner_ref` distinct nga të gjitha tabelat legacy dhe raporton anomalitë.
+    Nuk ndryshon asgjë dhe nuk bashkon asgjë."""
+    out = OwnerRefAudit()
+    where: dict[str, set[str]] = defaultdict(set)
+    for table in _existing_tables(db):
+        # emri i tabelës vjen nga konstanta e mësipërme, jo nga input i jashtëm
+        for (v,) in db.execute(text(f"SELECT DISTINCT owner_ref FROM {table}")):  # noqa: S608
+            if v is None:
+                n = db.execute(
+                    text(f"SELECT count(*) FROM {table} WHERE owner_ref IS NULL")
+                ).scalar()  # noqa: S608
+                out.null_counts[table] = int(n)
+            else:
+                where[v].add(table)
+    for v, tables in sorted(where.items()):
+        where_s = ", ".join(sorted(tables))
+        if v == "":
+            out.errors.append(f"owner_ref bosh ('') te: {where_s}")
+        elif v != v.strip():
+            out.errors.append(f"owner_ref me hapësira në fillim/fund {v!r} te: {where_s}")
+        elif _CONTROL.search(v):
+            out.errors.append(f"owner_ref me karaktere kontrolli {v!r} te: {where_s}")
+        elif len(v) > MAX_LEN:
+            out.errors.append(f"owner_ref më i gjatë se {MAX_LEN}: {v[:30]!r}… te: {where_s}")
+    valid = [
+        v for v in where if v == v.strip() and v and not _CONTROL.search(v) and len(v) <= MAX_LEN
+    ]
+    by_lower: dict[str, list[str]] = defaultdict(list)
+    for v in valid:
+        by_lower[v.lower()].append(v)
+    for variants in by_lower.values():
+        if len(variants) > 1:
+            out.errors.append(
+                f"variante që ndryshojnë vetëm nga shkronjat: {sorted(variants)} "
+                "(nuk bashkohen automatikisht: vendos dhe korrigjo të dhënat)"
+            )
+    by_sep: dict[str, set[str]] = defaultdict(set)
+    for v in valid:
+        by_sep[_SEPARATORS.sub("", v.lower())].add(v)
+    for variants in by_sep.values():
+        if len(variants) > 1 and len({x.lower() for x in variants}) > 1:
+            out.warnings.append(
+                f"përplasje e mundshme semantike (vetëm ndarës ndryshojnë): {sorted(variants)}"
+            )
+    out.owners = sorted(valid)
+    return out
+
+
+@dataclass
+class BackfillResult:
+    created: int
+    already_present: int
+    audit: OwnerRefAudit
+
+
+def backfill_missing(db: Session) -> BackfillResult:
+    """Krijon Enterprise për çdo `owner_ref` legacy që s'ka; idempotent, UUID të qëndrueshme
+    (ekzistueset nuk preken). Refuzon (pa shkruar asgjë) nëse ka anomali."""
+    audit = audit_owner_refs(db)
+    if not audit.ok:
+        raise InvalidOwnerRef("owner_ref anomalies block the backfill:\n" + audit.report())
+    have = set(db.scalars(select(Enterprise.owner_ref)))
+    missing = [o for o in audit.owners if o not in have]
+    for o in missing:
+        db.add(Enterprise(owner_ref=o))
+    db.flush()
+    return BackfillResult(len(missing), len(audit.owners) - len(missing), audit)
+
+
+def _check(owner_ref: str | None) -> str:
+    if not isinstance(owner_ref, str) or owner_ref == "" or owner_ref != owner_ref.strip():
+        raise InvalidOwnerRef("owner_ref must be a non-empty string without surrounding whitespace")
+    return owner_ref
+
+
+def for_owner_ref(db: Session, owner_ref: str | None) -> Enterprise | None:
+    """Enterprise-i për një `owner_ref` të saktë; `None` nëse nuk ekziston (nuk krijohet).
+    `None`/bosh/me hapësira → InvalidOwnerRef (asnjë normalizim i heshtur)."""
+    return db.scalar(select(Enterprise).where(Enterprise.owner_ref == _check(owner_ref)))
+
+
+def require_for_owner_ref(db: Session, owner_ref: str | None) -> Enterprise:
+    e = for_owner_ref(db, owner_ref)
+    if e is None:
+        raise EnterpriseNotFound(f"no enterprise for owner_ref {owner_ref!r}")
+    return e
+
+
+def count(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(Enterprise))
+
+
+__all__ = [
+    "LEGACY_OWNER_TABLES", "BackfillResult", "EnterpriseNotFound", "InvalidOwnerRef",
+    "OwnerRefAudit", "audit_owner_refs", "backfill_missing", "count", "for_owner_ref",
+    "require_for_owner_ref",
+]  # fmt: skip

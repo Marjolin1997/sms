@@ -10,6 +10,17 @@ Bazuar në `docs/ARCHITECTURE_AUDIT.md` (vendimet e fiksuara). **Ky dokument nuk
 5. **Një fazë prek sa më pak module**; feature flags për sjellje të reja.
 6. Izolimi i tenant-ëve provohet automatikisht (`tests/test_authz_matrix.py`, `tests/test_tenant_isolation.py`) dhe zgjerohet në çdo fazë.
 
+## Korrigjime të miratuara nga pronari (kanë përparësi mbi tekstin më poshtë)
+1. **M1a është strikt additiv**: vetëm `sms_enterprises` + backfill + `enterprises.for_owner_ref()` + teste + rikthim. Pa scoping, autorizim, dërgim, ledger, fushata, API. Sistemi sillet identikisht para dhe pas.
+2. **`owner_ref` nuk është identifikues biznesi i përhershëm.** UUID `id` është identiteti kanonik; `owner_ref` mbetet vetëm për pajtueshmëri. Metadata (`legal_name` etj.) nuk plotësohen nga supozime: mbeten `NULL`.
+3. **Asnjë normalizim/bashkim automatik** i `owner_ref`. `CLIENT_A`, `client_a`, `client_a ` nuk bashkohen; migrimi ndalon dhe raporton, përplasjet vetëm nga ndarësit raportohen si paralajmërim.
+4. **M1b: dual-write i centralizuar, jo dhjetëra thirrje manuale.** Një mekanizëm i vetëm (mixin/ORM event me një resolver të vetëm) plotëson `owner_ref` + `enterprise_id` që t'i referohen gjithmonë të njëjtit Enterprise; invariant i verifikueshëm: `record.owner_ref == enterprise.owner_ref for record.enterprise_id` (kontroll periodik + në teste).
+5. **M1c: tre kontekste të ndara** — *tenant*, *system/admin*, *worker*. Tenant API është secure-by-default; punët administrative dhe rikonsilimi punojnë **eksplicitisht** cross-tenant; **jo** filtër global implicit që fsheh gabime ose prek punët e sistemit. Çdo qasje cross-tenant është e qëllimshme dhe e audituar. **Standard testi negativ:** Enterprise A tenton të lexojë UUID-në e një burimi të Enterprise B → 404/403 pa asnjë informacion që rrjedh, për: contacts, lists, campaigns, messages, sender IDs, API keys, webhooks, reports.
+6. **`MessageQueue` sinkrone** (`publish/reserve/acknowledge/retry`); asnjë adapter async pa backend që e kërkon realisht.
+7. **Politika e konfigurimit të vjetruar është sipas llojit, jo një TTL universal:** çmimet → *last-known-good* + alarm; konfigurimi i produktit → *last-known-good* + alarm; rrugët → *last-known-good* kur është e sigurt; miratimi i sender-it → **fail closed** kur s'mund të provohet; revokimet e sigurisë → **fail closed** / sinkronizim me prioritet të lartë.
+8. **Paratë (M9):** "Central i padisponueshëm" nuk i jep Enterprise të drejtë të krijojë kredi. Enterprise shpenzon vetëm kredinë **e dhënë dhe të rikonsiliuar lokalisht**. Çdo tavan offline është pjesë e grant-it të fundit të autorizuar nga Central.
+9. **M12 (Gateway fizik) është opsional**; migrimi nuk konsiderohet i paplotë nëse Gateway mbetet i njëjti deployment, me kusht që kufiri modular të jetë i pastër dhe performanca/siguria të jenë të pranueshme. Nxjerrja bëhet vetëm për: shkallëzim i pavarur, izolim kredencialesh, deploy të pavarur, ulje të blast-radius, compliance.
+
 ## Inventari i sotëm (nga kodi)
 - **21 tabela** mbajnë drejtpërdrejt `owner_ref` (api_keys, wallets, account_plans, messages, emails, email_domains, contacts, contact_lists, consent_events, consent_state, campaigns, sender_ids, templates, events, webhook_endpoints, inbound_messages, keywords, billing_profiles, subscriptions, invoices, payments); të tjerat e trashëgojnë (ledger/holds/topups nga wallet, list_members, template_versions, campaign_recipients, message_events, webhook_deliveries, invoice_lines).
 - ~500 referenca `owner_ref` në kod: më të ngarkuarat `app/api/console.py`, `app/api/contacts.py`, `app/services/contacts.py`, `app/api/portal.py`, `app/services/campaigns.py`, `app/services/billing.py`, `app/api/billing.py`, `app/services/consent.py`, `app/services/inbox.py`, `app/services/webhooks.py`, `app/services/apikeys.py`; 64 në teste; 43 në frontend.
@@ -54,6 +65,15 @@ Varësi të ngurta: **M1 → M6, M7, M9**; **M3 → M4 → M5 → M7 → (M8, M9
 - **Tests:** i gjithë suite ekzistues; testi i inventarit (M0) kalon nga `owner_ref` te `enterprise_id`; **test negativ**: query pa kontekst tenant hedh gabim; test shadow i dual-write; izolim tenantësh (i ekzistuesi) i përsëritur mbi `enterprise_id`; migrim up/down/up në PG me të dhëna; bench pa regres.
 - **Rollback:** M1a/M1b: `downgrade` heq kolonat (të dhënat origjinale `owner_ref` janë të paprekura); M1c: flag `TENANT_SCOPING=owner_ref|enterprise` kthen leximet te `owner_ref`.
 - **Acceptance:** 100% e rreshtave kanë `enterprise_id`; asnjë query tenant pa filtër (test); suite + bench të gjelbër; API e vjetër punon; audit tregon `unscoped()` vetëm te vendet e lejuara.
+
+### M1a — ZBATUAR (strikt additiv)
+- **Migrimi:** `alembic/versions/0018_enterprises.py`. Auditon `owner_ref` **para** se të krijojë ndonjë gjë; nëse ka anomali ndalon me raport të qartë (asgjë nuk krijohet/bashkohet). Krijon `sms_enterprises` dhe një rresht për çdo `owner_ref` legacy me UUID të gjeneruar një herë (persistent). Nuk prek asnjë tabelë tjetër (provuar me test që krahason skemën e çdo tabele para/pas), nuk bën UPDATE/backfill te tabelat e mëdha, nuk shton FK.
+- **Kod:** `app/models/enterprise.py`, `app/services/enterprises.py` (`for_owner_ref`, `require_for_owner_ref`, `audit_owner_refs`, `backfill_missing`), `scripts/enterprises_audit.py`. Asnjë modul i rrugës së kërkesave nuk i importon (test i detyron).
+- **Auditim para migrimit (rekomandohet në çdo mjedis):** `SMS_DATABASE_URL=… python -m scripts.enterprises_audit` (vetëm-lexim; dalja 1 nëse ka anomali).
+- **Tenant-ët e krijuar pas M1a** nuk marrin Enterprise automatikisht (nuk ka lidhje në rrugën e kërkesave, me qëllim): `python -m scripts.enterprises_audit --backfill` i kap (idempotent); M1b e zëvendëson me shkrim të centralizuar.
+- **Rikthimi:** `alembic downgrade 0017` heq `sms_enterprises` (dhe dy indekset e saj). **UUID-të humbin**; s'ka çfarë t'i referojë në M1a, dhe një `upgrade` i ri krijon UUID të reja. Të dhënat legacy nuk preken kurrë. *Pas M1b rikthimi kërkon kujdes shtesë (UUID-t referohen).*
+- **Kyçje:** migrimi bën vetëm `SELECT DISTINCT owner_ref` (kyçje `ACCESS SHARE`, pa shkrime) mbi 21 tabelat dhe një `CREATE TABLE`; për tabela shumë të mëdha kjo është skanim vetëm-lexim.
+- **Pranimi:** invariant `COUNT(DISTINCT owner_ref të vlefshëm) == COUNT(sms_enterprises)`; suita ekzistuese e pandryshuar.
 
 ## M2 · Kontrata `MessageQueue` (e pavarur nga M1)
 - **Objective:** domain-i nuk di për PostgreSQL; brokeri mund të ndërrohet më vonë.
