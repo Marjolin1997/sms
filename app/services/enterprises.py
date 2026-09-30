@@ -199,6 +199,28 @@ def _insert_if_absent(db: Session, owner_ref: str) -> None:
     db.execute(ins(Enterprise.__table__).values(**values).on_conflict_do_nothing())
 
 
+def _from_loaded_rows(db: Session, owner_ref: str) -> uuid.UUID | None:
+    """`enterprise_id` nga një rresht tenant-owned i të njëjtit `owner_ref` që sesioni e ka tashmë të
+    ngarkuar (p.sh. Message që workeri sapo e lexoi, kur krijon Event). Mbështetet te invarianti
+    `record.owner_ref == enterprise.owner_ref` (i verifikuar nga `enterprises_audit --check`)."""
+    from sqlalchemy import inspect
+
+    from app.models.tenant import TenantOwned
+
+    for (
+        obj
+    ) in db.identity_map.values():  # vetëm rreshta të ruajtur (identity_map nuk përmban të rinj)
+        if not isinstance(obj, TenantOwned) or obj.enterprise_id is None:
+            continue
+        if obj.owner_ref != owner_ref:
+            continue
+        st = inspect(obj)
+        if st.attrs.owner_ref.history.has_changes() or st.attrs.enterprise_id.history.has_changes():
+            continue  # owner_ref/enterprise_id në ndryshim e sipër: jo burim i besueshëm
+        return obj.enterprise_id
+    return None
+
+
 def resolve_id(db: Session, owner_ref) -> uuid.UUID | None:
     """`enterprise.id` për një `owner_ref` të saktë; e krijon Enterprise-in nëse mungon (tenant i ri).
     Kthen `None` (pa përjashtim, pa krijuar asgjë) kur `owner_ref` është anomali: bosh, me hapësira,
@@ -212,6 +234,10 @@ def resolve_id(db: Session, owner_ref) -> uuid.UUID | None:
     cache: dict[str, uuid.UUID | None] = db.info.setdefault("_enterprise_ids", {})
     if owner_ref in cache and cache[owner_ref] is not None:
         return cache[owner_ref]
+    known = _from_loaded_rows(db, owner_ref)
+    if known is not None:  # rresht i njëjtit tenant, tashmë i ngarkuar në sesion: pa SELECT
+        cache[owner_ref] = known
+        return known
     with db.no_autoflush:
         found = db.scalar(select(Enterprise.id).where(Enterprise.owner_ref == owner_ref))
         if found is None:

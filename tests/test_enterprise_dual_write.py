@@ -125,6 +125,40 @@ def test_changing_owner_ref_re_resolves_enterprise_id(db):
     assert c.enterprise_id == ent(db, "moved").id != ent(db, "old").id
 
 
+def test_loaded_row_of_same_tenant_avoids_the_enterprise_select(db):
+    from sqlalchemy import event
+
+    from app.core.db import engine
+
+    contacts_svc.upsert(db, "acme", phone="+355691230003")
+    db.commit()
+    db.info.pop("_enterprise_ids", None)  # sesion "i ftohtë", por me një rresht të ngarkuar
+    db.expire_all()
+    loaded = db.scalar(select(Contact))  # rreshti i ngarkuar ka enterprise_id
+    seen = []
+
+    def spy(conn, cur, stmt, *a):
+        if "sms_enterprises" in stmt:
+            seen.append(stmt)
+
+    event.listen(engine, "before_cursor_execute", spy)
+    try:
+        w = wallets.create_wallet(db, "acme", "EUR")
+        db.flush()
+    finally:
+        event.remove(engine, "before_cursor_execute", spy)
+    assert seen == [] and w.enterprise_id == loaded.enterprise_id
+
+
+def test_row_with_pending_owner_ref_change_is_not_used_as_source(db):
+    c, _ = contacts_svc.upsert(db, "old", phone="+355691230003")
+    db.commit()
+    c.owner_ref = "moved"  # ende pa flush; enterprise_id i vjetër
+    w = wallets.create_wallet(db, "moved", "EUR")
+    db.commit()
+    assert w.enterprise_id == c.enterprise_id == ent(db, "moved").id != ent(db, "old").id
+
+
 # --- Anomalitë: sjellja e sistemit nuk ndryshon (NULL, jo përjashtim) ---------------------
 
 

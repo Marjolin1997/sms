@@ -37,3 +37,27 @@ uvicorn app.main:app --port 8000 --workers 2 &          # API-ja që do të ngar
 python -m scripts.bench --accounts 20 --messages 3000 --concurrency 32 --workers 2
 python -m scripts.bench_campaign 3000 10000              # shpejtësia e një fushate
 ```
+
+
+## M1b: kostoja e dual-write (`SMS_ENTERPRISE_DUAL_WRITE`), matje krahasuese
+
+Metodë: `scripts/bench_ab.py` (3 ON + 3 OFF, renditje e ndërthurur, të njëjtat të dhëna nga TEMPLATE PG),
+`scripts/bench_probe.py` (SQL/op, mikro-matje), `scripts/bench_profile.py` (cProfile i ciklit të workerit).
+
+**Gjetja e parë (para optimizimit):** drain i radhës (2 workers) ON 204.2 vs OFF 235.1 msg/s = **−13.1%**
+(konsistent, CPU workeri +15.6%). `before_flush` hynte në rrugën e workerit 2×/mesazh në të dyja mënyrat,
+por me ON `events.emit` shton një `Event` tenant-owned → `resolve_id` një herë/mesazh; sesion i ri për cikël
+⇒ cache bosh ⇒ +1 SELECT ORM/mesazh. cProfile: `resolve_id` 1.47 s/1000 mesazhe (≈1.5 ms/thirrje, kryesisht
+Python i ORM-it, jo pritja e DB).
+
+**Optimizimi (i vetëm):** `enterprises._from_loaded_rows`: kur sesioni ka tashmë një rresht tenant-owned të
+ruajtur me të njëjtin `owner_ref` dhe `enterprise_id` (Message që workeri sapo lexoi), merret prej tij pa
+SELECT (invarianti `record.owner_ref == enterprise.owner_ref`); rreshtat me `owner_ref`/`enterprise_id` në
+ndryshim shpërfillen. Pas tij: `resolve_id` 0.024 s/1000 mesazhe.
+
+**Pas optimizimit (3+3):** drain ON 226.5 vs OFF 235.0 msg/s = **−3.6%** (stdev 10.6/5.9, diapazonet mbivendosen;
+brenda pragut 5%), CPU workeri +3.4%, transaksione DB të barabarta; accept brenda zhurmës (A1 −2.3% më mirë me ON);
+SQL/request tipik 23 → 23; SQL/mesazh workeri (sesion i ri/cikël) 8 → ~8.6 (mbetet rasti kur rreshti i ngarkuar
+nuk ka `enterprise_id`); mikro: ON cold ≈ +0.5 ms/op (një SELECT), ON warm ≈ OFF.
+`enterprises_audit --check --strict` = 0/0 pas `backfill_enterprise_id` mbi rreshtat e shkruar me OFF
+(OFF nuk plotëson `enterprise_id`, sipas konceptit).
