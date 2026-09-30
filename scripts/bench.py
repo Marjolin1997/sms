@@ -39,7 +39,7 @@ def guard() -> None:
 
 
 def setup(accounts: int) -> list[tuple[str, str]]:
-    """→ [(owner, api_key)]. Çdo llogari: wallet 1 000 000 EUR, sender ACME, çmim 0.05, rrugë fake."""
+    """→ [(owner, api_key)]. Çdo llogari: wallet 1 000 000 EUR, sender BENCH<i>, çmim 0.05, rrugë fake."""
     with SessionLocal() as db:
         if db.scalar(select(func.count()).select_from(Message)):
             sys.exit("baza _bench ka tashmë mesazhe: krijoni një bazë të re")
@@ -57,7 +57,7 @@ def setup(accounts: int) -> list[tuple[str, str]]:
                 db, wallets.create_topup(db, w.id, "1000000", wallets.TopupMethod.CASH).id
             )
             db.add(AccountPlan(owner_ref=owner, rate_card_id=card.id, rate_limit_per_min=10**9))
-            s = sender_ids.request(db, owner, "AL", "ACME")
+            s = sender_ids.request(db, owner, "AL", f"BENCH{i}")
             sender_ids.approve(db, s.id, "bench")
             _, key = apikeys.create_key(db, f"bench{i}", "client", owner, "bench")
             out.append((owner, key))
@@ -78,7 +78,7 @@ async def accept_phase(base: str, keys: list[tuple[str, str]], total: int, conc:
             body = {
                 "owner_ref": owner,
                 "to": f"+3556912{i % 100000:05d}",
-                "sender": "ACME",
+                "sender": "BENCH" + owner.removeprefix("bench"),
                 "text": f"bench {i}",
             }
             async with sem:
