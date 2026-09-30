@@ -313,3 +313,78 @@ def audience_counts(
         for r in batch:
             counts[r.reason] = counts.get(r.reason, 0) + 1
         after = batch[-1].contact_id
+
+
+EXPORT_LIMIT = 1000
+
+
+def export_data(db: Session, owner_ref: str, c: Contact) -> dict:
+    """Paketa e qasjes për subjektin e të dhënave: profili, listat, historiku i pëlqimit
+    (evidenca ruhet me HMAC të adresës; këtu lidhet përsëri me kontaktin) dhe mesazhet."""
+    from app.models.contacts import ConsentEvent
+    from app.models.email import Email
+    from app.models.sending import Message
+
+    lists = db.execute(
+        select(ContactList.name, ListMember.added_at)
+        .join(ListMember, ListMember.list_id == ContactList.id)
+        .where(ListMember.contact_id == c.id, ContactList.owner_ref == owner_ref)
+    ).all()
+    hashes = {}
+    for channel, addr in (("sms", c.phone), ("email", c.email)):
+        if addr:
+            hashes[consent.address_hash(owner_ref, channel, consent.normalize(channel, addr))] = (
+                channel
+            )
+    events = (
+        db.scalars(
+            select(ConsentEvent)
+            .where(ConsentEvent.owner_ref == owner_ref, ConsentEvent.address_hash.in_(hashes))
+            .order_by(ConsentEvent.id)
+        ).all()
+        if hashes
+        else []
+    )
+    sms = (
+        db.scalars(
+            select(Message)
+            .where(Message.owner_ref == owner_ref, Message.destination == c.phone)
+            .order_by(Message.id.desc())
+            .limit(EXPORT_LIMIT)
+        ).all()
+        if c.phone
+        else []
+    )
+    emails = (
+        db.scalars(
+            select(Email)
+            .where(Email.owner_ref == owner_ref, Email.to_email == c.email)
+            .order_by(Email.id.desc())
+            .limit(EXPORT_LIMIT)
+        ).all()
+        if c.email
+        else []
+    )
+    return {
+        "contact": {
+            "id": c.id, "phone": c.phone, "email": c.email, "first_name": c.first_name,
+            "last_name": c.last_name, "external_id": c.external_id,
+            "attributes": c.attributes, "created_at": c.created_at,
+        },
+        "lists": [{"name": n, "added_at": t} for n, t in lists],
+        "consent_history": [
+            {"channel": e.channel, "action": e.action.value, "reason": e.reason,
+             "source": e.source, "evidence": e.evidence, "at": e.created_at}
+            for e in events
+        ],
+        "sms": [
+            {"id": m.public_id, "sender": m.sender, "text": m.text, "status": m.status.value,
+             "created_at": m.created_at}
+            for m in sms
+        ],
+        "emails": [
+            {"id": e.public_id, "subject": e.subject, "status": e.status.value,
+             "created_at": e.created_at}
+            for e in emails
+        ],
+    }  # fmt: skip

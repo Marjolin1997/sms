@@ -32,9 +32,23 @@ class ApiKey(Base):
         Enum(KeyStatus, native_enum=False, length=16), default=KeyStatus.ACTIVE
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    allowed_cidrs: Mapped[str | None] = mapped_column(Text)  # JSON: ["203.0.113.0/24", ...]
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuthFailure(Base):
+    """Provë e dështuar autentikimi (kufizim sipas IP). Pa sekrete: vetëm IP dhe prefix-i publik."""
+
+    __tablename__ = "sms_auth_failures"
+
+    id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
+    ip: Mapped[str] = mapped_column(String(45))
+    prefix: Mapped[str | None] = mapped_column(String(12))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_sms_auth_failures_ip", "ip", "created_at"),)
 
 
 class AuditLog(Base):

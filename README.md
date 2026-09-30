@@ -28,6 +28,14 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 11 Event log + webhooks për klientët (SSRF, retry, nënshkrim), çelësa API vetë-shërbyes, pasqyrë përdorimi (API; pa UI) | ✅ |
 | 12 Billing: plane, abonime, fatura të pandryshueshme me TVSH, pagesë nga wallet, pagesa online (adapter + webhook) | ✅ |
 
+## Siguria e prodhimit (Faza 13)
+- **Kufizim provash të dështuara:** pas `SMS_AUTH_MAX_FAILURES` (20) autentikimeve të dështuara brenda `SMS_AUTH_FAIL_WINDOW_S` (600 s) nga e njëjta IP, kërkesat me kredenciale kthejnë `429 too_many_attempts` (`Retry-After`). Regjistri është në PostgreSQL (`sms_auth_failures`, pa sekrete), pra funksionon për shumë procese.
+- **IP e klientit pas proxy-t:** vendosni `SMS_TRUSTED_PROXY_HOPS=N` (p.sh. 1 pas Nginx) që të besohet elementi N-nga-fundi i `X-Forwarded-For`. Me 0 (parazgjedhje) ky header injorohet, kështu nuk mund të falsifikohet.
+- **Allowlist IP për çelësa:** `allowed_cidrs` në krijim (`POST /v1/admin/api-keys`, `/v1/portal/api-keys`); nga IP të tjera çelësi kthen `403 ip_not_allowed`. Vlerat validohen (IPv4/IPv6/CIDR, deri në 20).
+- **Rrotullim çelësash:** `POST /v1/admin/api-keys/{id}/rotate` dhe `/v1/portal/api-keys/{id}/rotate` (`grace_minutes` 0–1440, parazgjedhje 60): çelës i ri me të njëjtin rol/llogari/IP; i vjetri skadon pas periudhës kalimtare (0 = revokim i menjëhershëm). Klienti mund të rrotullojë vetëm çelësat e vet.
+- **GDPR, e drejta e qasjes:** `GET /v1/contacts/{id}/export` kthen profilin, listat, historikun e pëlqimit (me evidencë), SMS-et dhe emailet e atij personi; regjistrohet në audit. Konsola ka butonin “Eksporto të dhënat”.
+- Kujdes: kufizimi është sipas IP; pas një sulmi nga një IP, edhe `X-Admin-Key` dhe çelësat e vlefshëm nga ajo IP bllokohen gjatë dritares.
+
 ## Paneli (frontend)
 React + Vite në `frontend/` (shih `frontend/README.md`); pamje në `docs/screenshots/`. Të dhëna demo: `python -m scripts.seed_demo`.
 

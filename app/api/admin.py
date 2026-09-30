@@ -38,13 +38,18 @@ class KeyIn(BaseModel):
     role: str
     owner_ref: str | None = Field(default=None, max_length=64)
     expires_at: datetime | None = None
+    allowed_cidrs: list[str] | None = Field(default=None, max_length=20)
+
+
+class RotateIn(BaseModel):
+    grace_minutes: int = Field(default=60, ge=0, le=1440)
 
 
 def _key_out(k: ApiKey, secret: str | None = None) -> dict:
     out = {
         "id": k.id, "prefix": k.prefix, "name": k.name, "role": k.role,
         "owner_ref": k.owner_ref, "status": k.status.value, "expires_at": k.expires_at,
-        "last_used_at": k.last_used_at,
+        "last_used_at": k.last_used_at, "allowed_cidrs": apikeys.cidrs_of(k),
     }  # fmt: skip
     if secret:
         out["key"] = secret  # shfaqet vetëm një herë
@@ -57,7 +62,7 @@ def create_key(
 ):
     def go():
         k, full = apikeys.create_key(
-            db, body.name, body.role, body.owner_ref, p.actor, body.expires_at
+            db, body.name, body.role, body.owner_ref, p.actor, body.expires_at, body.allowed_cidrs
         )
         audit(db, p, "apikey.create", "apikey", k.id, {"role": k.role, "owner": k.owner_ref})
         return k, full
@@ -69,6 +74,24 @@ def create_key(
 @router.get("/api-keys")
 def list_keys(db: Session = Depends(get_db), _: Principal = Depends(require("keys:manage"))):
     return [_key_out(k) for k in apikeys.list_keys(db)]
+
+
+@router.post("/api-keys/{key_id}/rotate", status_code=201)
+def rotate_key(
+    key_id: int,
+    body: RotateIn | None = None,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("keys:manage")),
+):
+    grace = (body or RotateIn()).grace_minutes
+
+    def go():
+        old, new, full = apikeys.rotate_key(db, key_id, p.actor, grace)
+        audit(db, p, "apikey.rotate", "apikey", old.id, {"new": new.id, "grace_min": grace})
+        return old, new, full
+
+    old, new, full = _run(db, go)
+    return {**_key_out(new, full), "replaces": _key_out(old)}
 
 
 @router.post("/api-keys/{key_id}/revoke")

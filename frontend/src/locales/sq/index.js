@@ -8,5 +8,6 @@ import contacts from "./contacts.js";
 import setup from "./setup.js";
 import money from "./money.js";
 import staff from "./staff.js";
+import security from "./security.js";
 
-export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff };
+export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security };

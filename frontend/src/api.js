@@ -20,6 +20,8 @@ const FRIENDLY = {
   template_not_usable: T("That template has no approved version yet."),
   sender_domain_not_verified: T("The from address must be on a domain you have verified under Email domains."),
   unauthorized: T("Your session is no longer valid. Please sign in again."),
+  too_many_attempts: T("Too many failed sign-in attempts from this network. Wait a few minutes and try again."),
+  ip_not_allowed: T("This key isn't allowed from your current network address."),
   forbidden: T("Your role doesn't allow this action."),
   not_found: T("We couldn't find that. It may have been removed."),
   gateway_error: T("The payment service is unavailable right now. Please try again in a moment."),

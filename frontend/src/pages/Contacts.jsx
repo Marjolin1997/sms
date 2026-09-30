@@ -64,6 +64,14 @@ function Import({ onDone }) {
   );
 }
 
+// Shkarkon një objekt JSON si skedar (eksport GDPR)
+function download(name, data) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const el = document.createElement("a");
+  el.href = url; el.download = name; el.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function People({ lists, reloadLists }) {
   const { confirm, toast } = useUi();
   const [q, setQ] = useState("");
@@ -99,7 +107,7 @@ function People({ lists, reloadLists }) {
         footer={st.more && <div className="row end" style={{ padding: 12 }}><Button busy={st.loading} onClick={() => load(rows[rows.length - 1].id)}>{t("Load more")}</Button></div>}
         cols={[{ label: <input type="checkbox" aria-label={t("Select all")} checked={all} onChange={() => setSel(all ? new Set() : new Set(rows.map((r) => r.id)))} />, render: (r) => <input type="checkbox" aria-label={t("Select {who}", { who: r.first_name || r.phone || r.email })} checked={sel.has(r.id)} onChange={() => toggle(r.id)} /> },
           { label: t("Name"), render: (r) => <b>{[r.first_name, r.last_name].filter(Boolean).join(" ") || "-"}</b> }, { label: t("Phone"), render: (r) => (r.phone ? `+${r.phone}` : "-") }, { label: t("Email"), render: (r) => r.email || "-" }, { label: t("Added"), render: (r) => <Time value={r.created_at} /> },
-          { label: "", render: (r) => <Button variant="danger" className="small" onClick={async () => { if (await confirm({ title: t("Erase this person?"), body: t("Their name, phone, email and attributes are permanently removed (GDPR). We keep only an anonymous block so they can't be messaged again by mistake."), danger: true, confirmLabel: t("Erase permanently") })) { await a.run(() => api.del(`/v1/contacts/${r.id}`), t("Person erased")); load(); } }}>{t("Erase")}</Button> }]} />
+          { label: "", render: (r) => <div className="row wrap"><Button className="small" onClick={async () => { const d = await a.run(() => api.get(`/v1/contacts/${r.id}/export`)); if (d && d !== true) download(`contact-${r.id}.json`, d); }}>{t("Export data")}</Button><Button variant="danger" className="small" onClick={async () => { if (await confirm({ title: t("Erase this person?"), body: t("Their name, phone, email and attributes are permanently removed (GDPR). We keep only an anonymous block so they can't be messaged again by mistake."), danger: true, confirmLabel: t("Erase permanently") })) { await a.run(() => api.del(`/v1/contacts/${r.id}`), t("Person erased")); load(); } }}>{t("Erase")}</Button></div> }]} />
     </Card>
   );
 }

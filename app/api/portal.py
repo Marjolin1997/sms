@@ -248,11 +248,17 @@ def list_events(
 class KeyIn(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     expires_at: datetime | None = None
+    allowed_cidrs: list[str] | None = Field(default=None, max_length=20)
+
+
+class RotateIn(BaseModel):
+    grace_minutes: int = Field(default=60, ge=0, le=1440)
 
 
 def _key_out(k, secret: str | None = None) -> dict:
     out = {"id": k.id, "prefix": k.prefix, "name": k.name, "status": k.status.value,
-           "expires_at": k.expires_at, "last_used_at": k.last_used_at}  # fmt: skip
+           "expires_at": k.expires_at, "last_used_at": k.last_used_at,
+           "allowed_cidrs": apikeys.cidrs_of(k)}  # fmt: skip
     if secret:
         out["key"] = secret
     return out
@@ -273,7 +279,9 @@ def create_own_key(
     owner = _client_only(p)
 
     def go():
-        k, full = apikeys.create_own_key(db, owner, body.name, p.actor, body.expires_at)
+        k, full = apikeys.create_own_key(
+            db, owner, body.name, p.actor, body.expires_at, body.allowed_cidrs
+        )
         audit(db, p, "apikey.self_create", "apikey", k.id, {"owner": owner})
         return k, full
 
@@ -284,6 +292,25 @@ def create_own_key(
 @router.get("/portal/api-keys")
 def list_own_keys(db: Session = Depends(get_db), p: Principal = Depends(require("keys:self"))):
     return [_key_out(k) for k in apikeys.list_own_keys(db, _client_only(p))]
+
+
+@router.post("/portal/api-keys/{key_id}/rotate", status_code=201)
+def rotate_own_key(
+    key_id: int,
+    body: RotateIn | None = None,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("keys:self")),
+):
+    owner = _client_only(p)
+    grace = (body or RotateIn()).grace_minutes
+
+    def go():
+        old, new, full = apikeys.rotate_own_key(db, owner, key_id, p.actor, grace)
+        audit(db, p, "apikey.self_rotate", "apikey", old.id, {"new": new.id, "owner": owner})
+        return old, new, full
+
+    old, new, full = _run(db, go)
+    return {**_key_out(new, full), "replaces": _key_out(old)}
 
 
 @router.post("/portal/api-keys/{key_id}/revoke")

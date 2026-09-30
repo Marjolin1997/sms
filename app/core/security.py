@@ -2,18 +2,20 @@
 
 import hashlib
 import hmac
+import ipaddress
+import json
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, Header, HTTPException
-from sqlalchemy import select
+from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.timeutil import as_utc
-from app.models.admin import ApiKey, KeyStatus
+from app.models.admin import ApiKey, AuthFailure, KeyStatus
 
 ROLE_PERMS: dict[str, set[str]] = {
     "superadmin": {"*"},
@@ -75,7 +77,48 @@ def _unauthorized() -> HTTPException:
     return HTTPException(401, {"code": "unauthorized", "message": "invalid credentials"})
 
 
-def _from_key(db: Session, token: str) -> Principal:
+def client_ip(request: Request) -> str:
+    """IP e klientit. X-Forwarded-For besohet vetëm sa proxy të besuar deklarohen."""
+    hops = settings.trusted_proxy_hops
+    if hops > 0:
+        chain = [
+            x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip()
+        ]
+        if len(chain) >= hops:
+            return chain[-hops][:45]
+    return (request.client.host if request.client else "unknown")[:45]
+
+
+def ip_allowed(ip: str, allowed_cidrs: str | None) -> bool:
+    if not allowed_cidrs:
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in ipaddress.ip_network(c, strict=False) for c in json.loads(allowed_cidrs))
+
+
+def _too_many_failures(db: Session, ip: str) -> bool:
+    since = datetime.now(UTC) - timedelta(seconds=settings.auth_fail_window_s)
+    n = db.scalar(
+        select(func.count())
+        .select_from(AuthFailure)
+        .where(AuthFailure.ip == ip, AuthFailure.created_at > since)
+    )
+    return n >= settings.auth_max_failures
+
+
+def _record_failure(db: Session, ip: str, prefix: str | None) -> None:
+    """Në sesion të veçantë: duhet të mbetet edhe kur kërkesa kthen 401 dhe bën rollback."""
+    with Session(bind=db.get_bind()) as s:
+        s.add(AuthFailure(ip=ip, prefix=prefix))
+        cutoff = datetime.now(UTC) - timedelta(seconds=settings.auth_fail_window_s * 6)
+        s.execute(delete(AuthFailure).where(AuthFailure.created_at < cutoff))
+        s.commit()
+
+
+def _from_key(db: Session, token: str, ip: str) -> Principal:
     parts = token.split("_", 2)
     if len(parts) != 3 or parts[0] != KEY_PREFIX:
         raise _unauthorized()
@@ -88,6 +131,11 @@ def _from_key(db: Session, token: str) -> Principal:
         raise _unauthorized()
     if key.expires_at is not None and as_utc(key.expires_at) <= now:
         raise _unauthorized()
+    if not ip_allowed(ip, key.allowed_cidrs):
+        raise HTTPException(
+            403,
+            {"code": "ip_not_allowed", "message": "this key can't be used from your IP address"},
+        )
     last = as_utc(key.last_used_at) if key.last_used_at else None
     if last is None or now - last > timedelta(minutes=5):
         key.last_used_at = now
@@ -96,17 +144,33 @@ def _from_key(db: Session, token: str) -> Principal:
 
 
 def current_principal(
+    request: Request,
     authorization: str = Header(default=""),
     x_admin_key: str = Header(default=""),
     db: Session = Depends(get_db),
 ) -> Principal:
-    if authorization.lower().startswith("bearer "):
-        return _from_key(db, authorization[7:].strip())
-    # Bootstrap: vetëm për të krijuar çelësat e parë; hiqe SMS_ADMIN_API_KEY në prodhim.
-    if x_admin_key and settings.admin_api_key:
-        if hmac.compare_digest(x_admin_key, settings.admin_api_key):
-            return Principal("bootstrap", "superadmin")
-    raise _unauthorized()
+    ip = client_ip(request)
+    bearer = authorization.lower().startswith("bearer ")
+    if (bearer or x_admin_key) and _too_many_failures(db, ip):
+        raise HTTPException(
+            429,
+            {"code": "too_many_attempts", "message": "too many failed attempts, try again later"},
+            headers={"Retry-After": str(settings.auth_fail_window_s)},
+        )
+    token = authorization[7:].strip() if bearer else ""
+    try:
+        if bearer:
+            return _from_key(db, token, ip)
+        # Bootstrap: vetëm për të krijuar çelësat e parë; hiqe SMS_ADMIN_API_KEY në prodhim.
+        if x_admin_key and settings.admin_api_key:
+            if hmac.compare_digest(x_admin_key, settings.admin_api_key):
+                return Principal("bootstrap", "superadmin")
+        raise _unauthorized()
+    except HTTPException as e:
+        if e.status_code == 401 and (bearer or x_admin_key):
+            parts = token.split("_", 2)
+            _record_failure(db, ip, parts[1][:12] if len(parts) == 3 else None)
+        raise
 
 
 def require(perm: str):

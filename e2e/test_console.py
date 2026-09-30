@@ -249,6 +249,18 @@ def client_flow(b):
     p.wait_for_selector("[role=dialog]")
     p.keyboard.press("Escape")
     check(p.locator("[role=dialog]").count() == 0, "dialog closes with Escape")
+    # rrotullim: çelës i ri shfaqet një herë, i vjetri mbetet aktiv gjatë periudhës kalimtare
+    p.locator(f"tbody tr:has-text('e2e key {UNIQ}') button:has-text('Rotate')").click()
+    p.wait_for_selector("[role=dialog]")
+    p.click("[role=dialog] button.primary")
+    p.wait_for_selector(".secret code", timeout=6000)
+    check(p.inner_text(".secret code").startswith("sms_"), "rotated key shown once")
+    p.click('button:has-text("I\'ve saved it")')
+    # eksport GDPR nga Contacts
+    go(p, "contacts", 900)
+    with p.expect_download() as dl:
+        p.locator("tbody tr").first.locator("button:has-text('Export data')").click()
+    check(dl.value.suggested_filename.startswith("contact-"), "contact export downloads a file")
     ctx.close()
 
 

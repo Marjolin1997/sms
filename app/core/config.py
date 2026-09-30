@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     # Gjuha e teksteve për përdoruesit fundorë (faturë, faqja e çregjistrimit, fundi i emailit).
     default_language: Literal["sq", "en"] = "sq"
 
+    # Mbrojtje nga provat e përsëritura të çelësave (për IP klienti).
+    auth_max_failures: int = 20
+    auth_fail_window_s: int = 600
+    # Sa proxy të besuar ka para aplikacionit (0 = pa proxy: përdoret adresa e lidhjes).
+    # Me N>0, IP e klientit është elementi N-nga-fundi i X-Forwarded-For.
+    trusted_proxy_hops: int = 0
+
     # PostgreSQL në prodhim; SQLite vetëm për zhvillim të shpejtë lokal.
     database_url: str = "sqlite:///./sms_dev.db"
     db_pool_size: int = 10

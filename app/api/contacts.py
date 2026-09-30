@@ -135,6 +135,22 @@ def get_contact(
     return _run(db, lambda: svc._get(db, owner, contact_id))
 
 
+@router.get("/contacts/{contact_id}/export")
+def export_contact(
+    contact_id: int,
+    owner_ref: str | None = None,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("contacts:read")),
+):
+    """GDPR (e drejta e qasjes): gjithçka që mbajmë për këtë person te kjo llogari."""
+    owner = owner_for(p, owner_ref)
+    c = _run(db, lambda: svc._get(db, owner, contact_id))
+    out = svc.export_data(db, owner, c)
+    audit(db, p, "contact.export", "contact", c.id, {"owner": owner})
+    db.commit()
+    return out
+
+
 @router.patch("/contacts/{contact_id}", response_model=ContactOut)
 def patch_contact(
     contact_id: int,
