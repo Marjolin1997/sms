@@ -108,7 +108,8 @@ Vendim i pronarit: **jo** `do_orm_execute`/`with_loader_criteria` global (fsheh 
 - **Rollback:** çdo outbox në commit të veçantë → revert individual.
 - **Acceptance:** asnjë import i `SKIP LOCKED` jashtë `app/queue/`; testet paralele të gjelbra; bench brenda ±10%.
 
-### M2 — ZBATUAR (refaktorim sjellje-ruajtës; shih `docs/QUEUE_ARCHITECTURE.md`)
+### M2 — CLOSED / APPROVED (refaktorim sjellje-ruajtës; referenca: `docs/QUEUE_ARCHITECTURE.md`)
+- **Gate i mbetur (jo bllokues për M3):** S1/E1 (SENDING i ngecur: raportim, veprim admin, rikonsilim hold, audit, vendim lease) para M9 / wallet-credit real në prodhim / go-live sign-off. Devijimi SKIP LOCKED (3 përjashtime) i pranuar, i fiksuar me allowlist test.
 - Zbatuar si **dy** kontrata sinkrone mbi rreshtat ekzistues (jo një `MessageQueue` me tabelë të veçantë): `DispatchQueue` (SMS, email; status
   SENDING, at-most-once për crash) dhe `DeliveryQueue` (webhook; lease, at-least-once), me adapterë `PostgresDispatchQueue`/`PostgresDeliveryQueue`
   te `app/queue/` dhe hooks të domain-it te services. Emrat e planit fillestar (`PostgresOutboxQueue`, `InMemoryQueue`, `dead_letter`) **nuk u zbatuan**

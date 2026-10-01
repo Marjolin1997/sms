@@ -1,5 +1,19 @@
 # Arkitektura e queue pas M2 (rishikim përfundimtar, M2-e)
 
+> **STATUSI: M2 CLOSED / APPROVED (pronari).** Ky dokument është arkitektura e referencës për M2.
+> **Invariante të ruajtura:** SMS → `DispatchQueue` → `PostgresDispatchQueue` → hooks SMS; Email → `DispatchQueue` →
+> `PostgresDispatchQueue` → hooks email; Webhook → `DeliveryQueue` → `PostgresDeliveryQueue` → hooks webhook;
+> campaigns / sweeps / DLR / retention **jashtë** abstraksionit me qëllim.
+> **Vendime të miratuara në mbyllje:** (1) devijimi SKIP LOCKED pranohet: `messages.expire_stale`, `campaigns.run_due`,
+> `payments.expire_pending` mbeten jashtë queue; allowlist testi (`tests/test_queue_boundaries.py`) mbetet dhe çdo përdorim i ri
+> kërkon review; të tre nuk zhvendosen në abstraksion për të plotësuar një kriter formal. (2) **Gate i fortë i besueshmërisë:**
+> S1/E1 (SMS/email `SENDING` i ngecur) dhe recovery/reporting duhen trajtuar **para** M9 (sjellja e parave/kreditit në prodhim), para
+> përdorimit real të wallet/credit në prodhim dhe para sign-off-it të besueshmërisë së go-live: SMS (raportim, veprim admin i kontrolluar,
+> rikonsilim i wallet hold, audit trail, vendim i shprehur për lease/auto-recovery); email (raportim, veprim admin, politika për
+> provider-sukses + COMMIT#2 dështim, vendim i shprehur për lease/auto-recovery). Nuk bllokon M3. E2 (email stuck reporting) mbetet në
+> reliability backlog dhe nuk bëhet para M3.
+
+
 Dokumenti përmbledh gjendjen **pas M2**. Detajet e karakterizimit dhe të secilit hap janë te `QUEUE_SEMANTICS.md` dhe
 `PERFORMANCE.md`. Nuk përdoret "exactly once" askund: nuk provohet end-to-end për asnjë kanal.
 
