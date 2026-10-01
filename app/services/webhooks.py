@@ -1,16 +1,14 @@
 """Webhook-et e klientëve: menaxhim endpoint-esh, dërgim i nënshkruar, retry, circuit breaker."""
 
-import hashlib
-import hmac
 import json
 import secrets
-import time
 from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.contracts.signature import sign_v1, verify_v1
 from app.core import crypto
 from app.core.config import settings
 from app.core.errors import Conflict, DomainError, NotFound
@@ -145,22 +143,9 @@ def redeliver(db: Session, owner: Owner, delivery_id: int) -> WebhookDelivery:
 # --- Nënshkrimi -----------------------------------------------------------------------
 
 
-def sign(secret: str, timestamp: int, body: bytes) -> str:
-    mac = hmac.new(secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256)
-    return f"t={timestamp},v1={mac.hexdigest()}"
-
-
-def verify_signature(secret: str, header: str, body: bytes, tolerance: int = 300, now=None) -> bool:
-    """Për dokumentim/testim: ashtu si duhet ta verifikojë marrësi (me mbrojtje replay)."""
-    try:
-        parts = dict(p.split("=", 1) for p in header.split(","))
-        ts = int(parts["t"])
-    except (KeyError, ValueError):
-        return False
-    if abs((now or time.time()) - ts) > tolerance:
-        return False
-    expected = sign(secret, ts, body).split("v1=")[1]
-    return hmac.compare_digest(parts.get("v1", ""), expected)
+# Kontrata V1 e nënshkrimit jeton te `app.contracts.signature`; emrat e vjetër mbeten (compat).
+sign = sign_v1
+verify_signature = verify_v1
 
 
 def envelope(ev: Event) -> bytes:

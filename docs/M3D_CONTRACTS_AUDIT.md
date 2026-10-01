@@ -140,3 +140,11 @@ Skedarët: `tests/test_webhook_golden.py`, `tests/golden/webhooks/{cases.json,*.
 - **Rrezik i karakterizuar (jo i miratuar):** `**ev.data` vjen pas `resource_*`, ndaj `data["resource_type"|"resource_id"]` mbishkruan vlerën e envelope-it (`test_characterization_event_data_overwrites_resource_fields`). Asnjë producer sot nuk e bën. Trajtohet vetëm me versionim ose miratim të veçantë.
 - **Vëzhgime sigurie (vetëm të dokumentuara dhe të testuara si sjellje):** `rotate_secret` pa grace; `X-SMS-Delivery-Id`/`Event-Id` të panënshkruar (input = `ts.body`); dedup te marrësi; vetëm skema `v1`.
 - Datetime: SQLite kthen `created_at` naive, PG aware; bytes janë identike (`as_utc`). Naive trajtohet si UTC; offset konvertohet në UTC.
+
+---
+## M3-d2 — Ekstraktimi i kontratës së nënshkrimit V1
+- `app/contracts/signature.py` (stdlib-only: `hashlib`, `hmac`, `time`): `sign_v1(secret, timestamp, body)`, `verify_v1(secret, header, body, tolerance=300, now=None)`, `TOLERANCE_S`. Kopje 1:1 e logjikës së mëparshme; asnjë abstraksion shtesë.
+- Kompatibilitet: `services.webhooks.sign = sign_v1`, `services.webhooks.verify_signature = verify_v1` (e njëjta bashkësi parametrash/emrash). `deliver_next` pandryshuar.
+- Sjellja e `verify` e ruajtur (e karakterizuar): çift pa `=` / `t` mungon ose jo-int → `False`; çelës i përsëritur → fiton i fundit; hapësirat rreth çelësave → çelës tjetër; pjesë shtesë (p.sh. `v2=`) injorohen; `now or time.time()` (now=0 ≡ None); `abs()` në të dyja drejtimet, `> tolerance` refuzon; `hmac.compare_digest`; `v1` jo-ASCII hedh `TypeError` (vëzhgim sigurie, pa ndryshim).
+- DLR hyrës (`api/webhooks.py::verify_signature`, `sha256=<hex>`) është kontratë tjetër dhe nuk preket; testet e garantojnë ndarjen.
+- Golden-et e d1 pa ndryshim (`tests/golden/` diff bosh).
