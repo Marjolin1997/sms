@@ -130,3 +130,13 @@ app/contracts/            # stdlib vetëm
 
 ## 19. Hapi i parë minimal
 **d1:** vetëm `tests/test_webhook_golden.py` + `tests/golden/webhooks/*` (bytes, JSON, signature, headers për ~10 tipe + rastet kufi), të gjeneruara nga `envelope()`/`sign()`/`deliver_next` aktuale. Zero kod prodhimi i ndryshuar; kjo ngrin kontratën para çdo extraction.
+
+---
+## M3-d1 — Golden të kontratës së webhook-ut (zero kod prodhimi)
+Skedarët: `tests/test_webhook_golden.py`, `tests/golden/webhooks/{cases.json,*.body,regenerate.py}`.
+- 33 fixture (21 kanonike, një për çdo `KNOWN_TYPES`, plus `message.failed` me `error_code` null/vlerë dhe 11 raste kufi). Secret `whsec_test_contract_v1`, `ts=1700000000`; nënshkrimi i parë u verifikua i pavarur me `openssl dgst -sha256 -hmac`.
+- Testet thërrasin `webhooks.envelope/sign/deliver_next` të prodhimit dhe krahasojnë BYTES; `regenerate.py` përdoret vetëm për ndryshim të miratuar të kontratës.
+- **Divergjencë e qëllimshme (e miratuar):** `GET /v1/events` serializon `created_at` përmes FastAPI; webhook envelope përdor `as_utc(...).isoformat()`. Dy paraqitje të të njëjtit `Event`; nuk unifikohen në M3-d1 (ndryshim API).
+- **Rrezik i karakterizuar (jo i miratuar):** `**ev.data` vjen pas `resource_*`, ndaj `data["resource_type"|"resource_id"]` mbishkruan vlerën e envelope-it (`test_characterization_event_data_overwrites_resource_fields`). Asnjë producer sot nuk e bën. Trajtohet vetëm me versionim ose miratim të veçantë.
+- **Vëzhgime sigurie (vetëm të dokumentuara dhe të testuara si sjellje):** `rotate_secret` pa grace; `X-SMS-Delivery-Id`/`Event-Id` të panënshkruar (input = `ts.body`); dedup te marrësi; vetëm skema `v1`.
+- Datetime: SQLite kthen `created_at` naive, PG aware; bytes janë identike (`as_utc`). Naive trajtohet si UTC; offset konvertohet në UTC.
