@@ -29,7 +29,7 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - name: Static security scan (bandit, medium+)
-        run: pip install bandit && bandit -q -r app -ll
+        run: pip install bandit && bandit -q -r app apps -ll
       - name: Tests on PostgreSQL
         run: pytest -q
       - name: Tests on SQLite (dev fallback)

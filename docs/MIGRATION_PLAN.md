@@ -135,6 +135,9 @@ Vendim i pronarit: **jo** `do_orm_execute`/`with_loader_criteria` global (fsheh 
 7. Pa DB të përbashkët.
 
 ## M4 · Central bazë (aplikacion i ri, DB e vet)
+### M4-a — skelet i pavarur (referenca: `docs/M4_ARCHITECTURE.md`)
+Vendime të miratuara: `apps/central/` në të njëjtin repo, Enterprise mbetet te `app/`; `app/contracts` mbetet (pa kopje, nxjerrja në `packages/contracts` vetëm me konsumatorin e parë real); version table `central_alembic_version`. M4-a = vetëm health/readiness + DB + migrime bosh, pa tabela biznesi.
+
 - **Objective:** ekziston Central si aplikacion i veçantë administrativ me identitet, audit dhe API shërbimi.
 - **Tables (DB Central):** `enterprises` (burimi i të vërtetës për ID/status), `staff_users`, `staff_roles`, `audit_log`, `service_credentials`.
 - **Files/modules:** `apps/central/` (FastAPI, migrime të veta, vetëm `kernel`+`contracts`); regjistrimi i çdo Enterprise ekzistues në Central me **të njëjtin UUID** (skript backfill nga `sms_enterprises` te Enterprise).

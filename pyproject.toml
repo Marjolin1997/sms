@@ -44,4 +44,4 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "app/core/tenancy.py" = ["E501"]
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "apps*"]
