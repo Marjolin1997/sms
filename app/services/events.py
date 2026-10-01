@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.contracts.events import EventEnvelopeV1
+from app.contracts.events import PUBLIC_EVENT_TYPES_V1, EventEnvelopeV1
 from app.core.context import TenantContext
 from app.core.scope import Owner, owned, ref
 from app.models.events import (
@@ -17,14 +17,7 @@ from app.models.events import (
 )
 from app.services.webhook_queue import queue
 
-KNOWN_TYPES = {
-    "message.sent", "message.delivered", "message.failed",
-    "email.sent", "email.delivered", "email.bounced", "email.complained", "email.failed",
-    "campaign.running", "campaign.paused", "campaign.completed", "campaign.cancelled",
-    "consent.opted_out", "consent.opted_in", "webhook.ping",
-    "invoice.issued", "invoice.paid", "payment.succeeded", "payment.failed",
-    "wallet.low_balance", "message.received",
-}  # fmt: skip
+KNOWN_TYPES = PUBLIC_EVENT_TYPES_V1  # alias kompatibiliteti; burimi i vetëm: app.contracts.events
 
 
 def to_envelope_v1(ev: Event) -> EventEnvelopeV1:

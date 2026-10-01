@@ -202,3 +202,52 @@ def test_internal_event_models_are_not_public_events():
     for m in (MessageEvent, EmailEvent, AuditLog, DlrReceipt):
         assert not issubclass(m, Event)
     assert inspect.signature(events.to_envelope_v1).parameters["ev"].annotation is Event
+
+
+# --- katalogu publik V1 (d4) -------------------------------------------------------------
+
+EXPECTED_V1 = {
+    "message.sent", "message.delivered", "message.failed", "message.received",
+    "email.sent", "email.delivered", "email.bounced", "email.complained", "email.failed",
+    "campaign.running", "campaign.paused", "campaign.completed", "campaign.cancelled",
+    "consent.opted_out", "consent.opted_in", "webhook.ping",
+    "invoice.issued", "invoice.paid", "payment.succeeded", "payment.failed",
+    "wallet.low_balance",
+}  # fmt: skip
+
+
+def test_public_event_types_v1_is_the_exact_immutable_catalog():
+    from app.contracts.events import PUBLIC_EVENT_TYPES_V1
+
+    assert isinstance(PUBLIC_EVENT_TYPES_V1, frozenset)
+    assert PUBLIC_EVENT_TYPES_V1 == EXPECTED_V1 and len(PUBLIC_EVENT_TYPES_V1) == 21
+    with pytest.raises(AttributeError):
+        PUBLIC_EVENT_TYPES_V1.add("x")
+
+
+def test_known_types_is_the_same_object_as_the_contract_catalog():
+    from app.contracts.events import PUBLIC_EVENT_TYPES_V1
+
+    assert events.KNOWN_TYPES is PUBLIC_EVENT_TYPES_V1
+    assert events.valid_filter("message.*") and events.valid_filter("*")
+    assert events.valid_filter("wallet.low_balance") and not events.valid_filter("nope.x")
+    assert events.matches(["message.*"], "message.received")
+
+
+def test_canonical_fixtures_map_one_to_one_to_the_catalog():
+    from collections import Counter
+
+    from app.contracts.events import PUBLIC_EVENT_TYPES_V1
+
+    canon = [c for c in CASES if not c["name"].startswith("edge.")]
+    counts = Counter(c["event"]["type"] for c in canon)
+    assert set(counts) == PUBLIC_EVENT_TYPES_V1  # asnjë i panjohur, asnjë mungon
+    assert {t for t, n in counts.items() if n > 1} == {"message.failed"}  # null + vlerë
+    assert all(c["event"]["type"] in PUBLIC_EVENT_TYPES_V1 for c in CASES)
+
+
+def test_emit_rejects_types_outside_the_catalog(db):
+    with pytest.raises(ValueError):
+        events.emit(db, "c1", "message.queued", "message", "x")  # status i brendshëm, jo publik
+    with pytest.raises(ValueError):
+        events.emit(db, "c1", "audit.created", "audit", "x")

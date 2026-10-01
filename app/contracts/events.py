@@ -14,6 +14,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+# Katalogu publik V1: çdo tip që del jashtë sistemit (webhook + `GET /v1/events`).
+# Shtimi/heqja/rename është ndryshim kontrate (golden + versionim). Eventet e brendshme
+# (MessageEvent, EmailEvent, AuditLog, DlrReceipt, jetëgjatësia e queue) NUK hyjnë këtu.
+PUBLIC_EVENT_TYPES_V1: frozenset[str] = frozenset({
+    "message.sent", "message.delivered", "message.failed", "message.received",
+    "email.sent", "email.delivered", "email.bounced", "email.complained", "email.failed",
+    "campaign.running", "campaign.paused", "campaign.completed", "campaign.cancelled",
+    "consent.opted_out", "consent.opted_in", "webhook.ping",
+    "invoice.issued", "invoice.paid", "payment.succeeded", "payment.failed",
+    "wallet.low_balance",
+})  # fmt: skip
+
 
 def _as_utc(dt: datetime) -> datetime:
     """Naive = UTC; me timezone konvertohet në UTC (identike me `core.timeutil.as_utc`)."""

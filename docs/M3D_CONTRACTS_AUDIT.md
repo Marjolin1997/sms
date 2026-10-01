@@ -156,3 +156,7 @@ Skedarët: `tests/test_webhook_golden.py`, `tests/golden/webhooks/{cases.json,*.
 - Mapper ORM → kontratë: `services.events.to_envelope_v1(ev)`; `data = {resource_type, resource_id, **(ev.data or {})}` (ev.data fiton në përplasje: sjellje e ngrirë). `webhooks.envelope(ev)` = `to_envelope_v1(ev).to_bytes()` (kthen `bytes`).
 - Golden: 33 fixture të pandryshuara; test dual-path (kopje verbatim e serializer-it të vjetër në test) == i ri == golden.
 - Kosto: ~+1.1 µs/envelope (≈ +14%) nga shtresimi (mapper + dataclass + `to_bytes`); absolutisht i papërfillshëm krahas HTTP + DB në `deliver_next`.
+
+---
+## M3-d4 — Katalogu publik + finalizimi i kufirit (M3-d i mbyllur)
+`PUBLIC_EVENT_TYPES_V1` (frozenset, 21) jeton te `app/contracts/events.py`; `services.events.KNOWN_TYPES` është alias (i njëjti objekt). Specifikimi përfundimtar: `docs/CONTRACTS_V1.md`. M3-d3 performance exception e dokumentuar aty (§7).
