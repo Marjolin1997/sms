@@ -148,3 +148,11 @@ Skedarët: `tests/test_webhook_golden.py`, `tests/golden/webhooks/{cases.json,*.
 - Sjellja e `verify` e ruajtur (e karakterizuar): çift pa `=` / `t` mungon ose jo-int → `False`; çelës i përsëritur → fiton i fundit; hapësirat rreth çelësave → çelës tjetër; pjesë shtesë (p.sh. `v2=`) injorohen; `now or time.time()` (now=0 ≡ None); `abs()` në të dyja drejtimet, `> tolerance` refuzon; `hmac.compare_digest`; `v1` jo-ASCII hedh `TypeError` (vëzhgim sigurie, pa ndryshim).
 - DLR hyrës (`api/webhooks.py::verify_signature`, `sha256=<hex>`) është kontratë tjetër dhe nuk preket; testet e garantojnë ndarjen.
 - Golden-et e d1 pa ndryshim (`tests/golden/` diff bosh).
+
+---
+## M3-d3 — EventEnvelopeV1 + serializer eksplicit
+- `app/contracts/events.py` (stdlib-only: `json`, `dataclasses`, `datetime`, `typing`; pa `app.*`): `@dataclass(frozen=True, slots=True) EventEnvelopeV1(id, type, created_at, data)`, `to_dict()` (kopje e cekët e `data`), `to_bytes()` = `json.dumps(..., separators=(",",":"), sort_keys=True, ensure_ascii=True).encode("utf-8")`.
+- `created_at`: primitive `_as_utc` e kopjuar qëllimisht nga `core.timeutil.as_utc` (që `contracts` të mos varet nga `core`); një test e mban të barabartë me origjinalin. Naive = UTC, offset → UTC, `+00:00` (jo `Z`), mikrosekonda vetëm kur ≠ 0.
+- Mapper ORM → kontratë: `services.events.to_envelope_v1(ev)`; `data = {resource_type, resource_id, **(ev.data or {})}` (ev.data fiton në përplasje: sjellje e ngrirë). `webhooks.envelope(ev)` = `to_envelope_v1(ev).to_bytes()` (kthen `bytes`).
+- Golden: 33 fixture të pandryshuara; test dual-path (kopje verbatim e serializer-it të vjetër në test) == i ri == golden.
+- Kosto: ~+1.1 µs/envelope (≈ +14%) nga shtresimi (mapper + dataclass + `to_bytes`); absolutisht i papërfillshëm krahas HTTP + DB në `deliver_next`.

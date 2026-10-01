@@ -1,6 +1,5 @@
 """Webhook-et e klientëve: menaxhim endpoint-esh, dërgim i nënshkruar, retry, circuit breaker."""
 
-import json
 import secrets
 from datetime import UTC, datetime
 
@@ -149,14 +148,7 @@ verify_signature = verify_v1
 
 
 def envelope(ev: Event) -> bytes:
-    return json.dumps(
-        {
-            "id": f"evt_{ev.id}", "type": ev.type, "created_at": as_utc(ev.created_at).isoformat(),
-            "data": {"resource_type": ev.resource_type, "resource_id": ev.resource_id,
-                     **(ev.data or {})},
-        },
-        separators=(",", ":"), sort_keys=True,
-    ).encode()  # fmt: skip
+    return events.to_envelope_v1(ev).to_bytes()
 
 
 # --- Worker ---------------------------------------------------------------------------

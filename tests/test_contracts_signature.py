@@ -128,7 +128,7 @@ def test_verify_uses_timing_safe_comparison():
 
 # --- kufiri i modulit (AST) ----------------------------------------------------------------
 
-ALLOWED_STDLIB = {"hashlib", "hmac", "time"}
+ALLOWED_STDLIB = {"hashlib", "hmac", "time", "json", "dataclasses", "datetime", "typing"}
 
 
 def _imports(path: Path) -> set[str]:
@@ -144,14 +144,18 @@ def _imports(path: Path) -> set[str]:
 
 def test_contracts_package_is_stdlib_only_and_signature_is_a_leaf():
     files = sorted((ROOT / "contracts").glob("*.py"))
-    assert {f.name for f in files} == {"__init__.py", "signature.py"}  # asnjë modul speculativ
+    assert {f.name for f in files} == {
+        "__init__.py",
+        "events.py",
+        "signature.py",
+    }  # asnjë modul speculativ
     for f in files:
         bad = _imports(f) - ALLOWED_STDLIB
         assert not bad, (f.name, bad)  # asnjë app.*, sqlalchemy, fastapi, pydantic, httpx
-    assert _imports(ROOT / "contracts" / "signature.py") <= ALLOWED_STDLIB
+    assert _imports(ROOT / "contracts" / "signature.py") <= {"hashlib", "hmac", "time"}
 
 
-def test_only_the_webhook_service_imports_the_contract():
+def test_only_the_webhook_services_import_the_contracts():
     importers = set()
     for p in ROOT.rglob("*.py"):
         if "contracts" in p.parts:
@@ -159,7 +163,7 @@ def test_only_the_webhook_service_imports_the_contract():
         for n in ast.walk(ast.parse(p.read_text())):
             if isinstance(n, ast.ImportFrom) and (n.module or "").startswith("app.contracts"):
                 importers.add(p.relative_to(ROOT).as_posix())
-    assert importers == {"services/webhooks.py"}
+    assert importers == {"services/webhooks.py", "services/events.py"}
 
 
 def test_outgoing_signature_header_is_built_in_one_place_only():

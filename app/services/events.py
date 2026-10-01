@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.contracts.events import EventEnvelopeV1
 from app.core.context import TenantContext
 from app.core.scope import Owner, owned, ref
 from app.models.events import (
@@ -24,6 +25,16 @@ KNOWN_TYPES = {
     "invoice.issued", "invoice.paid", "payment.succeeded", "payment.failed",
     "wallet.low_balance", "message.received",
 }  # fmt: skip
+
+
+def to_envelope_v1(ev: Event) -> EventEnvelopeV1:
+    """Mapper ORM → kontratë. `ev.data` vjen PAS resource_* dhe fiton në përplasje (e ngrirë)."""
+    return EventEnvelopeV1(
+        id=f"evt_{ev.id}",
+        type=ev.type,
+        created_at=ev.created_at,
+        data={"resource_type": ev.resource_type, "resource_id": ev.resource_id, **(ev.data or {})},
+    )
 
 
 def valid_filter(pattern: str) -> bool:
