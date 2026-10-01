@@ -21,7 +21,7 @@ NAME_MAX = 200
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
-def _name(value: str) -> str:
+def normalize_name(value: str) -> str:
     """Vetëm `strip`; pa normalizim tjetër. Bosh, >200 ose me karaktere kontrolli → Invalid."""
     if not isinstance(value, str):
         raise Invalid("name must be a string")
@@ -45,7 +45,7 @@ def create(
 ) -> Enterprise:
     """Krijon Enterprise (status `active`). `enterprise_id` eksplicit vetëm për migrimin e ardhshëm
     të UUID-ve ekzistuese; përndryshe Central e gjeneron (UUIDv4). ID e dyfishtë → Conflict."""
-    name = _name(name)
+    name = normalize_name(name)
     eid = _uuid(enterprise_id) if enterprise_id is not None else uuid.uuid4()
     if db.get(Enterprise, eid) is not None:
         raise Conflict("enterprise id already exists")
@@ -82,7 +82,7 @@ def rename(
     db: Session, enterprise_id: uuid.UUID | str, name: str, *, now: datetime | None = None
 ) -> Enterprise:
     ent = get(db, enterprise_id)
-    name = _name(name)
+    name = normalize_name(name)
     if name != ent.name:
         ent.name, ent.updated_at = name, now or utcnow()
         db.flush()

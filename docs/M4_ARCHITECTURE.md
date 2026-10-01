@@ -73,3 +73,46 @@ Pa sync Central→Enterprise, pa event, pa dual-write, pa DB të përbashkët, p
 ### Borxh i regjistruar
 - **TEST INFRASTRUCTURE DEBT:** `DROP DATABASE … WITH (FORCE)` dështon ndonjëherë me "permission denied to terminate process" (supozim i arsyeshëm, jo i provuar: worker autovacuum i role `postgres` te DB e re). Fixture-t e Central e riprovojnë (`drop_database`); fixture-t legacy (`test_enterprises`, `test_m3_timeutil`, …) jo; fix-i i përbashkët është i veçantë.
 - Rrezik: `ruff format --check` mund të ketë drift mbi dokumente/skedarë legacy (alembic 0014/0016, docs/API.md, kodi në markdown); nuk formatohen brenda M4.
+
+---
+## M4-c — Bootstrap i Enterprise-ve ekzistues në Central
+
+### Audit i formës së të dhënave
+- **Si krijohen rreshtat sot** (migrimi `0018` + `enterprises.backfill_missing` + `resolve_id`): vetëm `id` (UUID v4), `owner_ref`, `status='active'`, `created_at`, `updated_at`. `external_id`, `legal_name`, `short_name` janë **gjithmonë NULL** (asnjë kod i shkruan; vendimi M1 #2: metadata nuk plotësohen nga supozime). `status` është gjithmonë `active` (asnjë kod nuk e ndryshon).
+- **Qëndrueshmëria e `owner_ref`:** unik (`UNIQUE` + indeks unik `lower(owner_ref)`), i ruajtur saktësisht (pa normalizim), max 64. Anomalitë (bosh, hapësira, variante shkronjash) nuk futen në `sms_enterprises` (auditi i bllokon).
+- **Ripërdorimi i `id`:** po. `sms_enterprises.id` është UUID v4 kanonik dhe `enterprises.id` në Central është UUID; tipet përputhen (PG `uuid`, SQLite `CHAR(32)`). Asnjë UUID i ri në bootstrap; pa shtresë përkthimi.
+- **Përplasje / rreshta të paplotë:** në një DB reale s'ka përplasje id/owner_ref (kufizime). Mbrojtja e mbetur: DB e korruptuar/e ndryshuar manualisht → raportohet si e pavlefshme, s'shkruhet.
+- **Burimi i `name`:** vetëm `owner_ref` ka vlerë reale; politika `legal_name → short_name → owner_ref` (`external_id` përjashtohet: është identifikues, jo emër). Emrat nga `owner_ref` janë **provizorë** (raportohen; rename te Central më vonë).
+
+### Vendimi për `owner_ref` (A/B/C)
+| Opsion | Pro | Kundër |
+|---|---|---|
+| A. kolonë `legacy_owner_ref` te `enterprises` | kërkim i thjeshtë | ndot entitetin kanonik; migrim skeme; `owner_ref` s'ka kuptim në Central |
+| B. tabelë mapimi | modeli kanonik i pastër | skemë e re, ruajtje e përhershme për një nevojë të përkohshme |
+| **C. asnjë ruajtje (zgjedhur)** | zero ndryshim skeme; ID ruhet 1:1 prandaj mapimi s'nevojitet | `owner_ref` s'gjendet në Central (s'duhet: Enterprise e mban vetë) |
+`owner_ref` përdoret vetëm për fallback-un e emrit dhe për raport. **Zero ndryshim skeme.**
+
+### Algoritmi (`python -m apps.central.tools.bootstrap_enterprises [--dry-run]`)
+1. Lexon Enterprise DB (`ENTERPRISE_DATABASE_URL`) me SQL minimal në transaksion vetëm-lexim (PG: `SET TRANSACTION READ ONLY`); pa ORM të Enterprise, engine/session i veçantë. Central DB = `CENTRAL_DATABASE_URL` (`settings.database_url`). Të dyja URL-të e njëjta → refuzohet.
+2. Planifikon plotësisht para çdo shkrimi: për çdo rresht → i pavlefshëm | konflikt | përputhet | krijo.
+3. Nëse ka konflikte ose të pavlefshme: **asgjë nuk shkruhet** (kodi 1). Përndryshe, krijimet shkruhen në **një transaksion të vetëm** në Central (all-or-nothing; trade-off: një rresht i keq bllokon të gjithë, por bootstrap-i është i vogël dhe rerun është idempotent, ndaj ky është versioni më i sigurt).
+4. Raport (pa URL/sekrete): `Scanned / Create / Matching / Conflicts / Invalid / Central-only / Name sources / Mode`, plus rreshta `CONFLICT enterprise_id=… reason=… source=… target=…` dhe `INVALID …`.
+
+### Rregullat e hartimit
+- `id` → `id` (ruhet). `name` = `normalize_name(legal_name | short_name | owner_ref)` (strip, 1..200, pa karaktere kontrolli; i gjatë → i pavlefshëm, nuk shkurtohet).
+- `status`: tabelë eksplicite `active→active`, `suspended→suspended`; çdo tjetër (përfshirë NULL) → i pavlefshëm.
+- `created_at`/`updated_at` ruhen nga burimi (aware UTC; naive trajtohet UTC); mungesa → ora e bootstrap-it.
+- I pavlefshëm: id mungon/dyfishtë në burim; `owner_ref` mungon ose dyfishtë (pa dallim shkronjash/hapësirash); status i panjohur; asnjë burim emri i përdorshëm.
+
+### Idempotenca dhe konfliktet
+Id ekziston në Central me të njëjtin `name`+`status` → no-op (timestamps nuk krahasohen). Id ekziston me të dhëna tjetër → **konflikt**, pa mbishkrim (p.sh. pas një rename të qëllimshëm te Central: pritet; bootstrap-i është për importin fillestar, jo reconciliation). Rreshta vetëm në Central → të paprekur, vetëm të numëruar. Asnjë fshirje. Garë me krijim paralel → transaksioni dështon i tëri (kodi 2).
+
+### Kufijtë
+Pa sync runtime (pa event, polling, scheduler, webhook, worker, dual-write, transaksion të përbashkët), pa shkrim prapa te Enterprise, pa import `app.*` (guard AST), Central runtime s'e importon kurrë `tools/`. Sync-u vjen në M7.
+
+### Runbook
+1. `ENTERPRISE_DATABASE_URL=… CENTRAL_DATABASE_URL=… alembic -c apps/central/alembic.ini upgrade head` (Central në `0002`).
+2. `python -m apps.central.tools.bootstrap_enterprises --dry-run` → kontrollo raportin (Conflicts/Invalid duhet 0; shih "Name sources").
+3. Pa `--dry-run` për të aplikuar; përsërit për verifikim (`Create: 0`, `Matching: N`).
+4. Pas bootstrap-it, emrat provizorë ndryshohen te Central (`rename`).
+Kodet e daljes: 0 ok · 1 konflikte/të pavlefshme (asgjë e shkruar) · 2 konfigurim/lidhje/gabim.
