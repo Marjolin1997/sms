@@ -5,10 +5,11 @@ import hmac
 import json
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -227,29 +228,71 @@ queue = PostgresDispatchQueue(
 )
 
 
+@dataclass(frozen=True)
+class EmailSendPayload:
+    """Gjithçka që dërgimi i duhet, e materializuar në primitive PARA se transaksioni të mbyllet:
+    provider-i, MIME dhe DKIM nuk prekin ORM/Session (asnjë lazy-load, asnjë SQL gjatë rrjetit)."""
+
+    public_id: str
+    category: str
+    provider: str
+    from_email: str
+    from_name: str | None
+    to_email: str
+    subject: str
+    text_body: str | None
+    html_body: str | None
+    domain: str
+    dkim_selector: str
+    dkim_private_pem: bytes
+
+
+def _read_send_inputs(db: Session, e: Email) -> EmailSendPayload:
+    """Leximet e DB-së që dërgimi kërkon (domeni i verifikuar, çelësi DKIM), brenda transaksionit të
+    claim-it. Përjashtimet e domain-it riklasifikohen pas COMMIT#1 si më parë (shih process_one)."""
+    domain = email_domains.verified_domain_for(db, worker_owner(db, e), e.from_email)
+    if domain is None:  # DNS u hoq ndërkohë
+        raise ProviderError("domain_unverified", temporary=False)
+    return EmailSendPayload(
+        public_id=e.public_id, category=e.category, provider=e.provider,
+        from_email=e.from_email, from_name=e.from_name, to_email=e.to_email,
+        subject=e.subject, text_body=e.text_body, html_body=e.html_body,
+        domain=domain.domain, dkim_selector=domain.dkim_selector,
+        dkim_private_pem=email_domains.decrypt_private_key(domain),
+    )  # fmt: skip
+
+
 def process_one(db: Session, now: datetime | None = None) -> Email | None:
-    """Commit para dhe pas thirrjes së provider-it: një crash s'shkakton dërgim të dyfishtë."""
+    """claim + leximet e nevojshme → COMMIT#1 (lidhja lirohet) → MIME/DKIM/SMTP pa transaksion
+    DB → ack/retry/fail → COMMIT#2. Crash pas COMMIT#1 e lë SENDING (pa auto-recovery, si SMS)."""
     now = as_utc(now or datetime.now(UTC))
     if not switches.is_enabled(db, switches.DISPATCH):
         return None
     e = claim_next(db, now)
     if e is None:
         return None
-    db.commit()
+    payload, deferred = None, None
     try:
-        domain = email_domains.verified_domain_for(db, worker_owner(db, e), e.from_email)
-        if domain is None:  # DNS u hoq ndërkohë
-            raise ProviderError("domain_unverified", temporary=False)
-        token = unsubscribe_token(e.public_id) if e.category == "marketing" else None
+        payload = _read_send_inputs(db, e)
+    except SQLAlchemyError:
+        raise  # gabim DB: s'bëhet gabim provider-i; claim-i zhbëhet nga rollback
+    except (
+        Exception
+    ) as ex:  # domen i hequr, çelës i palexueshëm...: klasifikohet pas COMMIT#1, si më parë
+        deferred = ex
+    db.commit()  # COMMIT#1: claim + leximet; asnjë transaksion i hapur gjatë provider-it
+    try:
+        if deferred is not None:
+            raise deferred
+        token = unsubscribe_token(payload.public_id) if payload.category == "marketing" else None
         msg_id, raw = email_mime.build(
-            public_id=e.public_id, domain=domain.domain, from_email=e.from_email,
-            from_name=e.from_name, to_email=e.to_email, subject=e.subject,
-            text_body=e.text_body, html_body=e.html_body, unsubscribe_token=token,
-            dkim_selector=domain.dkim_selector,
-            dkim_private_pem=email_domains.decrypt_private_key(domain),
+            public_id=payload.public_id, domain=payload.domain, from_email=payload.from_email,
+            from_name=payload.from_name, to_email=payload.to_email, subject=payload.subject,
+            text_body=payload.text_body, html_body=payload.html_body, unsubscribe_token=token,
+            dkim_selector=payload.dkim_selector, dkim_private_pem=payload.dkim_private_pem,
         )  # fmt: skip
-        req = EmailRequest(e.public_id, msg_id, e.from_email, e.to_email, raw)
-        result = get_email_provider(e.provider).send(req)
+        req = EmailRequest(payload.public_id, msg_id, payload.from_email, payload.to_email, raw)
+        result = get_email_provider(payload.provider).send(req)
     except email_mime.UnsafeHeader:
         queue.retry(db, e, error="unsafe_header", temporary=False, now=now)
     except ProviderError as ex:
@@ -258,7 +301,7 @@ def process_one(db: Session, now: datetime | None = None) -> Email | None:
         queue.retry(db, e, error="provider_exception", temporary=True, now=now)
     else:
         queue.acknowledge(db, e, result.provider_message_id)
-    db.commit()
+    db.commit()  # COMMIT#2
     return e
 
 

@@ -103,3 +103,22 @@ Runs të ndërthurura BASE/NEW (worktree i commit-it paraardhës), integriteti 0
 | Lidhja gjatë provider call | idle in transaction | idle in transaction | e pandryshuar (dokumentuar; mat 15 ms me fake) |
 
 Brenda pragut 5%. Kufizime: një makinë, provider `fake`, pa SMTP real.
+
+## Patch i transaksionit të email: para/pas (BASE/NEW të ndërthurura, 5+5, 1200 email/run, provider fake)
+
+| Matje | BASE | NEW | NEW vs BASE |
+|---|---|---|---|
+| Submit email (/s) | 92.2 | 91.0 | −1.2% (mediana +2.5%) |
+| Submit CPU (s) | 8.22 | 8.26 | +0.5% |
+| Worker drain (email/s) | 40.2 | 41.0 | +2.2% (mediana +2.6%) |
+| Worker CPU (s) | 22.2 | 21.7 | −2.1% |
+| SQL submit / process_one / retry / fail / cancel | 10/9/9/9/6 | 10/9/9/9/6 | identik, e njëjta renditje (93 statements) |
+
+Lidhja gjatë provider call (PostgreSQL, 16 workers njëkohësisht, provider që fle 0.3 s):
+
+| | para | pas |
+|---|---|---|
+| Lidhje të pool-it të zëna (pool_size=10, overflow 10) | 16 | **0** |
+| Sesione `idle in transaction` | 16 | **0** |
+
+(Koha e mbajtjes së lidhjes për email në atë test sintetik përfshin konkurrimin e 16 thread-eve për GIL/CPU: 658 → 179 ms mesatarisht; nuk është matje e izoluar.) Brenda pragut 5%.

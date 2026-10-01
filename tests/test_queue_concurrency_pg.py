@@ -239,8 +239,8 @@ def test_concurrent_publish_with_the_same_key_creates_one_item(q, db):  # noqa: 
 
 
 def test_worker_connection_state_during_the_provider_call(q, db):  # noqa: F811
-    """SMS: lidhja është 'idle' (jashtë tx). Email: 'idle in transaction' (tx leximi i hapur para SMTP;
-    pa lock mbi rreshtin). RISK i dokumentuar, jo ndryshim në M2."""
+    """SMS dhe email: asnjë lidhje 'idle in transaction' gjatë provider call (patch-i i transaksionit
+    të email: leximet e domenit/DKIM bëhen para COMMIT#1; më parë email ishte 1) dhe rreshti s'është i kyçur."""
     item = publish(q, db)
     db.commit()
     seen = {}
@@ -266,7 +266,7 @@ def test_worker_connection_state_during_the_provider_call(q, db):  # noqa: F811
     q.install(send)
     q.process(db)
     assert seen["row_locked"] is False
-    assert seen["idle_in_tx"] == (1 if q.name == "email" else 0)
+    assert seen["idle_in_tx"] == 0  # ndryshuar qëllimisht: email ishte 1 para patch-it
 
 
 # ====================================================================================================

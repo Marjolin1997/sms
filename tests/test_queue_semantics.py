@@ -265,10 +265,10 @@ def test_claim_is_committed_before_the_provider_is_called(q, db):
     q.install(send)
     q.process(db)
     assert seen["status"] == q.SENDING and seen["attempts"] == 1
-    # DIVERGENCË: SMS e thërret provider-in jashtë çdo transaksioni; email hap një transaksion leximi
-    # (verified_domain_for + çelësi DKIM) para thirrjes, pra provider-i thirret brenda një tx të hapur
-    # vetëm-lexim, pa lock mbi rreshtin e email-it. RISK: idle_in_transaction gjatë SMTP.
-    assert seen["in_tx"] is (q.name == "email")
+    # NDRYSHUAR NGA PATCH-I I TRANSAKSIONIT TË EMAIL (qëllimisht): më parë email e thërriste provider-in
+    # brenda një tx leximi të hapur (`in_tx is True`); tani leximet e domenit/DKIM bëhen para COMMIT#1
+    # dhe provider-i thirret jashtë çdo transaksioni, si SMS.
+    assert seen["in_tx"] is False
     assert q.get(db, item).status == q.SENT
 
 
