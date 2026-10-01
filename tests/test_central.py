@@ -42,6 +42,24 @@ def enterprise_alembic(url, *args):
     return r
 
 
+def drop_database(admin, name, attempts=8):
+    """DROP DATABASE WITH (FORCE) pa superuser mund të dështojë nëse autovacuum (role postgres) ka
+    sesion të hapur te DB e re ("permission denied to terminate process"): riprovo shkurt."""
+    import time
+
+    from sqlalchemy.exc import ProgrammingError
+
+    for i in range(attempts):
+        try:
+            with admin.connect() as c:
+                c.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+            return
+        except ProgrammingError as e:
+            if "terminate process" not in str(e) or i == attempts - 1:
+                raise
+            time.sleep(0.5)
+
+
 @pytest.fixture(params=["sqlite", "postgres"])
 def make_db(request, tmp_path):
     """Fabrikë DB-sh logjike të veçanta (SQLite: skedarë; PG: databaza të reja)."""
@@ -62,8 +80,7 @@ def make_db(request, tmp_path):
 
     yield make
     for name in created:
-        with admin.connect() as c:
-            c.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+        drop_database(admin, name)
 
 
 def client_for(url):
@@ -134,8 +151,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0002_next.py").write_text(
-        'revision = "0002"\ndown_revision = "0001"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0003_next.py").write_text(
+        'revision = "0003"\ndown_revision = "0002"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -147,14 +164,17 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
 # --- version table, metadata ------------------------------------------------------------------
 
 
-def test_central_uses_its_own_version_table_and_creates_no_business_tables(make_db):
+def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
     url = make_db()
+    assert VERSION_TABLE == "central_alembic_version"
+    central_alembic(url, "upgrade", "0001")  # baseline: vetëm version table
+    assert set(inspect(create_engine(url)).get_table_names()) == {"central_alembic_version"}
     central_alembic(url, "upgrade", "head")
     tables = set(inspect(create_engine(url)).get_table_names())
-    assert tables == {"central_alembic_version"} and VERSION_TABLE == "central_alembic_version"
+    assert tables == {"central_alembic_version", "enterprises"}
+    assert not any(t.startswith("sms_") for t in tables)
     central_alembic(url, "downgrade", "base")
     central_alembic(url, "upgrade", "head")  # up/down/up
-    assert set(inspect(create_engine(url)).get_table_names()) == {"central_alembic_version"}
 
 
 def test_central_metadata_is_independent_from_enterprise_metadata():
@@ -162,7 +182,9 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
     from app.core.db import Base as EnterpriseBase
 
     assert Base is not EnterpriseBase and Base.metadata is not EnterpriseBase.metadata
-    assert not Base.metadata.tables  # M4-a: asnjë tabelë biznesi
+    assert set(Base.metadata.tables) == {"enterprises"}  # M4-b: vetëm regjistri
+    assert "enterprises" not in EnterpriseBase.metadata.tables
+    assert "sms_enterprises" not in Base.metadata.tables
     assert not set(Base.metadata.tables) & set(EnterpriseBase.metadata.tables)
     assert not any(t.startswith("sms_") for t in Base.metadata.tables)
 
@@ -178,7 +200,10 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
     ent, cen = create_engine(ent_url), create_engine(cen_url)
     ent_tables = set(inspect(ent).get_table_names())
     assert "sms_alembic_version" in ent_tables and "central_alembic_version" not in ent_tables
-    assert set(inspect(cen).get_table_names()) == {"central_alembic_version"}  # vetëm Central
+    assert set(inspect(cen).get_table_names()) == {"central_alembic_version", "enterprises"}
+    assert "enterprises" not in ent_tables and not any(
+        t.startswith("sms_") for t in inspect(cen).get_table_names()
+    )
     ent_rev = text("select version_num from sms_alembic_version")
     with ent.connect() as c:
         ent_head = c.execute(ent_rev).scalar()

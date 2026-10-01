@@ -1,1 +1,5 @@
-"""Modelet ORM të Central (M4-a: asnjë tabelë biznesi). Importet e modeleve regjistrohen këtu."""
+"""Modelet ORM të Central. Importet e modeleve regjistrohen këtu në `Base.metadata`."""
+
+from apps.central.models.enterprise import Enterprise, EnterpriseStatus
+
+__all__ = ["Enterprise", "EnterpriseStatus"]
