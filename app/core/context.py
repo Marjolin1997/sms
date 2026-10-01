@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from app.models import enterprise_registry as registry
+
 
 class TenantUnresolved(Exception):
     """Ky owner_ref nuk ka identitet Enterprise (mungon ose është anomali): asnjë qasje tenant."""
@@ -49,9 +51,7 @@ class SystemContext:
 def for_owner(db: Session, owner_ref: str, *, create: bool = False, origin: str = "staff"):
     """TenantContext për një `owner_ref` të dhënë shprehimisht (staf, worker legacy, skripte).
     `create=False`: vetëm lexim i regjistrit; `create=True`: krijon Enterprise-in nëse mungon."""
-    from app.services import enterprises
-
-    eid = enterprises.resolve_id(db, owner_ref) if create else enterprises.lookup_id(db, owner_ref)
+    eid = registry.resolve_id(db, owner_ref) if create else registry.lookup_id(db, owner_ref)
     if eid is None:
         raise TenantUnresolved(f"no enterprise identity for owner_ref {owner_ref!r}")
     return TenantContext(eid, owner_ref, origin)

@@ -113,7 +113,7 @@ def probe_worker(keys, n=200):
     )
     owner = keys[1][0]
     calls = Counter()
-    import app.services.enterprises as ent
+    import app.models.enterprise_registry as ent
 
     real = ent.resolve_id
 

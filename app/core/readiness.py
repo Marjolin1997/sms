@@ -33,7 +33,7 @@ def _unbackfilled(db) -> str | None:
     import time
 
     from app.core.config import settings
-    from app.services.enterprises import LEGACY_OWNER_TABLES
+    from app.models.enterprise_registry import LEGACY_OWNER_TABLES
 
     global _backfill_cache
     if settings.tenant_scoping != "enterprise":

@@ -2,7 +2,7 @@
 
 Një listener `before_flush` mbi çdo Session: për çdo objekt të ri (ose me `owner_ref` të ndryshuar)
 të një modeli `TenantOwned`, `enterprise_id` përcaktohet nga `owner_ref` përmes një resolveri të
-vetëm (`enterprises.resolve_id`). Shërbimet NUK shkruajnë `enterprise_id` vetë. Invariant në shkrim:
+vetëm (`models.enterprise_registry.resolve_id`). Shërbimet NUK shkruajnë `enterprise_id` vetë. Invariant në shkrim:
 nëse `enterprise_id` jepet eksplicitisht, duhet të përputhet me `owner_ref` (përndryshe TenantMismatch:
 gabim programimi, jo anomali e të dhënave).
 
@@ -14,6 +14,7 @@ from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models import enterprise_registry as registry
 from app.models.tenant import TenantOwned
 
 
@@ -22,14 +23,12 @@ class TenantMismatch(RuntimeError):
 
 
 def _apply(session: Session, obj: TenantOwned, *, only_if_changed: bool) -> None:
-    from app.services import enterprises
-
     owner = obj.owner_ref
     if owner is None:
         return  # p.sh. çelës stafi: pa tenant
     if only_if_changed and not inspect(obj).attrs.owner_ref.history.has_changes():
         return
-    resolved = enterprises.resolve_id(session, owner)
+    resolved = registry.resolve_id(session, owner)
     explicit = obj.enterprise_id
     if resolved is None:
         if settings.enterprise_dual_write_strict:
