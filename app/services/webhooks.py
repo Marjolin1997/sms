@@ -5,7 +5,7 @@ import hmac
 import json
 import secrets
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import func, select
@@ -24,12 +24,15 @@ from app.models.events import (
 )
 from app.services import events, net_guard
 from app.services.wallet import Conflict, NotFound, WalletError
+from app.services.webhook_queue import (  # noqa: F401  (ri-eksportuar: konstantet e kontratës)
+    DISABLE_AFTER,
+    LEASE_SECONDS,
+    MAX_ATTEMPTS,
+    RETRY_DELAYS,
+    queue,
+)
 
 MAX_ENDPOINTS = 10
-RETRY_DELAYS = [30, 120, 600, 1800, 7200, 21600, 43200]  # sekonda; 8 përpjekje gjithsej
-MAX_ATTEMPTS = len(RETRY_DELAYS) + 1
-LEASE_SECONDS = 120  # nëse worker-i vdes gjatë dërgimit, delivery ripërpiqet pas kësaj
-DISABLE_AFTER = 5  # delivery të shterura radhazi → endpoint çaktivizohet
 
 
 class InvalidWebhook(WalletError):
@@ -130,19 +133,12 @@ def send_test(db: Session, owner: Owner, endpoint_id: int) -> Event:
 
 
 def redeliver(db: Session, owner: Owner, delivery_id: int) -> WebhookDelivery:
-    d = db.scalar(
-        select(WebhookDelivery)
-        .join(WebhookEndpoint, WebhookEndpoint.id == WebhookDelivery.endpoint_id)
-        .where(WebhookDelivery.id == delivery_id, owned(WebhookEndpoint, owner))
-        .with_for_update(of=WebhookDelivery)
-    )
+    d = queue.lock(db, delivery_id, where=owned(WebhookEndpoint, owner))
     if d is None:
         raise NotFound("delivery not found")
     if d.status == DeliveryStatus.PENDING:
         raise Conflict("delivery is still pending")
-    d.status, d.attempts, d.next_attempt_at = DeliveryStatus.PENDING, 0, datetime.now(UTC)
-    d.last_error = None
-    db.flush()
+    queue.replay(db, d, now=datetime.now(UTC))
     return d
 
 
@@ -199,22 +195,9 @@ def deliver_next(db: Session, now: datetime | None = None) -> WebhookDelivery | 
     """Merr një delivery të gatshme, dërgon, regjistron rezultatin. Commit para HTTP: një crash
     lë delivery-n me lease dhe ripërpiqet pas LEASE_SECONDS (dërgim të paktën një herë)."""
     now = as_utc(now or datetime.now(UTC))
-    d = db.scalar(
-        select(WebhookDelivery)
-        .join(WebhookEndpoint, WebhookEndpoint.id == WebhookDelivery.endpoint_id)
-        .where(
-            WebhookDelivery.status == DeliveryStatus.PENDING,
-            WebhookDelivery.next_attempt_at <= now,
-            WebhookEndpoint.status == EndpointStatus.ACTIVE,
-        )
-        .order_by(WebhookDelivery.next_attempt_at, WebhookDelivery.id)
-        .limit(1)
-        .with_for_update(of=WebhookDelivery, skip_locked=True)
-    )
+    d = queue.reserve(db, now)
     if d is None:
         return None
-    d.attempts += 1
-    d.next_attempt_at = now + timedelta(seconds=LEASE_SECONDS)
     ep = db.get(WebhookEndpoint, d.endpoint_id)
     ev = db.get(Event, d.event_id)
     url, secret, body = ep.url, crypto.decrypt(ep.secret_enc).decode(), envelope(ev)
@@ -242,23 +225,13 @@ def deliver_next(db: Session, now: datetime | None = None) -> WebhookDelivery | 
     except httpx.HTTPError as e:
         error = f"network:{type(e).__name__}"
 
-    d = db.get(WebhookDelivery, delivery_id, with_for_update=True)
-    ep = db.get(WebhookEndpoint, d.endpoint_id, with_for_update=True)
+    d = queue.lock(db, delivery_id)
+    # kyç edhe endpoint-in: numëruesit e dështimeve ndryshohen nga hooks
+    db.get(WebhookEndpoint, d.endpoint_id, with_for_update=True)
     d.last_status_code, d.last_error = code, error
     if error is None:
-        d.status, d.delivered_at = DeliveryStatus.SUCCEEDED, now
-        ep.consecutive_failures = 0
-    elif permanent or d.attempts >= MAX_ATTEMPTS:
-        d.status = DeliveryStatus.FAILED
-        ep.consecutive_failures += 1
-        if permanent or ep.consecutive_failures >= DISABLE_AFTER:
-            ep.status = EndpointStatus.DISABLED
-            ep.disabled_reason = (
-                "gone"
-                if code == 410
-                else ("unsafe_url" if error.startswith("unsafe") else "too_many_failures")
-            )
+        queue.complete(db, d, now)
     else:
-        d.next_attempt_at = now + timedelta(seconds=RETRY_DELAYS[d.attempts - 1])
+        queue.retry(db, d, now=now, permanent=permanent)
     db.commit()
     return d

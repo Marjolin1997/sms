@@ -136,3 +136,55 @@ sesione `idle in transaction` 16 → **0**. Pa SQL midis COMMIT#1 dhe kthimit t�
   ngjarje `sent`; **dërgimi mund të ketë ndodhur**. Testuar (`..._REMAINING_RISK`): rreshti mbetet SENDING, attempts=1 dhe
   `process_one` nuk e merr më kurrë vetvetiu. Provider-i deduplikon vetëm me `Message-ID` (s'është provuar me provider real).
 - Email nuk ka raportim të ngecurish (`stuck_sending` vetëm për SMS). Lease/auto-recovery janë çështje e veçantë.
+
+## M2-d: `DeliveryQueue` + `PostgresDeliveryQueue` (webhook deliveries; kontratë e veçantë nga `DispatchQueue`)
+Webhook mbetet **at-least-once me lease**; `DispatchQueue` (status SENDING, at-most-once për crash) nuk ripërdoret.
+
+**Kontrata** (`app/queue/delivery.py`; implementimi `PostgresDeliveryQueue` te `app/queue/postgres.py`):
+```python
+DeliverySpec(model, base: () -> Select, eligible: (now) -> predicate, attempts, next_attempt_at, id,
+             lease_s=120, retry_delays_s=(30,120,600,1800,7200,21600,43200))   # max_attempts = len+1 = 8
+DeliveryHooks:  completed(db, item, now) · failed(db, item, outcome) · replayed(db, item)
+DeliveryQueue:  publish(db, items)                      # vetëm db.add: pa flush, pa commit
+                reserve(db, now) -> item | None         # eligible+due, ORDER BY next_attempt_at,id, LIMIT 1,
+                                                        # FOR UPDATE OF <model> SKIP LOCKED; attempts+1; next=now+lease_s
+                lock(db, id, *, where=None) -> item     # FOR UPDATE (pret): db.get, ose SELECT bazë + predikat domain
+                complete(db, item, now)                 # hooks.completed
+                retry(db, item, *, now, permanent)      # permanent→FAILED; attempts>=max→EXHAUSTED; përndryshe next=now+delays[attempts-1]
+                fail(db, item, outcome)                 # hooks.failed
+                replay(db, item, *, now)                # attempts=0, next=now, hooks.replayed, flush
+```
+`DeliveryOutcome`: `RETRIED`, `FAILED` (i përhershëm), `EXHAUSTED`. Adapteri **nuk** bën commit/rollback, nuk importon
+HTTP/domain (provuar me AST + kërkim fjalësh) dhe nuk njeh payload, nënshkrim, endpoint ose ngjarje.
+
+**Domain (te `webhooks.py` / `webhook_queue.py`):** ndërtimi i kërkesës HTTP, nënshkrimi, `X-SMS-*`, interpretimi i
+rezultatit (2xx / non-2xx / 410 / `UnsafeUrl` / `HTTPError`), `last_status_code`/`last_error`. Hooks:
+`completed` → `SUCCEEDED`, `delivered_at`, `consecutive_failures=0`; `failed` → `FAILED`, `consecutive_failures+1`,
+dhe disable (`gone` për 410, `unsafe_url`, `too_many_failures` pas `DISABLE_AFTER=5`); `replayed` → `PENDING`,
+`last_error=None`. `webhook_queue.py` ekziston që `events` ↔ `webhooks` të mos formojnë cikël importesh.
+
+**Çfarë ka dalë nga service:** SELECT-i `JOIN endpoint … FOR UPDATE OF delivery SKIP LOCKED` (te `deliver_next`), `attempts+=1`,
+vendosja e lease-it, zgjedhja e vonesës së retry (`RETRY_DELAYS[attempts-1]`), kontrolli i `MAX_ATTEMPTS`, SELECT-i i
+`redeliver` (me JOIN dhe `owned(...)`), rivendosja e `attempts/next_attempt_at`, dhe `db.add(WebhookDelivery)` te `emit`.
+
+**Outbox transaksional (i pandryshuar):** `events.emit` bën `Event` + flush + `queue.publish(deliveries)` brenda transaksionit
+të thirrësit; `publish` vetëm `db.add`. Rollback → asnjë Event, asnjë delivery (testuar). Endpoint jo-aktiv nuk merr delivery.
+
+**Flow i `deliver_next` (i pandryshuar):**
+```
+reserve (lease+attempts, SKIP LOCKED) + lexim endpoint/event → COMMIT → [HTTP: pa tx, pa lock, pa SQL, pa lidhje pool]
+→ lock(delivery) + lock(endpoint) → complete | retry(permanent) → COMMIT
+```
+Testuar: pa SQL midis COMMIT dhe kthimit të HTTP, `db.in_transaction()` False, `pool.checkedout()` 0, `pg_stat_activity` pa
+`idle in transaction`, dhe `FOR UPDATE NOWAIT` mbi rreshtat e delivery/endpoint kalon gjatë HTTP (asnjë lock i mbajtur).
+
+**Semantika që ruhet:** lease 120 s; `attempts` rritet vetëm në reserve; endpoint ACTIVE i detyrueshëm; retry 30/120/600/1800/7200/21600/43200
+(listë eksplicite, 8 përpjekje); i njëjti `X-SMS-Delivery-Id` në retry dhe replay (replay rivendos të njëjtin rresht,
+nuk krijon të ri); replay refuzon PENDING dhe tenant tjetër; replay **nuk** riaktivizon endpoint-in e çaktivizuar.
+
+**Dritaret e dështimit (at-least-once; pa exactly-once):**
+- **A)** lease i commit-uar → procesi vdes para HTTP → lease skadon pas 120 s → delivery riprovohet (pa dërgim të humbur).
+- **B)** pranuesi e merr webhook-un → procesi vdes para finalize (ose COMMIT final dështon) → lease skadon → **dublikim i mundshëm**
+  me të njëjtin `X-SMS-Delivery-Id`; pranuesi është përgjegjës për dedup. `attempts` shtohet në çdo reserve, pra një crash
+  shpenzon një përpjekje.
+- Timeout/network error: pranuesi mund ta ketë përpunuar; trajtohet si i përkohshëm dhe riprovohet.

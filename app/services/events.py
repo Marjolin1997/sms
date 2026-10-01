@@ -14,6 +14,7 @@ from app.models.events import (
     WebhookDelivery,
     WebhookEndpoint,
 )
+from app.services.webhook_queue import queue
 
 KNOWN_TYPES = {
     "message.sent", "message.delivered", "message.failed",
@@ -72,7 +73,9 @@ def emit(
         q = q.where(WebhookEndpoint.id == only_endpoint_id)
     for ep in db.scalars(q):
         if only_endpoint_id is not None or matches(ep.event_types, type_):
-            db.add(WebhookDelivery(endpoint_id=ep.id, event_id=ev.id, next_attempt_at=now))
+            queue.publish(
+                db, [WebhookDelivery(endpoint_id=ep.id, event_id=ev.id, next_attempt_at=now)]
+            )
     return ev
 
 

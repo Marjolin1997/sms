@@ -122,3 +122,16 @@ Lidhja gjatë provider call (PostgreSQL, 16 workers njëkohësisht, provider që
 | Sesione `idle in transaction` | 16 | **0** |
 
 (Koha e mbajtjes së lidhjes për email në atë test sintetik përfshin konkurrimin e 16 thread-eve për GIL/CPU: 658 → 179 ms mesatarisht; nuk është matje e izoluar.) Brenda pragut 5%.
+
+## M2-d: `DeliveryQueue` për webhook: para/pas (BASE/NEW të ndërthurura, 5+5, 2000 event → 4000 deliveries/run, HTTP fake)
+
+| Matje | BASE | NEW | NEW vs BASE |
+|---|---|---|---|
+| Publish event (/s; 1 event + 2 deliveries, commit për event) | 173.3 | 171.5 | −1.1% (mediana +1.5%) |
+| Publish CPU (s) | 7.10 | 7.18 | +1.2% |
+| Delivery drain (/s, sesion i ri për cikël) | 86.1 | 88.0 | +2.3% (mediana +3.8%) |
+| Drain CPU (s) | 26.4 | 26.3 | −0.7% |
+| SQL emit / deliver ok / retry / fail 410 / replay | 4 / 7 / 7 / 8 / 2 | 4 / 7 / 7 / 8 / 2 | identik (37 statements, teksti identik) |
+| Gjatë HTTP (16 workers njëkohësisht): lidhje pool / idle in tx / lock rreshti | 0 / 0 / asnjë | 0 / 0 / asnjë | e pandryshuar (webhook s'kishte problemin e email) |
+
+Brenda pragut 5%. Kufizime: një makinë, HTTP fake (MockTransport).

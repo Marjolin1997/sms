@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import and_, select
 
+from app.queue.delivery import DeliveryHooks, DeliveryOutcome, DeliverySpec
 from app.queue.dispatch import DispatchHooks, DispatchSpec, Outcome
 
 
@@ -66,3 +67,65 @@ class PostgresDispatchQueue:
             return False
         self.hooks.failed(db, item, reason)
         return True
+
+
+class PostgresDeliveryQueue:
+    """Implementimi PostgreSQL i `DeliveryQueue`: lease me `next_attempt_at`, `FOR UPDATE OF <model>
+    SKIP LOCKED`. Nuk bën kurrë commit/rollback; caller commit-on lease-in para punës së jashtme."""
+
+    def __init__(self, spec: DeliverySpec, hooks: DeliveryHooks) -> None:
+        self.spec, self.hooks = spec, hooks
+
+    def publish(self, db, items) -> None:
+        for item in items:
+            db.add(item)  # pa flush: rreshtat dalin me transaksionin e biznesit
+
+    def reserve(self, db, now: datetime):
+        s = self.spec
+        item = db.scalar(
+            s.base()
+            .where(s.eligible(now))
+            .order_by(s.next_attempt_at, s.id)
+            .limit(1)
+            .with_for_update(of=s.model, skip_locked=True)
+        )
+        if item is None:
+            return None
+        setattr(item, s.attempts.key, getattr(item, s.attempts.key) + 1)
+        setattr(item, s.next_attempt_at.key, now + timedelta(seconds=s.lease_s))
+        return item
+
+    def lock(self, db, item_id: int, *, where=None):
+        """FOR UPDATE (pret, jo SKIP LOCKED). Pa `where`: sipas çelësit primar; me `where`: SELECT-i
+        bazë me predikatin shtesë të domain-it (p.sh. izolimi i tenant-it)."""
+        s = self.spec
+        if where is None:
+            return db.get(s.model, item_id, with_for_update=True)
+        return db.scalar(s.base().where(s.id == item_id, where).with_for_update(of=s.model))
+
+    def complete(self, db, item, now: datetime) -> None:
+        self.hooks.completed(db, item, now)
+
+    def retry(self, db, item, *, now: datetime, permanent: bool) -> DeliveryOutcome:
+        s = self.spec
+        attempts = getattr(item, s.attempts.key)
+        if permanent:
+            self.hooks.failed(db, item, DeliveryOutcome.FAILED)
+            return DeliveryOutcome.FAILED
+        if attempts >= s.max_attempts:
+            self.hooks.failed(db, item, DeliveryOutcome.EXHAUSTED)
+            return DeliveryOutcome.EXHAUSTED
+        delay = s.retry_delays_s[attempts - 1]
+        setattr(item, s.next_attempt_at.key, now + timedelta(seconds=delay))
+        return DeliveryOutcome.RETRIED
+
+    def fail(self, db, item, outcome: DeliveryOutcome) -> None:
+        self.hooks.failed(db, item, outcome)
+
+    def replay(self, db, item, *, now: datetime) -> None:
+        """Kthen të njëjtin element (identiteti i ruajtur) në pritje: attempts=0, due tani."""
+        s = self.spec
+        setattr(item, s.attempts.key, 0)
+        setattr(item, s.next_attempt_at.key, now)
+        self.hooks.replayed(db, item)
+        db.flush()
