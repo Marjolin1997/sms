@@ -92,20 +92,38 @@ Paketa `app/queue/` (nuk importon asgjë nga `app.models/services/providers/api`
 - **Provë ekuivalence:** 100 SQL statement (submit + process_one + retry) në PostgreSQL, teksti i normalizuar,
   identik para/pas (diff bosh); numri: submit 21, process_one 8, retry 8.
 
-## Risku i njohur, i pandryshuar: email thërret SMTP brenda transaksioni leximi të hapur
-**Shkaku:** `emails.process_one` bën COMMIT#1 (claim), por para `provider.send` thërret
-`email_domains.verified_domain_for(db, …)` dhe `decrypt_private_key(domain)`, që ekzekutojnë SELECT në të
-njëjtin `Session`. SQLAlchemy autobegin hap transaksion të ri, që mbetet i hapur gjatë ndërtimit të MIME/DKIM
-dhe gjatë SMTP, deri te COMMIT#2. SMS s'ka thirrje DB midis COMMIT#1 dhe provider-it, prandaj është `idle`.
-**Ndikimi:**
-1. `idle_in_transaction_session_timeout` (`db_idle_tx_timeout_ms`=60 s në `make_engine`): SMTP me
-   STARTTLS+AUTH+DATA, me `timeout=15s` **për operacion**, mund ta kalojë 60 s; PostgreSQL e vret sesionin,
-   COMMIT#2 dështon (OperationalError) dhe email-i mbetet `SENDING` ndërsa mund të jetë dërguar. Kjo
-   është dritare e re për SENDING të ngecur (rikuperim manual; s'ka raportim për email).
-2. Një lidhje e pool-it (`db_pool_size`=10) mbahet e zënë gjatë gjithë SMTP-së (SMS e lëshon).
-   Me shumë workers/provider të ngadaltë kjo ul kapacitetin e pool-it dhe mban snapshot të hapur (vacuum).
-3. Nuk mban lock rreshti (provuar me `FOR UPDATE NOWAIT`).
-**Rekomandim (patch i veçantë, jo në M2):** lexo domenin/çelësin DKIM **para** COMMIT#1, ose bëj
-`db.commit()` para `provider.send`, me test që `pg_stat_activity.state='idle'` gjatë SMTP dhe benchmark të vetin.
-Testi `test_worker_connection_state_during_the_provider_call` e dokumenton sjelljen e sotme (email=1
-`idle in transaction`, SMS=0) dhe do të kthehet në `0` kur të rregullohet.
+## M2-c: email përmes të njëjtit `PostgresDispatchQueue`
+- `emails.queue = PostgresDispatchQueue(DispatchSpec(Email, pending=status==QUEUED, attempts, next_attempt_at,
+  id, backoff_s=30, max_attempts=5), _EmailHooks())`: i njëjti adapter dhe e njëjta klasë si SMS (provuar nga test).
+- `_EmailHooks`: `reserved` → `_move(SENDING)`; `requeued` → `error_code` + `_move(QUEUED, "retry:<code>")`;
+  `sent` → `provider_message_id` + `_move(SENT)`; `failed` → `_fail` (`_move(FAILED)` + `error_code`). `_move` mbetet
+  burimi i vetëm. Nuk ka efekt parash (divergjencë e vërtetë nga SMS: hook-u `failed` s'ka wallet).
+- Hequr nga `emails.py`: `SELECT … FOR UPDATE SKIP LOCKED` te `claim_next` dhe `cancel_if_queued`, `attempts += 1`,
+  llogaritja e backoff, kontrolli i `MAX_ATTEMPTS` (`_after_error`). `claim_next`/`cancel_if_queued` mbeten funksione publike.
+- **Transaksioni i `process_one` NUK ndryshoi:** claim → COMMIT#1 → `verified_domain_for`/DKIM/MIME/SMTP → ack|retry|fail → COMMIT#2.
+- Provë ekuivalence (PostgreSQL, 93 statement, teksti i normalizuar identik para/pas): submit 10, process_one 9,
+  retry 9, fail i përhershëm 9, cancel 6 SQL.
+
+## Email provider transaction risk (i pandryshuar; patch i veçantë i rekomanduar)
+**Pse bëhet `idle in transaction`.** `emails.process_one` bën COMMIT#1 pas claim-it. Menjëherë pas tij,
+`email_domains.verified_domain_for(db, …)` dhe `decrypt_private_key(domain)` ekzekutojnë SELECT në të njëjtin
+`Session`; SQLAlchemy bën autobegin dhe transaksioni i ri qëndron i hapur gjatë ndërtimit të MIME, nënshkrimit DKIM
+dhe thirrjes SMTP, deri te COMMIT#2. SMS s'ka thirrje DB midis COMMIT#1 dhe provider-it, prandaj lidhja është `idle`.
+**Sa gjatë mbahet lidhja.** Matur me provider `fake` (DB + MIME + DKIM): mesatarisht 15 ms (max 24 ms). Me SMTP real
+shtohet koha e rrjetit; kodi e kufizon vetëm për operacion (`timeout=15s` për connect, STARTTLS, AUTH, DATA), pra
+në rast të ngadaltë kufiri teorik është shumë më i madh se 60 s.
+**`idle_in_transaction_session_timeout`.** `make_engine` e vendos `db_idle_tx_timeout_ms=60000`. Nëse SMTP e kalon
+60 s, PostgreSQL e mbyll sesionin; COMMIT#2 dështon me `OperationalError`.
+**Dritarja e dështimit.** Email-i është dërguar nga provider-i, por COMMIT#2 dështon (timeout, lidhje e mbyllur,
+crash): statusi mbetet `SENDING` (COMMIT#1 e ka bërë të qëndrueshëm), pa `provider_message_id`, pa ngjarje `sent`.
+Nuk ka lease/auto-recovery dhe për email nuk ka as raportim të ngecurish (`stuck_sending` ekziston vetëm për SMS).
+Rikuperimi është manual dhe provider-i deduplikon vetëm me `Message-ID` (nuk është provuar kundër provider-it real).
+**Ndikimi në pool.** Gjatë gjithë SMTP-së një lidhje nga pool-i (`db_pool_size`=10) mbahet e zënë (SMS e lëshon pas
+COMMIT#1) dhe mban snapshot të hapur (vacuum). Me N workers email dhe provider të ngadaltë, kapaciteti i pool-it
+ulet; nuk mban lock rreshti (provuar me `FOR UPDATE NOWAIT`).
+**Patch minimal i rekomanduar (NUK implementohet këtu).** Lexo domenin dhe çelësin DKIM **para** COMMIT#1 (brenda
+të njëjtit transaksion të claim-it), ose, minimalisht, `db.commit()` pas leximit dhe para `provider.send`, që
+SMTP të ekzekutohet pa transaksion të hapur. Pas rregullimit, testi i karakterizimit
+`test_worker_connection_state_during_the_provider_call` duhet të kthehet nga `idle in transaction`=1 në 0 dhe
+`test_claim_is_committed_before_the_provider_is_called` nga `in_tx is True` në `False` për email.
+Benchmark i veçantë dhe test që një dështim i COMMIT#2 s'e lë email-in të ngecur pa raportim.

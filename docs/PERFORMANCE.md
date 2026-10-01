@@ -89,3 +89,17 @@ Një A/B i parë 3+3 dha A2 −7.7% (brenda 5–10%): u analizua me 10 runs të 
 | SQL: submit+commit / process_one / retry | 21 / 8 / 8 | 21 / 8 / 8 | identik (100 statements, teksti i normalizuar identik) |
 
 Runs të ndërthurura BASE/NEW (worktree i commit-it paraardhës), integriteti 0 probleme. Brenda pragut 5%.
+
+
+## M2-c: email përmes `DispatchQueue`: para/pas (BASE/NEW të ndërthurura, 5+5, 1200 email/run, provider fake)
+
+| Matje | BASE | NEW | NEW vs BASE |
+|---|---|---|---|
+| Submit email (/s, një commit për email) | 96.5 | 94.5 | −2.1% (mediana −1.4%) |
+| Submit CPU (s) | 7.87 | 7.97 | +1.2% |
+| Worker drain (email/s, sesion i ri/cikël, DKIM+MIME reale) | 40.7 | 40.8 | +0.3% (mediana −0.4%) |
+| Worker CPU (s) | 21.8 | 21.7 | −0.6% |
+| SQL submit / process_one / retry / fail / cancel | 10 / 9 / 9 / 9 / 6 | 10 / 9 / 9 / 9 / 6 | identik (93 statements, teksti identik) |
+| Lidhja gjatë provider call | idle in transaction | idle in transaction | e pandryshuar (dokumentuar; mat 15 ms me fake) |
+
+Brenda pragut 5%. Kufizime: një makinë, provider `fake`, pa SMTP real.

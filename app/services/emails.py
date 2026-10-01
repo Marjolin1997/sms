@@ -23,6 +23,8 @@ from app.models.email import (
 )
 from app.providers import ProviderError, get_email_provider
 from app.providers.email import EmailRequest
+from app.queue.dispatch import DispatchSpec
+from app.queue.postgres import PostgresDispatchQueue
 from app.services import consent, email_domains, email_mime, events, switches
 from app.services.wallet import Conflict, NotFound, WalletError
 
@@ -136,8 +138,7 @@ def submit(
                 subject=subject, text_body=text, html_body=html,
                 provider=settings.email_provider, next_attempt_at=now,
             )  # fmt: skip
-            db.add(e)
-            db.flush()
+            queue.publish(db, e)
             db.add(EmailEvent(email_id=e.id, from_status=None, to_status="queued"))
     except IntegrityError:
         again = _find(db, owner, key)
@@ -186,24 +187,44 @@ def unsubscribe(db: Session, token: str) -> Email:
 
 
 def claim_next(db: Session, now: datetime | None = None) -> Email | None:
-    now = as_utc(now or datetime.now(UTC))
-    e = db.scalar(
-        select(Email)
-        .where(Email.status == EmailStatus.QUEUED, Email.next_attempt_at <= now)
-        .order_by(Email.next_attempt_at, Email.id)
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    )
-    if e is None:
-        return None
-    _move(db, e, EmailStatus.SENDING)
-    e.attempts += 1
-    return e
+    return queue.reserve(db, as_utc(now or datetime.now(UTC)))
 
 
 def _fail(db: Session, e: Email, code: str) -> None:
     _move(db, e, EmailStatus.FAILED, code)
     e.error_code = code
+
+
+class _EmailHooks:
+    """Tranzicionet e email: `_move` mbetet burimi i vetëm i state machine-it."""
+
+    def reserved(self, db, e: Email) -> None:
+        _move(db, e, EmailStatus.SENDING)
+
+    def requeued(self, db, e: Email, error: str) -> None:
+        e.error_code = error
+        _move(db, e, EmailStatus.QUEUED, f"retry:{error}")
+
+    def sent(self, db, e: Email, provider_ref: str) -> None:
+        e.provider_message_id = provider_ref
+        _move(db, e, EmailStatus.SENT, provider_ref)
+
+    def failed(self, db, e: Email, reason: str) -> None:
+        _fail(db, e, reason)
+
+
+queue = PostgresDispatchQueue(
+    DispatchSpec(
+        model=Email,
+        pending=Email.status == EmailStatus.QUEUED,
+        attempts=Email.attempts,
+        next_attempt_at=Email.next_attempt_at,
+        id=Email.id,
+        backoff_s=BACKOFF_SECONDS,
+        max_attempts=MAX_ATTEMPTS,
+    ),
+    _EmailHooks(),
+)
 
 
 def process_one(db: Session, now: datetime | None = None) -> Email | None:
@@ -230,25 +251,15 @@ def process_one(db: Session, now: datetime | None = None) -> Email | None:
         req = EmailRequest(e.public_id, msg_id, e.from_email, e.to_email, raw)
         result = get_email_provider(e.provider).send(req)
     except email_mime.UnsafeHeader:
-        _after_error(db, e, "unsafe_header", False, now)
+        queue.retry(db, e, error="unsafe_header", temporary=False, now=now)
     except ProviderError as ex:
-        _after_error(db, e, ex.code, ex.temporary, now)
+        queue.retry(db, e, error=ex.code, temporary=ex.temporary, now=now)
     except Exception:  # rezultat i panjohur; provider-i deduplikon me Message-ID
-        _after_error(db, e, "provider_exception", True, now)
+        queue.retry(db, e, error="provider_exception", temporary=True, now=now)
     else:
-        e.provider_message_id = result.provider_message_id
-        _move(db, e, EmailStatus.SENT, result.provider_message_id)
+        queue.acknowledge(db, e, result.provider_message_id)
     db.commit()
     return e
-
-
-def _after_error(db: Session, e: Email, code: str, temporary: bool, now: datetime) -> None:
-    if temporary and e.attempts < MAX_ATTEMPTS:
-        e.next_attempt_at = now + timedelta(seconds=BACKOFF_SECONDS * 2 ** (e.attempts - 1))
-        e.error_code = code
-        _move(db, e, EmailStatus.QUEUED, f"retry:{code}")
-    else:
-        _fail(db, e, code)
 
 
 # --- Events nga provider-i --------------------------------------------------------------
@@ -291,12 +302,4 @@ def apply_event(
 
 def cancel_if_queued(db: Session, email_id: int) -> bool:
     """Anulon një email që worker-i s'e ka marrë ende (SKIP LOCKED)."""
-    e = db.scalar(
-        select(Email)
-        .where(Email.id == email_id, Email.status == EmailStatus.QUEUED)
-        .with_for_update(skip_locked=True)
-    )
-    if e is None:
-        return False
-    _fail(db, e, "campaign_cancelled")
-    return True
+    return queue.cancel_if_pending(db, email_id, reason="campaign_cancelled")

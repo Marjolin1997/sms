@@ -194,3 +194,75 @@ def test_sql_statement_count_of_the_hot_path_is_unchanged(db, world):  # noqa: F
         assert (submit_n, process_n) == (21, 8)
     else:  # SQLite: numra të tjerë (pa SELECT FOR UPDATE / savepoint si PG), por të ngurtë
         assert submit_n > 0 and process_n > 0
+
+
+# --- M2-c: email përmes të njëjtit adapter ---------------------------------------------------------------
+
+from app.models.email import DomainStatus, Email, EmailDomain, EmailStatus  # noqa: E402
+from app.services import emails  # noqa: E402
+from tests.test_email import FROM, fake_dns, fake_email_provider, verified  # noqa: E402, F401
+
+
+def test_email_uses_the_same_adapter_class_as_sms():
+    assert type(emails.queue) is type(msgsvc.queue) is PostgresDispatchQueue
+    spec = emails.queue.spec
+    assert (spec.model, spec.backoff_s, spec.max_attempts) == (Email, 30, 5)
+    assert spec.pending.compare(Email.status == EmailStatus.QUEUED)
+
+
+def test_email_hooks_are_the_only_place_that_knows_email_statuses():
+    text = (Path(__file__).resolve().parents[1] / "app" / "queue" / "postgres.py").read_text()
+    assert "Email" not in text and "SMTP" not in text and "DKIM" not in text
+
+
+def test_email_domain_unverified_after_publish_is_a_permanent_failure(db, world, verified):  # noqa: F811
+    e = emails.submit(db, "c1", "k", FROM, "ana@customer.org", subject="s", text="t")
+    db.commit()
+    db.execute(EmailDomain.__table__.update().values(status=DomainStatus.PENDING))
+    db.commit()
+    got = emails.process_one(db, T0 + timedelta(days=1))
+    assert got.id == e.id and got.status == EmailStatus.FAILED and got.attempts == 1
+    assert got.error_code == "domain_unverified"
+    assert emails.process_one(db, T0 + timedelta(days=30)) is None
+
+
+def test_email_sql_statement_counts_of_the_hot_path_are_unchanged(db, world, verified):  # noqa: F811
+    """Para M2-c (kodi i mëparshëm, PostgreSQL): submit 10, process_one 9, retry 9, cancel 6 SQL."""
+    n = {"n": 0}
+
+    def count(*a):
+        n["n"] += 1
+
+    def measure(fn):
+        n["n"] = 0
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            with SessionLocal() as s:
+                out = fn(s)
+                s.commit()
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        return n["n"], out
+
+    def sub(s, key, to="ana@customer.org"):
+        return emails.submit(s, "c1", key, FROM, to, subject="Hello", text="Body")
+
+    with SessionLocal() as s:
+        sub(s, "w0")
+        sub(s, "w1")
+        s.commit()
+    submit_n, _ = measure(lambda s: sub(s, "w2"))
+    process_n, _ = measure(lambda s: emails.process_one(s))
+    with SessionLocal() as s:
+        sub(s, "t", "temp@customer.org")
+        s.commit()
+    retry_n, _ = measure(lambda s: emails.process_one(s, datetime.now(UTC) + timedelta(seconds=60)))
+    with SessionLocal() as s:
+        eid = sub(s, "c").id
+        s.commit()
+    cancel_n, ok = measure(lambda s: emails.cancel_if_queued(s, eid))
+    assert ok is True
+    if db.get_bind().dialect.name == "postgresql":
+        assert (submit_n, process_n, retry_n, cancel_n) == (10, 9, 9, 6)
+    else:
+        assert min(submit_n, process_n, retry_n, cancel_n) > 0
