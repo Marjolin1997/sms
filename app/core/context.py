@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.models import enterprise_registry as registry
+import app.models.enterprise_registry as registry
 
 
 class TenantUnresolved(Exception):
@@ -38,7 +38,7 @@ class TenantContext:
 @dataclass(frozen=True, slots=True)
 class SystemContext:
     """Qasje ndër-tenant e shprehur. Kush e krijon duhet të japë aktorin dhe arsyen; përdorimi mbi
-    resurse sensitive auditohet nga `scope.cross_tenant`."""
+    resurse sensitive auditohet nga `services.audit.cross_tenant`."""
 
     actor: str
     reason: str

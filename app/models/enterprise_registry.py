@@ -3,7 +3,7 @@
 Primitiva e persistencës (SELECT / INSERT … ON CONFLICT DO NOTHING mbi `sms_enterprises`) që
 `core.context` dhe `core.tenancy` e kërkojnë; s'ka logjikë biznesi, auditim apo backfill (ato mbeten
 te `services.enterprises`, që e ri-eksporton këtë modul për përputhshmëri). Varet vetëm nga
-`models.enterprise`/`models.tenant`: asnjë import nga `app.services`.
+`models.enterprise`/`models.tenant`: asnjë import nga shtresa e shërbimeve.
 
 Rregull: `owner_ref` krahasohet saktësisht siç është. Asnjë normalizim, bashkim apo hamendësim."""
 

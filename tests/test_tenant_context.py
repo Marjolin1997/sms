@@ -24,6 +24,7 @@ from app.core.security import Principal, current_principal
 from app.models.admin import AuditLog
 from app.models.contacts import Contact
 from app.models.enterprise import Enterprise
+from app.services import audit as audit_svc
 from app.services import contacts as contacts_svc
 from app.services import enterprises
 from app.services import messages as msgsvc
@@ -140,8 +141,8 @@ def test_legacy_string_path_is_explicit_and_counted(db):
 
 def test_cross_tenant_needs_system_context_and_is_audited(db):
     with pytest.raises(TypeError):
-        scope.cross_tenant(db, for_owner(db, "x", create=True), "messages", "list")  # type: ignore[arg-type]
-    scope.cross_tenant(db, SystemContext("staff:1", "support ticket 42"), "messages", "list")
+        audit_svc.cross_tenant(db, for_owner(db, "x", create=True), "messages", "list")  # type: ignore[arg-type]
+    audit_svc.cross_tenant(db, SystemContext("staff:1", "support ticket 42"), "messages", "list")
     db.commit()
     row = db.scalar(select(AuditLog).where(AuditLog.action == "cross_tenant.list"))
     assert row.actor == "staff:1" and "support ticket 42" in row.detail

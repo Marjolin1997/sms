@@ -13,8 +13,8 @@ SMS_ENTERPRISE_DUAL_WRITE_STRICT=true. Çaktivizohet plotësisht me SMS_ENTERPRI
 from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
 
+import app.models.enterprise_registry as registry
 from app.core.config import settings
-from app.models import enterprise_registry as registry
 from app.models.tenant import TenantOwned
 
 

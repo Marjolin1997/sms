@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.tenant import scoped, system, tenant
-from app.core import scope
 from app.core.db import get_db
 from app.core.errors import DomainError
 from app.core.scope import owned
@@ -25,7 +24,7 @@ from app.services import messages as msg_svc
 from app.services import rates as rates_svc
 from app.services import templates as tpl
 from app.services import wallet as wallets
-from app.services.audit import audit
+from app.services.audit import audit, cross_tenant
 
 router = APIRouter(prefix="/v1")
 _STATUS = {"not_found": 404, "no_rate": 422, "no_route": 422, "account_disabled": 403}
@@ -48,7 +47,7 @@ def _owner_or_all(db: Session, p: Principal, owner_ref: str | None, perm: str, r
         return tenant(db, p, owner_ref)
     if not p.has(perm):
         raise HTTPException(403, {"code": "forbidden", "message": f"missing {perm}"})
-    scope.cross_tenant(db, system(p, f"{resource} review queue"), resource, "list")
+    cross_tenant(db, system(p, f"{resource} review queue"), resource, "list")
     db.commit()
     return None
 
@@ -307,7 +306,7 @@ def pending_topups(
     p: Principal = Depends(require("topup:confirm")),
 ):
     """Radha e financës: top-up-et që presin konfirmim (cash / transfertë). SYSTEM, e audituar."""
-    scope.cross_tenant(db, system(p, "top-up confirmation queue"), "topups", "list")
+    cross_tenant(db, system(p, "top-up confirmation queue"), "topups", "list")
     db.commit()
     rows = db.execute(
         select(Topup, Wallet.owner_ref, Wallet.currency)
@@ -326,7 +325,7 @@ def pending_topups(
 def accounts(db: Session = Depends(get_db), p: Principal = Depends(require("monitor:read"))):
     """Lista e llogarive që stafi të zgjedhë në vend që ta shkruajë owner_ref. SYSTEM: numëron
     tenant-ët sipas dizajnit (ndër-tenant, i audituar)."""
-    scope.cross_tenant(db, system(p, "account directory"), "accounts", "list")
+    cross_tenant(db, system(p, "account directory"), "accounts", "list")
     db.commit()
     owners: set[str] = set()
     for model in (Wallet, AccountPlan, Subscription):

@@ -137,3 +137,31 @@ bazë) pret miratim.
   ende `InvalidAmount`/`money` nga wallet. `api/wallets.py` (module wallet) mbetet i pandryshuar.
 - Fan-in top-level i `services.wallet`: 31 → 8. Cikli lazy me 5 module u hoq plotësisht (`enterprises → wallet` ishte edge-i i vetëm i varur nga gabimet).
 - Guard-et: `tests/test_m3_errors.py` (snapshot i 47 klasave të gabimit, hartëzimi `_STATUS` (10 fjalorë), alias identitet, payload API, AST, zero cikle).
+
+## M3-c — Formalizim i kufijve të shtresave
+
+Shtresimi: `api ↓ services ↓ models ↓ core` (+ `queue` si infrastrukturë). Të zbatuar nga `tests/test_m3_layers.py` (AST).
+
+### Skajet lart-poshtë që u hoqën
+| Nga | Te | Zgjidhje |
+|---|---|---|
+| `core.context` → `services.enterprises` | resolver | `models.enterprise_registry` (`lookup_id`/`resolve_id`) |
+| `core.tenancy` → `services.enterprises` | resolver | i njëjti modul |
+| `core.readiness` → `services.enterprises` | `LEGACY_OWNER_TABLES` | konstanta jeton te `models.enterprise_registry` |
+| `core.scope.cross_tenant` (shkruante audit) | audit | `services.audit.cross_tenant` (një rrugë shkrimi: `_append`) |
+
+`services.enterprises` ri-eksporton emrat e vjetër (kompatibilitet). Nuk ka service locator / container global.
+
+### Devijim nga Protocol-inversioni
+U zgjodh zhvendosja e resolver-it në shtresën `models` (varet vetëm nga `models.enterprise`/`models.tenant`), jo Protocol i injektuar: ~30 call-sites, zero ndryshim sjelljeje, SQL identik (cold=1, warm=0, tenant i ri=3).
+
+### Skaje të mbetura (borxh pronësie/emërtimi)
+- `core.security/tenancy/context/readiness → models.*` (admin, tenant, registry): `core` mbetet "mbi" `models` në kod; ownership për M3-d/M13.
+- `wallet → events` (e njëjta shtresë, pa cikël; lidhje tranzitive `events → webhook_queue`): lihet; port te event-bus → M3-later.
+
+### Audit
+Një kufi shkrimi (`_append`), e njëjta transaksion, dedup 5 min i ruajtur për `cross_tenant`, pa ndryshim skeme.
+
+### Borxh kompatibiliteti (pandryshuar me vendim)
+- `DomainError.code = "wallet_error"` — NUK ndryshohet pa vendim të veçantë për error contract.
+- `TenantContext.owner_ref` mbetet (enterprise_id kanonik, owner_ref compat deri në M13).
