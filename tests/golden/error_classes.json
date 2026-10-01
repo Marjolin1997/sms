@@ -1,0 +1,897 @@
+{
+ "classes": {
+  "app.core.context.TenantUnresolved": {
+   "app_mro": [
+    "TenantUnresolved"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "tenant_unresolved",
+   "module": "app.core.context",
+   "name": "TenantUnresolved",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.core.tenancy.TenantMismatch": {
+   "app_mro": [
+    "TenantMismatch"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.core.tenancy",
+   "name": "TenantMismatch",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.admin.AuditImmutableError": {
+   "app_mro": [
+    "AuditImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.admin",
+   "name": "AuditImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.billing.InvoiceImmutableError": {
+   "app_mro": [
+    "InvoiceImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.billing",
+   "name": "InvoiceImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.contacts.ConsentImmutableError": {
+   "app_mro": [
+    "ConsentImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.contacts",
+   "name": "ConsentImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.email.EmailEventImmutableError": {
+   "app_mro": [
+    "EmailEventImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.email",
+   "name": "EmailEventImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.messaging.TemplateBodyFrozenError": {
+   "app_mro": [
+    "TemplateBodyFrozenError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.messaging",
+   "name": "TemplateBodyFrozenError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.rates.RateFrozenError": {
+   "app_mro": [
+    "RateFrozenError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.rates",
+   "name": "RateFrozenError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.sending.EventImmutableError": {
+   "app_mro": [
+    "EventImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.sending",
+   "name": "EventImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.wallet.LedgerImmutableError": {
+   "app_mro": [
+    "LedgerImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.wallet",
+   "name": "LedgerImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.providers.base.ProviderError": {
+   "app_mro": [
+    "ProviderError"
+   ],
+   "args": null,
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.providers.base",
+   "name": "ProviderError",
+   "own_init": true,
+   "str": null
+  },
+  "app.services.apikeys.InvalidKey": {
+   "app_mro": [
+    "InvalidKey",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_key",
+   "module": "app.services.apikeys",
+   "name": "InvalidKey",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.billing.InvalidBilling": {
+   "app_mro": [
+    "InvalidBilling",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_billing",
+   "module": "app.services.billing",
+   "name": "InvalidBilling",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.campaigns.InvalidCampaign": {
+   "app_mro": [
+    "InvalidCampaign",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_campaign",
+   "module": "app.services.campaigns",
+   "name": "InvalidCampaign",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.campaigns._BudgetExhausted": {
+   "app_mro": [
+    "_BudgetExhausted"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.campaigns",
+   "name": "_BudgetExhausted",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.consent.InvalidAddress": {
+   "app_mro": [
+    "InvalidAddress",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_address",
+   "module": "app.services.consent",
+   "name": "InvalidAddress",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.consent.RecipientSuppressed": {
+   "app_mro": [
+    "RecipientSuppressed",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "recipient_suppressed",
+   "module": "app.services.consent",
+   "name": "RecipientSuppressed",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.contacts.InvalidContact": {
+   "app_mro": [
+    "InvalidContact",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_contact",
+   "module": "app.services.contacts",
+   "name": "InvalidContact",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.dns_check.DnsError": {
+   "app_mro": [
+    "DnsError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.dns_check",
+   "name": "DnsError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.email_domains.InvalidDomain": {
+   "app_mro": [
+    "InvalidDomain",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_domain",
+   "module": "app.services.email_domains",
+   "name": "InvalidDomain",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.email_mime.UnsafeHeader": {
+   "app_mro": [
+    "UnsafeHeader"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "ValueError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.services.email_mime",
+   "name": "UnsafeHeader",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.emails.InvalidEmail": {
+   "app_mro": [
+    "InvalidEmail",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_email",
+   "module": "app.services.emails",
+   "name": "InvalidEmail",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.emails.SenderDomainNotVerified": {
+   "app_mro": [
+    "SenderDomainNotVerified",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "sender_domain_not_verified",
+   "module": "app.services.emails",
+   "name": "SenderDomainNotVerified",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.enterprises.EnterpriseNotFound": {
+   "app_mro": [
+    "EnterpriseNotFound",
+    "NotFound",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "not_found",
+   "module": "app.services.enterprises",
+   "name": "EnterpriseNotFound",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.enterprises.InvalidOwnerRef": {
+   "app_mro": [
+    "InvalidOwnerRef",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_owner_ref",
+   "module": "app.services.enterprises",
+   "name": "InvalidOwnerRef",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.inbox.InvalidKeyword": {
+   "app_mro": [
+    "InvalidKeyword",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_keyword",
+   "module": "app.services.inbox",
+   "name": "InvalidKeyword",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.messages.AccountDisabled": {
+   "app_mro": [
+    "AccountDisabled",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "account_disabled",
+   "module": "app.services.messages",
+   "name": "AccountDisabled",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.messages.InvalidMessage": {
+   "app_mro": [
+    "InvalidMessage",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_message",
+   "module": "app.services.messages",
+   "name": "InvalidMessage",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.messages.NoRoute": {
+   "app_mro": [
+    "NoRoute",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "no_route",
+   "module": "app.services.messages",
+   "name": "NoRoute",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.messages.RateLimited": {
+   "app_mro": [
+    "RateLimited",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "rate_limited",
+   "module": "app.services.messages",
+   "name": "RateLimited",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.messages.SendingPaused": {
+   "app_mro": [
+    "SendingPaused",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "sending_paused",
+   "module": "app.services.messages",
+   "name": "SendingPaused",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.net_guard.UnsafeUrl": {
+   "app_mro": [
+    "UnsafeUrl"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "ValueError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.services.net_guard",
+   "name": "UnsafeUrl",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.payments.GatewayError": {
+   "app_mro": [
+    "GatewayError",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "gateway_error",
+   "module": "app.services.payments",
+   "name": "GatewayError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.payments.PaymentsDisabled": {
+   "app_mro": [
+    "PaymentsDisabled",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "payments_disabled",
+   "module": "app.services.payments",
+   "name": "PaymentsDisabled",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.rates.InvalidNumber": {
+   "app_mro": [
+    "InvalidNumber",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_number",
+   "module": "app.services.rates",
+   "name": "InvalidNumber",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.rates.NoRate": {
+   "app_mro": [
+    "NoRate",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "no_rate",
+   "module": "app.services.rates",
+   "name": "NoRate",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.sender_ids.InvalidSender": {
+   "app_mro": [
+    "InvalidSender",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_sender",
+   "module": "app.services.sender_ids",
+   "name": "InvalidSender",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.sender_ids.SenderNotAllowed": {
+   "app_mro": [
+    "SenderNotAllowed",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "sender_not_allowed",
+   "module": "app.services.sender_ids",
+   "name": "SenderNotAllowed",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.templates.InvalidTemplate": {
+   "app_mro": [
+    "InvalidTemplate",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_template",
+   "module": "app.services.templates",
+   "name": "InvalidTemplate",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.templates.TemplateNotUsable": {
+   "app_mro": [
+    "TemplateNotUsable",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "template_not_usable",
+   "module": "app.services.templates",
+   "name": "TemplateNotUsable",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.twofactor.InvalidCode": {
+   "app_mro": [
+    "InvalidCode",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "totp_invalid",
+   "module": "app.services.twofactor",
+   "name": "InvalidCode",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.wallet.Conflict": {
+   "app_mro": [
+    "Conflict",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "conflict",
+   "module": "app.services.wallet",
+   "name": "Conflict",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.wallet.InsufficientFunds": {
+   "app_mro": [
+    "InsufficientFunds",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "insufficient_funds",
+   "module": "app.services.wallet",
+   "name": "InsufficientFunds",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.wallet.InvalidAmount": {
+   "app_mro": [
+    "InvalidAmount",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_amount",
+   "module": "app.services.wallet",
+   "name": "InvalidAmount",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.wallet.NotFound": {
+   "app_mro": [
+    "NotFound",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "not_found",
+   "module": "app.services.wallet",
+   "name": "NotFound",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.wallet.WalletError": {
+   "app_mro": [
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "wallet_error",
+   "module": "app.services.wallet",
+   "name": "WalletError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.webhooks.InvalidWebhook": {
+   "app_mro": [
+    "InvalidWebhook",
+    "WalletError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "invalid_webhook",
+   "module": "app.services.webhooks",
+   "name": "InvalidWebhook",
+   "own_init": false,
+   "str": "boom"
+  }
+ },
+ "http_status": {
+  "app.api.admin": {
+   "conflict": 409,
+   "not_found": 404
+  },
+  "app.api.billing": {
+   "conflict": 409,
+   "gateway_error": 502,
+   "insufficient_funds": 402,
+   "not_found": 404,
+   "payments_disabled": 503
+  },
+  "app.api.campaigns": {
+   "account_disabled": 403,
+   "conflict": 409,
+   "not_found": 404
+  },
+  "app.api.console": {
+   "account_disabled": 403,
+   "no_rate": 422,
+   "no_route": 422,
+   "not_found": 404
+  },
+  "app.api.contacts": {
+   "conflict": 409,
+   "not_found": 404
+  },
+  "app.api.email": {
+   "account_disabled": 403,
+   "conflict": 409,
+   "not_found": 404,
+   "rate_limited": 429,
+   "recipient_suppressed": 422,
+   "sender_domain_not_verified": 403,
+   "sending_paused": 503
+  },
+  "app.api.inbox": {
+   "conflict": 409,
+   "not_found": 404
+  },
+  "app.api.messages": {
+   "account_disabled": 403,
+   "conflict": 409,
+   "insufficient_funds": 402,
+   "no_rate": 422,
+   "no_route": 422,
+   "not_found": 404,
+   "rate_limited": 429,
+   "recipient_suppressed": 422,
+   "sender_not_allowed": 403,
+   "sending_paused": 503,
+   "template_not_usable": 403
+  },
+  "app.api.messaging": {
+   "conflict": 409,
+   "not_found": 404,
+   "sender_not_allowed": 403,
+   "template_not_usable": 403
+  },
+  "app.api.portal": {
+   "conflict": 409,
+   "not_found": 404
+  }
+ }
+}

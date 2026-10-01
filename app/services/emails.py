@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.email import (
@@ -27,7 +28,6 @@ from app.providers.email import EmailRequest
 from app.queue.dispatch import DispatchSpec
 from app.queue.postgres import PostgresDispatchQueue
 from app.services import consent, email_domains, email_mime, events, switches
-from app.services.wallet import Conflict, NotFound, WalletError
 
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30
@@ -35,11 +35,11 @@ DEFAULT_RATE_LIMIT = 600
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
 
-class InvalidEmail(WalletError):
+class InvalidEmail(DomainError):
     code = "invalid_email"
 
 
-class SenderDomainNotVerified(WalletError):
+class SenderDomainNotVerified(DomainError):
     code = "sender_domain_not_verified"
 
 

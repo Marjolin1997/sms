@@ -6,10 +6,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.errors import DomainError
 from app.core.security import Principal, require
 from app.services import rates as svc
 from app.services.audit import audit
-from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1")
 
@@ -54,7 +54,7 @@ class QuoteOut(BaseModel):
     total: Decimal
 
 
-def _http(e: WalletError) -> HTTPException:
+def _http(e: DomainError) -> HTTPException:
     status = {"not_found": 404, "conflict": 409, "no_rate": 404}.get(e.code, 422)
     return HTTPException(status, {"code": e.code, "message": str(e)})
 
@@ -64,7 +64,7 @@ def _run(db: Session, fn):
         out = fn()
         db.commit()
         return out
-    except WalletError as e:
+    except DomainError as e:
         db.rollback()
         raise _http(e) from e
 

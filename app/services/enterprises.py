@@ -14,8 +14,8 @@ from datetime import UTC, datetime
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
+from app.core.errors import DomainError, NotFound
 from app.models.enterprise import Enterprise
-from app.services.wallet import NotFound, WalletError
 
 # Tabelat që mbajnë `owner_ref` direkt. Kopja e ngrirë e kësaj liste është te migrimi 0018;
 # testi i driftit i detyron të përputhen me modelet.
@@ -32,7 +32,7 @@ _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _SEPARATORS = re.compile(r"[\s_\-.]+")
 
 
-class InvalidOwnerRef(WalletError):
+class InvalidOwnerRef(DomainError):
     code = "invalid_owner_ref"
 
 

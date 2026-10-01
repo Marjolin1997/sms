@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.billing import (
@@ -23,14 +24,14 @@ from app.providers import ProviderError
 from app.providers.payments import get_gateway
 from app.services import billing, events
 from app.services import wallet as wallets
-from app.services.wallet import Conflict, InvalidAmount, NotFound, WalletError
+from app.services.wallet import InvalidAmount
 
 
-class GatewayError(WalletError):
+class GatewayError(DomainError):
     code = "gateway_error"
 
 
-class PaymentsDisabled(WalletError):
+class PaymentsDisabled(DomainError):
     code = "payments_disabled"
 
 

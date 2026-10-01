@@ -10,16 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.core import crypto
 from app.core.config import settings
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.email import DomainStatus, EmailDomain
 from app.services.dns_check import DnsError, get_resolver
-from app.services.wallet import Conflict, NotFound, WalletError
 
 _DOMAIN = re.compile(r"^(?=.{4,190}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 SELECTOR = "sms1"
 
 
-class InvalidDomain(WalletError):
+class InvalidDomain(DomainError):
     code = "invalid_domain"
 
 

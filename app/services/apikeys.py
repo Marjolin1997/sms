@@ -5,13 +5,13 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, belongs, owned, ref
 from app.core.security import ROLE_PERMS, STAFF_ROLES, generate_key
 from app.models.admin import ApiKey, KeyStatus
-from app.services.wallet import Conflict, NotFound, WalletError
 
 
-class InvalidKey(WalletError):
+class InvalidKey(DomainError):
     code = "invalid_key"
 
 

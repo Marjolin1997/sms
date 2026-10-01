@@ -4,12 +4,12 @@ from sqlalchemy.orm import Session
 
 from app.api.tenant import access_or_404, tenant
 from app.core.db import get_db
+from app.core.errors import DomainError
 from app.core.security import Principal, require
 from app.models.messaging import ApprovalStatus, SenderId, Template, TemplateVersion
 from app.services import sender_ids as sid
 from app.services import templates as tpl
 from app.services.audit import audit
-from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1")
 
@@ -21,7 +21,7 @@ def _run(db: Session, fn):
         out = fn()
         db.commit()
         return out
-    except WalletError as e:
+    except DomainError as e:
         db.rollback()
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
 

@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, Template, TemplateVersion
 from app.services import approvals
 from app.services.sms_text import count_segments
-from app.services.wallet import Conflict, NotFound, WalletError
 
 VAR = re.compile(r"\{\{([a-z_][a-z0-9_]{0,31})\}\}")
 MAX_BODY = 1600
@@ -16,11 +16,11 @@ MAX_VALUE = 160
 MAX_SEGMENTS = 10
 
 
-class InvalidTemplate(WalletError):
+class InvalidTemplate(DomainError):
     code = "invalid_template"
 
 
-class TemplateNotUsable(WalletError):
+class TemplateNotUsable(DomainError):
     code = "template_not_usable"
 
 

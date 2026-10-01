@@ -126,3 +126,14 @@ enterprise, events, inbound, messaging, rates, sending`) e importojnë tani nga 
 (AST: asnjë modul s'importon `utcnow` nga `models.wallet`; snapshot golden i metadata ORM `tests/golden/orm_metadata.json`: 42 tabela, 417
 kolona, default-et callable; PG: alembic autogenerate pa diff). Nuk ka migrim, nuk ka ndryshim skeme/sjelljeje. Hapi tjetër (M3-b(ii): gabimet
 bazë) pret miratim.
+
+---
+## M3-b(ii) — ZBATUAR (miratuar nga pronari): gabimet bazë te `app/core/errors.py`
+- `app/core/errors.py` (pa asnjë import nga `app`): `DomainError` (`code="wallet_error"`, parazgjedhja e trashëguar), `NotFound` (`not_found`), `Conflict` (`conflict`).
+  `WalletError` ishte `class WalletError(Exception): code = "wallet_error"` pa konstruktor/atribute/serializim → u migrua saktësisht.
+- `services.wallet`: `WalletError = DomainError` (alias, i njëjti objekt), `NotFound`/`Conflict` ri-eksportuar; `InsufficientFunds`/`InvalidAmount` mbeten
+  te wallet (wallet-specifike; `InvalidAmount` përdoret edhe nga rates/billing/payments: coupling i raportuar, jo i prekur).
+- 30 module migruan importet (nga `services.wallet` te `core.errors`; `WalletError`→`DomainError` në trup); 3 prej tyre (`billing`, `payments`, `rates`) importojnë
+  ende `InvalidAmount`/`money` nga wallet. `api/wallets.py` (module wallet) mbetet i pandryshuar.
+- Fan-in top-level i `services.wallet`: 31 → 8. Cikli lazy me 5 module u hoq plotësisht (`enterprises → wallet` ishte edge-i i vetëm i varur nga gabimet).
+- Guard-et: `tests/test_m3_errors.py` (snapshot i 47 klasave të gabimit, hartëzimi `_STATUS` (10 fjalorë), alias identitet, payload API, AST, zero cikle).

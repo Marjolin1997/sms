@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.billing import (
@@ -38,7 +39,7 @@ from app.models.email import Email, EmailStatus
 from app.models.wallet import Wallet
 from app.services import events
 from app.services import wallet as wallets
-from app.services.wallet import Conflict, InvalidAmount, NotFound, WalletError
+from app.services.wallet import InvalidAmount
 
 log = logging.getLogger("sms.billing")
 CENT = Decimal("0.01")
@@ -51,7 +52,7 @@ BILLABLE_EMAIL = (
 _CODE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,31}$")
 
 
-class InvalidBilling(WalletError):
+class InvalidBilling(DomainError):
     code = "invalid_billing"
 
 

@@ -17,6 +17,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, object_session
 
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.campaigns import (
@@ -42,7 +43,6 @@ from app.services import (
 )
 from app.services import messages as msg
 from app.services import wallet as wallets
-from app.services.wallet import Conflict, NotFound, WalletError
 
 log = logging.getLogger("sms.campaigns")
 
@@ -52,7 +52,7 @@ ESTIMATE_CAP = 50_000
 CONTACT_FIELDS = {"first_name", "last_name", "phone", "email"}
 
 
-class InvalidCampaign(WalletError):
+class InvalidCampaign(DomainError):
     code = "invalid_campaign"
 
 
@@ -434,7 +434,7 @@ def _dispatch_step(db: Session, c: Campaign, now: datetime) -> None:
             return
         except (msg.RateLimited, msg.SendingPaused):
             return  # provo sërish në ciklin tjetër; marrësi mbetet PENDING
-        except WalletError as e:  # consent, route, sender, domen, tarifë, variabël e munguar...
+        except DomainError as e:  # consent, route, sender, domen, tarifë, variabël e munguar...
             _skip(r, e.code if not str(e).startswith("missing_variable") else str(e))
     _touch(c, now=now)
 
@@ -576,7 +576,7 @@ def estimate(db: Session, owner: Owner, campaign_id: int, now: datetime | None =
                     else templates.render(db, owner, c.template_id, values).text
                 )
                 q = rates.quote(db, plan.rate_card_id, r.address, text, now)
-            except WalletError:
+            except DomainError:
                 est.excluded += 1
                 continue
             est.recipients += 1

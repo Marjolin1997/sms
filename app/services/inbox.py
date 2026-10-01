@@ -9,12 +9,12 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, belongs, owned, ref
 from app.models.contacts import Contact, ContactStatus
 from app.models.inbound import InboundMessage, Keyword
 from app.services import consent, events, sender_ids
 from app.services import messages as msg_svc
-from app.services.wallet import Conflict, NotFound, WalletError
 
 MAX_KEYWORDS = 50
 REPLY_COOLDOWN_S = 60  # një përgjigje automatike për numër në minutë
@@ -22,7 +22,7 @@ _KW = re.compile(r"^[a-z0-9]{2,32}$")
 RESERVED = consent.STOP_WORDS | consent.START_WORDS
 
 
-class InvalidKeyword(WalletError):
+class InvalidKeyword(DomainError):
     code = "invalid_keyword"
 
 
@@ -151,7 +151,7 @@ def _auto_reply(db: Session, row: InboundMessage, text: str) -> None:
             )  # fmt: skip
         row.reply_message_id = m.public_id
         row.reply_status = "queued"
-    except WalletError as e:
+    except DomainError as e:
         row.reply_status = f"failed:{e.code}"[:64]
     db.flush()
 

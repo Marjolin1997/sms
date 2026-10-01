@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
+from app.core.errors import Conflict
 from app.models.messaging import ApprovalStatus as S
-from app.services.wallet import Conflict
 
 _ALLOWED = {
     "approve": ({S.PENDING}, S.APPROVED),

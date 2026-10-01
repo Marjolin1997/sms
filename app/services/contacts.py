@@ -5,6 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.contacts import (
     Contact,
@@ -13,12 +14,11 @@ from app.models.contacts import (
     ListMember,
 )
 from app.services import consent
-from app.services.wallet import Conflict, NotFound, WalletError
 
 MAX_IMPORT = 1000
 
 
-class InvalidContact(WalletError):
+class InvalidContact(DomainError):
     code = "invalid_contact"
 
 
@@ -133,7 +133,7 @@ def import_contacts(db: Session, owner: Owner, rows: list[dict]) -> ImportResult
                 _, created = upsert(db, owner, **row)
             out.created += created
             out.updated += not created
-        except WalletError as e:
+        except DomainError as e:
             out.errors.append({"row": i, "code": e.code, "message": str(e)})
     return out
 

@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from app.api.webhooks import verify_signature
 from app.core.config import settings
 from app.core.db import SessionLocal, get_db
+from app.core.errors import Conflict, NotFound
 from app.core.texts import html_lang, tr
 from app.services import emails as svc
-from app.services.wallet import Conflict, NotFound
 
 router = APIRouter()
 

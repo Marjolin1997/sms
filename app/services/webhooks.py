@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core import crypto
 from app.core.config import settings
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
 from app.models.events import (
@@ -23,7 +24,6 @@ from app.models.events import (
     WebhookEndpoint,
 )
 from app.services import events, net_guard
-from app.services.wallet import Conflict, NotFound, WalletError
 from app.services.webhook_queue import (  # noqa: F401  (ri-eksportuar: konstantet e kontratës)
     DISABLE_AFTER,
     LEASE_SECONDS,
@@ -35,7 +35,7 @@ from app.services.webhook_queue import (  # noqa: F401  (ri-eksportuar: konstant
 MAX_ENDPOINTS = 10
 
 
-class InvalidWebhook(WalletError):
+class InvalidWebhook(DomainError):
     code = "invalid_webhook"
 
 

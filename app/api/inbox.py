@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.api.tenant import tenant
 from app.core.db import get_db
+from app.core.errors import DomainError
 from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.inbound import InboundMessage
 from app.services import inbox as svc
 from app.services.audit import audit
-from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1")
 _STATUS = {"not_found": 404, "conflict": 409}
@@ -23,7 +23,7 @@ def _run(db: Session, fn):
         out = fn()
         db.commit()
         return out
-    except WalletError as e:
+    except DomainError as e:
         db.rollback()
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
 

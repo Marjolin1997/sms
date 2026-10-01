@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.api.tenant import scoped, tenant
 from app.core.db import get_db
+from app.core.errors import DomainError
 from app.core.security import Principal, require
 from app.models.sending import Message, MessageEvent
 from app.services import messages as svc
-from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1")
 
@@ -76,7 +76,7 @@ def send(
             category=body.category,
         )  # fmt: skip
         db.commit()
-    except WalletError as e:
+    except DomainError as e:
         db.rollback()
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
     return _out(m)

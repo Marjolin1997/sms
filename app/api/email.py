@@ -5,13 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.api.tenant import scoped, tenant
 from app.core.db import get_db
+from app.core.errors import DomainError
 from app.core.scope import owned
 from app.core.security import Principal, require
 from app.models.email import Email, EmailDomain, EmailEvent
 from app.services import email_domains as domains
 from app.services import emails as svc
 from app.services.audit import audit
-from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1/email")
 _STATUS = {
@@ -26,7 +26,7 @@ def _run(db: Session, fn):
         out = fn()
         db.commit()
         return out
-    except WalletError as e:
+    except DomainError as e:
         db.rollback()
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
 

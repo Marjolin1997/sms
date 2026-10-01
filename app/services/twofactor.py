@@ -3,11 +3,11 @@
 from sqlalchemy.orm import Session
 
 from app.core import crypto, totp
+from app.core.errors import Conflict, DomainError, NotFound
 from app.models.admin import ApiKey
-from app.services.wallet import Conflict, NotFound, WalletError
 
 
-class InvalidCode(WalletError):
+class InvalidCode(DomainError):
     code = "totp_invalid"
 
 

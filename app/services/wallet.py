@@ -5,6 +5,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.context import worker_owner
+from app.core.errors import (  # noqa: F401  (Conflict/NotFound: alias + përdorim)
+    Conflict,
+    DomainError,
+    NotFound,
+)
 from app.core.scope import Owner, owned, ref
 from app.models.wallet import (
     EntryType,
@@ -21,24 +26,17 @@ ZERO = Decimal("0")
 QUANT = Decimal("0.000001")
 
 
-class WalletError(Exception):
-    code = "wallet_error"
+# Gabimet bazë jetojnë te `app.core.errors` (burimi i vetëm). `WalletError`, `NotFound`, `Conflict`
+# mbeten këtu vetëm si ALIASE përputhshmërie (të njëjtët objekte); kodi i ri: core.errors.
+WalletError = DomainError
 
 
-class InsufficientFunds(WalletError):
+class InsufficientFunds(DomainError):
     code = "insufficient_funds"
 
 
-class InvalidAmount(WalletError):
+class InvalidAmount(DomainError):
     code = "invalid_amount"
-
-
-class NotFound(WalletError):
-    code = "not_found"
-
-
-class Conflict(WalletError):
-    code = "conflict"
 
 
 def money(value: Decimal | str | int) -> Decimal:

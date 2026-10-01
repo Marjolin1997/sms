@@ -10,10 +10,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.errors import Conflict, DomainError
 from app.core.scope import Owner, owned, ref
 from app.models.contacts import ConsentAction, ConsentEvent, ConsentState
 from app.services import events
-from app.services.wallet import Conflict, WalletError
 
 CHANNELS = {"sms", "email"}
 CATEGORIES = {"transactional", "marketing"}
@@ -27,11 +27,11 @@ STOP_WORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit", "ndalo"
 START_WORDS = {"start", "unstop", "yes", "fillo"}
 
 
-class InvalidAddress(WalletError):
+class InvalidAddress(DomainError):
     code = "invalid_address"
 
 
-class RecipientSuppressed(WalletError):
+class RecipientSuppressed(DomainError):
     code = "recipient_suppressed"
 
 

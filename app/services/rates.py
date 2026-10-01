@@ -6,19 +6,20 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.timeutil import as_utc  # noqa: F401  (ri-eksportuar)
 from app.models.rates import Rate, RateCard, RateCardVersion, VersionStatus
 from app.services.sms_text import count_segments
-from app.services.wallet import Conflict, InvalidAmount, NotFound, WalletError, money
+from app.services.wallet import InvalidAmount, money
 
 E164 = re.compile(r"^\+?[1-9]\d{6,14}$")
 
 
-class NoRate(WalletError):
+class NoRate(DomainError):
     code = "no_rate"
 
 
-class InvalidNumber(WalletError):
+class InvalidNumber(DomainError):
     code = "invalid_number"
 
 

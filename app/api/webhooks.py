@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.core.errors import Conflict, NotFound
 from app.models.sending import DlrReceipt
 from app.services import inbox
 from app.services import messages as svc
-from app.services.wallet import Conflict, NotFound
 
 router = APIRouter()
 

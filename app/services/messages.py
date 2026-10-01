@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.sending import (
     TERMINAL,
@@ -31,29 +32,28 @@ from app.queue.postgres import PostgresDispatchQueue
 from app.services import consent, events, rates, sender_ids, switches, templates
 from app.services import wallet as wallets
 from app.services.sms_text import count_segments
-from app.services.wallet import Conflict, NotFound, WalletError
 
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30
 
 
-class InvalidMessage(WalletError):
+class InvalidMessage(DomainError):
     code = "invalid_message"
 
 
-class AccountDisabled(WalletError):
+class AccountDisabled(DomainError):
     code = "account_disabled"
 
 
-class NoRoute(WalletError):
+class NoRoute(DomainError):
     code = "no_route"
 
 
-class SendingPaused(WalletError):
+class SendingPaused(DomainError):
     code = "sending_paused"
 
 
-class RateLimited(WalletError):
+class RateLimited(DomainError):
     code = "rate_limited"
 
 

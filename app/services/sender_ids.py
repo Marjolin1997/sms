@@ -5,21 +5,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.context import worker_owner
+from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, SenderId, SenderKind
 from app.services import approvals
-from app.services.wallet import Conflict, NotFound, WalletError
 
 ALNUM = re.compile(r"^(?=.*[A-Za-z])[A-Za-z0-9 ]{3,11}$")
 NUMERIC = re.compile(r"^\+?[1-9]\d{2,14}$")
 COUNTRY = re.compile(r"^[A-Za-z]{2}$")
 
 
-class SenderNotAllowed(WalletError):
+class SenderNotAllowed(DomainError):
     code = "sender_not_allowed"
 
 
-class InvalidSender(WalletError):
+class InvalidSender(DomainError):
     code = "invalid_sender"
 
 

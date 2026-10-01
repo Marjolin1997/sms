@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.tenant import scoped, system, tenant
 from app.core import scope
 from app.core.db import get_db
+from app.core.errors import DomainError
 from app.core.scope import owned
 from app.core.security import Principal, require, require_any
 from app.models.billing import BillingProfile, Subscription
@@ -25,7 +26,6 @@ from app.services import rates as rates_svc
 from app.services import templates as tpl
 from app.services import wallet as wallets
 from app.services.audit import audit
-from app.services.wallet import WalletError
 
 router = APIRouter(prefix="/v1")
 _STATUS = {"not_found": 404, "no_rate": 422, "no_route": 422, "account_disabled": 403}
@@ -152,7 +152,7 @@ def quote_message(
         dest = body.to.lstrip("+")
         route = msg_svc.find_route(db, dest)
         q = rates_svc.quote(db, plan.rate_card_id, dest, body.text)
-    except WalletError as e:
+    except DomainError as e:
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
     return {
         "country": route.country, "encoding": q.encoding, "segments": q.segments,
