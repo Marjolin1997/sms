@@ -119,14 +119,20 @@ Vendim i pronarit: **jo** `do_orm_execute`/`with_loader_criteria` global (fsheh 
 - Borxhi i besueshmërisë (SENDING i ngecur, pa lease, SMTP/HTTP real i paprovuar, dublikim webhook) është te regjistri i `QUEUE_ARCHITECTURE.md` §6.
 
 ## M3 · Kernel + kontrata (kufij kodi, jo shërbime)
-- **Objective:** kufij të qartë në kod para se të shtohet Central.
-- **Tables:** asnjë.
-- **Files/modules:** `app/kernel/` (security/HMAC, crypto, ledger money, audit, envelope evente, idempotencë, tenant scoping), `app/contracts/` (skemat Pydantic të versionuara të evenimenteve dhe API-ve Central↔Enterprise↔Gateway), rregulla `import-linter` në CI (Enterprise nuk importon Central; Gateway nuk importon API Enterprise; vetëm `kernel`/`contracts` janë të përbashkëta).
-- **Migration strategy:** lëviz kod pa ndryshuar sjellje (`git mv` + re-export i përkohshëm për prapavajtje).
-- **Backwards compat:** e plotë.
-- **Tests:** teste kontrate (serializim/versionim/nënshkrim); CI import-linter; e gjithë suite.
-- **Rollback:** revert i lëvizjeve.
-- **Acceptance:** rregullat e kufijve kalojnë në CI; asnjë cikël importi.
+### M3 — CLOSED / APPROVED (referenca: `docs/M3_AUDIT.md` §M3-e, `docs/CONTRACTS_V1.md`)
+- **Çfarë u bë (sjellje-ruajtës):** `core.timeutil`, `core.errors` (kernel-like); `app/contracts/` stdlib-only (`EventEnvelopeV1`, `PUBLIC_EVENT_TYPES_V1`, `sign_v1`/`verify_v1`) me 33 golden fixture bytes; `models.enterprise_registry` (identitet persistence); `core` pa varësi te `services`/`api`; audit me një rrugë shkrimi; guard AST (cikle, shtresa, queue, contracts, pronësi).
+- **Devijime nga plani origjinal (të miratuara):** nuk krijohet `app/kernel/` as paketa fizike (primitivat qëndrojnë në `core`); kontratat janë `dataclass` + serializer eksplicit, jo Pydantic (bytes të ngrira); `import-linter` zëvendësohet nga testet AST në CI.
+- **Paketim fizik:** shtyhet te M4 (konsumatori i dytë real).
+- **Gate-et e mbetura (jo bllokuese për M4):** S1/E1 para M9/go-live; borxhet në `docs/M3_AUDIT.md` (teknik) dhe `docs/CONTRACTS_V1.md` §7 (kontratë).
+
+### Kriteret e hyrjes në M4
+1. Contracts V1 stabile (golden 33/33; ndryshim vetëm me miratim kontrate).
+2. Identiteti kanonik i tenant-it në Enterprise = `enterprise_id` (`owner_ref` vetëm kompat).
+3. Pa shkelje të varësive shtresore (guard-et në CI të gjelbra).
+4. Central NUK importon ORM-in e Enterprise.
+5. Central ka DB dhe migrime të veta (versioning table e vet).
+6. Komunikimi Central↔Enterprise vetëm përmes kontratave/API të versionuara.
+7. Pa DB të përbashkët.
 
 ## M4 · Central bazë (aplikacion i ri, DB e vet)
 - **Objective:** ekziston Central si aplikacion i veçantë administrativ me identitet, audit dhe API shërbimi.

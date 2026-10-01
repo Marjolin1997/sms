@@ -165,3 +165,45 @@ Një kufi shkrimi (`_append`), e njëjta transaksion, dedup 5 min i ruajtur për
 ### Borxh kompatibiliteti (pandryshuar me vendim)
 - `DomainError.code = "wallet_error"` — NUK ndryshohet pa vendim të veçantë për error contract.
 - `TenantContext.owner_ref` mbetet (enterprise_id kanonik, owner_ref compat deri në M13).
+
+---
+## M3-e — MBYLLJA E M3 (CLOSED / APPROVED)
+
+### Vendimi i paketimit
+**Asnjë paketë/aplikacion fizik tani** (`packages/kernel`, `packages/contracts`, `apps/enterprise|central|gateway` NUK krijohen). Ndarja fizike pret M4 (konsumatori i dytë real). `app/kernel/` nuk krijohet: primitivat e qëndrueshme qëndrojnë në `core`; `app/contracts/` ekziston (stdlib-only).
+
+### Grafi përfundimtar (i matur nga kodi, 92 module)
+```
+api ──► services ──► models ──► core(db, timeutil, errors, tenancy…)
+ │        │  │  └──► contracts   (stdlib vetëm)
+ │        │  └─────► queue       (stdlib + SQLAlchemy vetëm)
+ │        └────────► providers ──► core
+ └─► core, models, providers
+worker, main: pikat e hyrjes (askush nuk i importon)
+```
+Skajet ndërshtresore të matura: `core→models` 5 (borxh pronësie), `models→core` (db/timeutil/tenancy), `services→{contracts,core,models,providers,queue}`, `providers→core`, `api→{core,models,providers,services}`. Zero: `core→services`, `core→api`, `models→services`, `models→api`, `services→api`, `queue→*`, `contracts→*`, `providers→{services,models}`. Cikle top-level: 0; cikle lazy: 0.
+
+### Matrica e pronësisë
+| Klasa | Module |
+|---|---|
+| **KERNEL-like** (primitiva të qëndrueshme, `core`) | `core.errors`, `core.timeutil`, `core.totp` |
+| **CONTRACT** (`app/contracts`, stdlib-only) | `contracts.events` (`EventEnvelopeV1`, `PUBLIC_EVENT_TYPES_V1`), `contracts.signature` (`sign_v1`, `verify_v1`) |
+| **ENTERPRISE** | `core.context`, `core.scope`, `core.tenancy`, `core.security`, `core.texts`; `models.*` (përfshirë `models.enterprise_registry`: regjistër identiteti i persistencës); `services.audit`, `enterprises`, `wallet`, `billing`, `payments`, `rates`, `campaigns`, `consent`, `contacts`, `inbox`, `apikeys`, `approvals`, `sender_ids`, `templates`, `switches`, `twofactor`, `invoice_render`, `events`; `api.*` |
+| **INFRASTRUCTURE** | `core.db`, `core.config`, `core.crypto`, `core.openapi`, `core.readiness`; `queue.{dispatch,delivery,postgres}` |
+| **GATEWAY (logjik)** | `providers.*`; `services.messages`/`emails` (integrimi i dërgimit SMS/email me hooks), `email_mime`, `dns_check`, `sms_text`, `net_guard`, `webhook_queue`/`webhooks` (mekanika e dërgimit; menaxhimi i endpoint-eve mbetet Enterprise), `app.worker` |
+
+Pronësia për Central (M5/M10): çmimet (`rates`), miratimet (`approvals`, `sender_ids`), katalogu; paratë (`wallet`, ledger) → M9, nuk nxirren para M9. Kjo matricë është formalizim, jo lëvizje moduli.
+
+### `enterprise_registry` (rikonfirmuar)
+Regjistër identiteti i persistencës: lookup, resolve, krijim ekzistues, cache për sesion, invariante persistence. JO: produkte, çmime, miratime, billing, provisioning, RBAC, HTTP. Guard: `tests/test_m3_closure.py` (importe të lejuara + bashkësia e funksioneve).
+
+### Guard-et përfundimtare
+`test_m3_layers.py` (core/models ↛ services/api, cikle, allowlist `core→models`), `test_queue_boundaries.py`, `test_contracts_events.py` + `test_contracts_signature.py` (contracts stdlib-only, katalog), `test_webhook_golden.py` (33 fixture), golden ORM metadata, Alembic `compare_metadata` = 0 (PG), `test_m3_closure.py` (pronësia e paketave të vogla, providers/queue/contracts leaf, entrypoint-et, kufiri i registry).
+
+### Borxh i mbetur (i pranuar, i dokumentuar)
+Teknik: `core→models` (5 skaje: security, tenancy, context, readiness); `wallet→events` (e njëjta shtresë); `matches/valid_filter` te `services.events`; `DomainError.code="wallet_error"` (kompatibilitet); `owner_ref` (kompat deri M13); `scope.cross_tenant` tani `services.audit.cross_tenant`; 10 fjalorë `_STATUS` HTTP; `SMS_TENANT_SCOPING` fallback (M13).
+Kontratë (shih `docs/CONTRACTS_V1.md` §7): mbishkrimi `resource_*`, `_as_utc` i dyfishuar, `data` mutable, `Decimal` TypeError, `/v1/events` `created_at` ndryshe, `verify_v1` non-ASCII TypeError + `now=0`, `rotate_secret` pa grace, delivery-id i panënshkruar, ID lokale, exception performance serializer.
+Operacional (gate para M9/go-live): S1/E1 (SENDING i ngecur: raportim/veprim/rikonsilim), W1 dublikim webhook (dokumentim klientësh), E2 backlog.
+
+### Deklarata
+**M3 = CLOSED / APPROVED** (pas miratimit të pronarit). Hyrja për M4: shih `docs/MIGRATION_PLAN.md` §M3/M4.
