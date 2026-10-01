@@ -108,6 +108,15 @@ Vendim i pronarit: **jo** `do_orm_execute`/`with_loader_criteria` global (fsheh 
 - **Rollback:** çdo outbox në commit të veçantë → revert individual.
 - **Acceptance:** asnjë import i `SKIP LOCKED` jashtë `app/queue/`; testet paralele të gjelbra; bench brenda ±10%.
 
+### M2 — ZBATUAR (refaktorim sjellje-ruajtës; shih `docs/QUEUE_ARCHITECTURE.md`)
+- Zbatuar si **dy** kontrata sinkrone mbi rreshtat ekzistues (jo një `MessageQueue` me tabelë të veçantë): `DispatchQueue` (SMS, email; status
+  SENDING, at-most-once për crash) dhe `DeliveryQueue` (webhook; lease, at-least-once), me adapterë `PostgresDispatchQueue`/`PostgresDeliveryQueue`
+  te `app/queue/` dhe hooks të domain-it te services. Emrat e planit fillestar (`PostgresOutboxQueue`, `InMemoryQueue`, `dead_letter`) **nuk u zbatuan**
+  qëllimisht (s'ka tabelë dead-letter; s'ka backend të dytë).
+- Devijime nga plani: campaigns, sweeps (`expire_stale`, `expire_pending`) dhe DLR mbeten jashtë abstraksionit (kriteri "asnjë SKIP LOCKED jashtë
+  `app/queue/`" plotësohet me 3 përjashtime të dokumentuara dhe të fiksuara nga test); patch i veçantë i miratuar për transaksionin e email.
+- Borxhi i besueshmërisë (SENDING i ngecur, pa lease, SMTP/HTTP real i paprovuar, dublikim webhook) është te regjistri i `QUEUE_ARCHITECTURE.md` §6.
+
 ## M3 · Kernel + kontrata (kufij kodi, jo shërbime)
 - **Objective:** kufij të qartë në kod para se të shtohet Central.
 - **Tables:** asnjë.

@@ -9,7 +9,6 @@ Semantika që ruhet (provuar nga tests/test_queue_semantics.py dhe test_queue_co
 Adapteri nuk njeh statuset, paratë, ngjarjet apo provider-in: ato janë të `DispatchHooks`."""
 
 import enum
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -64,6 +63,3 @@ class DispatchQueue(Protocol):
     def fail(self, db, item, reason: str) -> None: ...
 
     def cancel_if_pending(self, db, item_id: int, *, reason: str) -> bool: ...
-
-
-NowFn = Callable[[], datetime]

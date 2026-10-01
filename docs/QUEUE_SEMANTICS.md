@@ -1,5 +1,9 @@
 # Queue/outbox: sjellja e sotme dhe garancitë e dërgimit (M2-a, karakterizim)
 
+> **Shënim (M2-e):** pamja përfundimtare dhe matricat janë te `QUEUE_ARCHITECTURE.md`. Seksionet para "M2-b" janë
+> karakterizimi historik i kodit para refactor-it (emra si `claim_next`/`_after_error` i përkasin asaj kohe); seksionet
+> M2-b/c/d dhe "Email provider transaction window" përshkruajnë gjendjen aktuale.
+
 Ky dokument përshkruan **çfarë bën kodi sot** (i provuar nga `tests/test_queue_semantics.py` dhe
 `tests/test_queue_concurrency_pg.py`), jo çfarë do të donim. Refactor-i M2 duhet ta ruajë. Termi
 "exactly once" **nuk** përdoret: nuk provohet end-to-end për asnjë kanal.
