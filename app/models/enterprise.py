@@ -9,7 +9,7 @@ from sqlalchemy import DateTime, Index, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
-from app.models.wallet import utcnow
+from app.core.timeutil import utcnow
 
 
 class Enterprise(Base):

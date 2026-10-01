@@ -8,9 +8,9 @@ from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.timeutil import utcnow
 from app.models.rates import PK
 from app.models.tenant import TenantOwned
-from app.models.wallet import utcnow
 
 
 class KeyStatus(enum.StrEnum):

@@ -117,3 +117,12 @@ pastaj analizë e kandidatëve. Nuk u zhvendos asnjë kod. Skripti është repro
 ## 10. Ndryshimi i parë minimal i rekomanduar (për miratim; nuk është bërë)
 **M3-b(i): `utcnow` nga `models/wallet.py` te `core/timeutil.py`** (`models.wallet.utcnow` mbetet re-export), 11 importe modelesh ndryshojnë.
 Zero ndryshim sjelljeje, zero migrim, heq varësinë e çdo modeli nga moduli i parave. Pas tij, i njëjti stil për gabimet bazë (M3-b(ii)).
+
+---
+## M3-b(i) — ZBATUAR (miratuar nga pronari)
+`utcnow` u zhvendos nga `models/wallet.py` te `core/timeutil.py` (burimi i vetëm). `models.wallet.utcnow` mbetet **alias i përkohshëm
+përputhshmërie** (i njëjti objekt: `models.wallet.utcnow is core.timeutil.utcnow`); 11 modele (`admin, billing, campaigns, contacts, email,
+enterprise, events, inbound, messaging, rates, sending`) e importojnë tani nga burimi neutral. Garda: `tests/test_m3_timeutil.py`
+(AST: asnjë modul s'importon `utcnow` nga `models.wallet`; snapshot golden i metadata ORM `tests/golden/orm_metadata.json`: 42 tabela, 417
+kolona, default-et callable; PG: alembic autogenerate pa diff). Nuk ka migrim, nuk ka ndryshim skeme/sjelljeje. Hapi tjetër (M3-b(ii): gabimet
+bazë) pret miratim.

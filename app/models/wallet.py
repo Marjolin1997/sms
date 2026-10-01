@@ -8,7 +8,7 @@ Rregulla të hekurta:
 """
 
 import enum
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -29,13 +29,14 @@ from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.timeutil import utcnow  # noqa: F401  (re-export i përputhshmërisë; shih më poshtë)
 from app.models.tenant import TenantOwned
 
 MONEY = Numeric(20, 6)
 
 
-def utcnow() -> datetime:
-    return datetime.now(UTC)
+# `utcnow` mbetet këtu vetëm si ALIAS PËRKOHSHËM përputhshmërie (M3-b): burimi i së vërtetës është
+# `app.core.timeutil.utcnow`; modelet e tjera nuk guxojnë ta importojnë nga ky modul (e ruan test).
 
 
 class Wallet(TenantOwned, Base):
