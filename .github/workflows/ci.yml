@@ -22,7 +22,7 @@ jobs:
       SMS_TEST_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_test
       PGPASSWORD: sms
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements-dev.txt}
       - run: pip install -r requirements-dev.txt
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: frontend}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: {node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json}
       - run: npm ci
@@ -80,7 +80,7 @@ jobs:
       SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=
       SMS_ADMIN_API_KEY: ci-bootstrap-key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements-dev.txt}
       - uses: actions/setup-node@v4
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build API/worker image and smoke-test it
         run: |
           docker build -t sms-api .
@@ -124,7 +124,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true  # këshillues: raporton dobësi të njohura, nuk bllokon
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install pip-audit && pip-audit -r requirements.txt
