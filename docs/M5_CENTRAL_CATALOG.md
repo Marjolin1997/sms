@@ -113,3 +113,65 @@ Asnjë thirrje drejt Enterprise, event, polling, worker, dual-write ose provisio
 - **M5-c:** `limits`/config (vetëm JSON me skemë sipas kanalit) dhe mapim i jashtëm, **vetëm nëse ka nevojë reale**; `activation_date` nëse kërkohet.
 - **M5-d / M9–M10:** pricing (rate cards), faturim, miratime sender ID/shtet.
 - **M7:** sync i `status` të assignment-it drejt `AccountPlan.enabled`/runtime (Central → Enterprise), me kontratë të versionuar.
+
+---
+## 9. M5-c — audit i config/limits (VETËM AUDIT; asgjë e implementuar)
+
+### 9.1 Inventari (evidencë nga kodi)
+| # | Fushë/koncept | Tabela / moduli | Pronari sot | Konsumatori | Runtime? | Komercial? | Politikë? | Specifik provider? | Kandidat Central? | Faza |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `AccountPlan.enabled` | `sms_account_plans` | Enterprise; shkruhet nga `PUT /admin/plans/{owner}` | `messages.submit`, `emails.submit` (**të dyja** kanalet), `console` | po (hot path, kill switch) | jo | po (entitlement admin) | jo | **po, tashmë** si `EnterpriseProduct.status` (M5-b) | M7 (sync) |
+| 2 | `AccountPlan.rate_limit_per_min` (SMS) | po | Enterprise; shkruhet nga `PUT /admin/plans` (1..1.000.000, NULL = parazgjedhje) | `messages.submit` (numëron mesazhet e fundit 1 min nga DB) | po (vlera lexohet në hot path; numëruesi është runtime) | jo | **po (entitlement)** | jo | **po (vetëm vlera e cakut)** | **M5-c** |
+| 3 | `AccountPlan.email_rate_limit_per_min` | po | Enterprise; **s'ka shkrues në prodhim** (vetëm kolonë + një test) | `emails.submit` | po | jo | po | jo | po, por provë e dobët (kolonë e vdekur sot) | **M5-c (me rezervë)** |
+| 4 | `DEFAULT_RATE_LIMIT = 600` (SMS dhe email) | `services/messages.py`, `emails.py` | konstante në kod | submit | po | jo | parazgjedhje platforme | jo | **jo** (mbetet në Enterprise; NULL = trashëgo) | Enterprise only |
+| 5 | `AccountPlan.rate_card_id` | po | Enterprise | tarifimi | po | **po (çmim)** | jo | jo | po, por si pricing | M5-d/M9 |
+| 6 | `Plan.monthly_fee`, `included_emails`, `email_overage_price`; `Subscription.*` | `sms_plans`, `sms_subscriptions` | Enterprise/billing | faturimi | po (periudha) | **po** | jo | jo | pjesërisht (çmimi) | M5-d/M9 |
+| 7 | Kufizime sender: `SenderId` miratim për (owner, country, value); `assert_usable` kërkon gjithmonë status APPROVED | `sms_sender_ids` | Enterprise (miratim stafi) | `messages.submit` | po | jo | **po (miratim)** | jo | matrica e miratimit → **M10**, jo M5-c | M10 |
+| 8 | `requires_sid_registration` | **nuk ekziston në kod** (regjistrimi i sender-it kërkohet gjithmonë për SMS) | — | — | — | — | — | — | s'ka evidencë për flamur; sot konstante `true` | M10 (nëse variacion real) |
+| 9 | Kufizime sipas vendit per enterprise | **nuk ekzistojnë**; `Route` është global (`prefix → country → provider`) | Enterprise (platformë) | `find_route` | po | jo | jo | **po (provider)** | **jo** (Gateway) | M10/Gateway |
+| 10 | Kufizime fushate: `Campaign.max_cost` (buxhet i vendosur nga klienti për çdo fushatë), `ESTIMATE_CAP`, `PREP_BATCH`, `SEND_BATCH` | `sms_campaigns`; konstante | klienti / kod | `campaigns` | po | jo | jo | jo | **jo** (të dhëna klienti ose mekanikë punëtori) | Enterprise only |
+| 11 | Kufij globalë: `MAX_SEGMENTS=10`, `MAX_BODY=1600`, `MAX_IMPORT=1000`, `MAX_ENDPOINTS=10`, `MAX_KEYWORDS=50`, `MAX_SELF_SERVICE_KEYS=20`, `MAX_DAYS=366` | konstante | kod | shërbimet | po | jo | kufij platforme, **jo per enterprise** | jo | **jo** (s'ka variacion per enterprise) | Enterprise only |
+| 12 | Kuota ditore/mujore email ose SMS | **nuk ekzistojnë** | — | — | — | — | — | — | s'ka evidencë | — |
+| 13 | Domene të lejuara email / verifikim | `sms_email_domains` (objekt runtime i tenant-it, DKIM/SPF) | tenant + Enterprise | `emails.submit` (`verified_domain_for`) | po | jo | po | jo | **jo**: objekt operacional; Central s'duhet ta transferojë | Enterprise only |
+| 14 | Kill switch globale `submit`, `dispatch` | `sms_switches` | staf Enterprise | pipeline | po | jo | operacional | jo | **jo** | Enterprise only |
+| 15 | `Wallet.low_balance_threshold` | `sms_wallets` | klienti | `wallet` | po | jo | jo | jo | **jo** | Enterprise/M9 |
+| 16 | Retry/lease/queue (`MAX_ATTEMPTS`, `BACKOFF_SECONDS`, `RETRY_DELAYS`, lease) | queue + shërbime | kod | workers | **po** | jo | jo | jo | **jo** (mekanikë) | Enterprise only |
+| 17 | Referenca të jashtme: `Payment.external_id` (sesioni i gateway-t të pagesës, për pagesë), `Contact.external_id` (id CRM e klientit), `Enterprise.external_id` (unik, **gjithmonë NULL, pa shkrues**) | disa | gateway pagese / klienti / —  | `payments`, `contacts` | — | — | — | po (pagesa) | **jo** si mapim produkti | — |
+
+### 9.2 Gjetje të rëndësishme (jo vetëm për M5-c)
+1. **`AccountPlan` është per-owner, jo per-kanal:** një `enabled` hap/mbyll **SMS dhe email** njëkohësisht; `emails.submit` kërkon `AccountPlan` të aktiv (me `rate_card_id` NOT NULL për çmimin SMS). Një enterprise vetëm-email sot duhet të ketë rate card SMS. `EnterpriseProduct.status` është per-produkt/kanal: **M7 duhet të vendosë** si harton statusin per-kanal te `enabled` i vetëm (ose Enterprise merr `enabled` per kanal). I regjistruar si risk i dizajnit të sync-ut.
+2. Vetëm **një** parametër per-enterprise ekziston realisht dhe ka shkrues prodhimi: caku SMS (`rate_limit_per_min`). Caku email ka konsumator por jo shkrues.
+3. Gjithçka tjetër është konstante globale, të dhëna të klientit, mekanikë punëtori, ose nuk ekziston.
+
+### 9.3 Rregullat e pronësisë të aplikuara
+Central merr vetëm: entitlement administrativ, aftësi komerciale, config i qëndrueshëm per-enterprise/per-produkt që do të jetë burim i së vërtetës për sync. Nuk merr: routing në hot path, gjendje kalimtare, shëndet provider-i, mekanikë queue/retry, numërues runtime (p.sh. numëruesi i mesazheve/minutë mbetet te Enterprise; Central zotëron vetëm **caqen**).
+
+### 9.4 Kolonë apo JSON
+| Kandidat | Interrogueshëm? | Constraint? | Rëndësi auditi? | Specifik produkti/kanali? | Vendim |
+|---|---|---|---|---|---|
+| cak `rate_limit_per_min` | mundësisht (pasqyra e kufijve) | po (`>=1`, `<=1.000.000` ose NULL) | **po** | forma e njëjtë për SMS dhe email (një int) | **kolonë e vetme** `INTEGER NULL` + CHECK |
+| (hipotetike) lista domenesh, matrica vendesh, politika sender-i | jo/rrallë | — | — | po, e rrallë | **JSON vetëm kur të ketë ≥ 2 fusha jo-triviale me konsumator**, me skemë të versionuar Central-internal (`SmsAssignmentConfigV1`/`EmailAssignmentConfigV1`) |
+**Ndryshim i propozimit të §6:** `limits` JSON **nuk justifikohet** (evidenca është një int i vetëm); kolona është më e thjeshtë, e kufizuar nga DB dhe e audit-ueshme. JSON blob "për çdo rast": **refuzohet**.
+
+### 9.5 Mapimi i jashtëm
+**Nuk ka evidencë** për WMS/provider/partner/external-product id per enterprise (§17: vetëm id pagese, id CRM e klientit dhe një `Enterprise.external_id` i papërdorur). **Nuk implementohet.** Aftësi e ardhshme: entitet i veçantë mapimi (enterprise, sistem, id i jashtëm; mund të ketë shumë dhe histori), jo kolona te `EnterpriseProduct`; ka kuptim kur të ketë konsumator (M12 llogari provider-i në Gateway, ose integrim partneri).
+
+### 9.6 `activation_date`
+**Refuzohet.** `created_at` është data e caktimit; "kur u aktivizua/suspendua" i përgjigjet `audit_log` (aktori, ora, before/after për çdo ndryshim statusi). Enterprise s'ka koncept aktivizimi të ndarë nga abonimi (`Subscription.started_at` është ankorë faturimi, jo entitlement), dhe asnjë konsumator s'e kërkon. Shtohet vetëm nëse një proces (M8 provisioning) kërkon datë të planifikuar në të ardhmen.
+
+### 9.7 Rekomandimi i fushës së M5-c
+Zbatim i vogël dhe i drejtpërdrejtë (një fushë, pa nën-faza), **nëse miratohet**:
+- Migrim `0007`: `enterprise_products.rate_limit_per_min INTEGER NULL` + CHECK (`NULL` ose `1..1.000.000`). Asgjë tjetër.
+- Kuptimi: **cak i Central-it; NULL = Enterprise përdor parazgjedhjen e vet (600)**; Central nuk e dyfishon konstanten. Interpretimi sipas kanalit të produktit (SMS: mesazhe/min; email: email/min).
+- Service `update_assignment(...)` me diff; PATCH `{"status"?, "rate_limit_per_min"?}` (të paktën një fushë; `null` e pastron), `enterprise_id`/`product_id` mbeten të pandryshueshme; audit `enterprise_product.update` me before/after vetëm të ndryshuarat; no-op pa audit; validim `int` 1..1.000.000 (jo bool, jo string); `POST` s'ndryshon.
+- **Jo:** pricing, `rate_card_id`, JSON config, mapim i jashtëm, `activation_date`, matrica vendesh, sync.
+Alternativa e vlefshme: **"NO IMPLEMENTATION — defer until M7"**: asnjë konsumator nuk e lexon vlerën para M7, dhe M7 (ose bootstrap-i i assignment-eve për enterprise ekzistues) mund ta shtojë kur të kuptohet harta me `AccountPlan`. Arsyet pro-implementim: është e vetmja fushë me shkrues prodhimi dhe me kuptim të qartë; qëndron e vogël dhe e reversibile; Central bëhet burim i së vërtetës para M7. Arsyet pro-shtyrje: zero konsumator sot, dhe gjetja 9.2.1 mund të ndryshojë formën e sync-ut.
+
+### 9.8 Çfarë mbetet jashtë dhe pse
+Pricing/rate_card/faturim → M5-d/M9. Matrica sender/vend → M10. Routing/provider → Gateway. Kuota ditore/mujore, kufij globalë, domene, switches, queue → ose nuk ekzistojnë ose janë Enterprise-only. Backfill i vlerave ekzistuese të `AccountPlan` në assignment-e Central për enterprise ekzistues = hap i veçantë (analog i bootstrap-it M4-c), pas vendimit.
+
+### 9.9 Rreziqe/borxh
+- Kolonë pa konsumator deri në M7 (rrezik "config i vdekur").
+- Hendeku `AccountPlan` per-owner vs `EnterpriseProduct` per-kanal (9.2.1) është pyetje e hapur për M7, jo e zgjidhur nga M5-c.
+- Vlerat e `rate_limit_per_min` ekzistuese te Enterprise nuk janë në Central; pa backfill ka dy burime deri në M7.
+- `Enterprise.external_id` (i papërdorur, unik) është kandidat për heqje/ripërdorim; nuk preket.
