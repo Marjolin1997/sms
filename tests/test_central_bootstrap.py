@@ -268,7 +268,11 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
     assert bs.run(ent, cen).written == 0  # rerun
     assert source_snapshot(ent) == (before, tables)  # Enterprise i paprekur
     cen_tables = set(inspect(create_engine(cen)).get_table_names())
-    assert cen_tables == {"central_alembic_version", "enterprises"}  # pa ndryshim skeme
+    assert cen_tables == {
+        "central_alembic_version",
+        "enterprises",
+        "users",
+    }  # bootstrap s'ndryshon skemë
     assert not any(t.startswith("sms_") for t in cen_tables)
     assert "enterprises" not in tables and "central_alembic_version" not in tables
 
@@ -322,4 +326,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
     assert sorted(p.name for p in versions.glob("0*.py")) == [
         "0001_baseline.py",
         "0002_enterprises.py",
+        "0003_users.py",
     ]

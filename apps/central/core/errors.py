@@ -12,3 +12,11 @@ class Conflict(CentralError):
 
 class Invalid(CentralError):
     pass
+
+
+class AuthenticationFailed(CentralError):
+    """Kredenciale të pavlefshme. `reason` është vetëm për log operacional, jo për klientin."""
+
+    def __init__(self, reason: str):
+        super().__init__("invalid credentials")
+        self.reason = reason

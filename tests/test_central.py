@@ -122,7 +122,7 @@ def test_readyz_is_503_when_the_database_is_unavailable():
 
 def test_central_has_only_health_routes_and_no_docs():
     paths = set(create_app(create_engine("sqlite://")).openapi()["paths"])
-    assert paths == {"/healthz", "/readyz"}
+    assert paths == {"/healthz", "/readyz", "/auth/token", "/auth/me", "/admin/ping"}
 
 
 # --- readiness: gjendjet e skemës --------------------------------------------------------------
@@ -151,8 +151,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0003_next.py").write_text(
-        'revision = "0003"\ndown_revision = "0002"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0004_next.py").write_text(
+        'revision = "0004"\ndown_revision = "0003"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -171,7 +171,7 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
     assert set(inspect(create_engine(url)).get_table_names()) == {"central_alembic_version"}
     central_alembic(url, "upgrade", "head")
     tables = set(inspect(create_engine(url)).get_table_names())
-    assert tables == {"central_alembic_version", "enterprises"}
+    assert tables == {"central_alembic_version", "enterprises", "users"}
     assert not any(t.startswith("sms_") for t in tables)
     central_alembic(url, "downgrade", "base")
     central_alembic(url, "upgrade", "head")  # up/down/up
@@ -182,7 +182,7 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
     from app.core.db import Base as EnterpriseBase
 
     assert Base is not EnterpriseBase and Base.metadata is not EnterpriseBase.metadata
-    assert set(Base.metadata.tables) == {"enterprises"}  # M4-b: vetëm regjistri
+    assert set(Base.metadata.tables) == {"enterprises", "users"}  # M4-b + M4-d
     assert "enterprises" not in EnterpriseBase.metadata.tables
     assert "sms_enterprises" not in Base.metadata.tables
     assert not set(Base.metadata.tables) & set(EnterpriseBase.metadata.tables)
@@ -200,7 +200,11 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
     ent, cen = create_engine(ent_url), create_engine(cen_url)
     ent_tables = set(inspect(ent).get_table_names())
     assert "sms_alembic_version" in ent_tables and "central_alembic_version" not in ent_tables
-    assert set(inspect(cen).get_table_names()) == {"central_alembic_version", "enterprises"}
+    assert set(inspect(cen).get_table_names()) == {
+        "central_alembic_version",
+        "enterprises",
+        "users",
+    }
     assert "enterprises" not in ent_tables and not any(
         t.startswith("sms_") for t in inspect(cen).get_table_names()
     )
@@ -268,5 +272,7 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "database_url",
         "db_pool_size",
         "db_statement_timeout_ms",
+        "auth_secret",
+        "auth_ttl_seconds",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"

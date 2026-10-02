@@ -141,6 +141,8 @@ Vendime të miratuara: `apps/central/` në të njëjtin repo, Enterprise mbetet 
 Tabela `enterprises` (UUID kanonik, `name`, `status` active/suspended, timestamps), migrimi `0002`, service konkret pa HTTP/auth/sync/fshirje. Central ≠ rekord lokal i Enterprise; nuk ka sync deri te M7.
 ### M4-c — bootstrap i Enterprise-ve ekzistues (referenca: `docs/M4_ARCHITECTURE.md` §M4-c)
 Kopjon `sms_enterprises` → Central `enterprises` me UUID të ruajtura, manual dhe idempotent (`apps/central/tools/bootstrap_enterprises.py`, `--dry-run`); zero ndryshim skeme, `owner_ref` nuk ruhet në Central, pa sync runtime.
+### M4-d — autentikimi/autorizimi bazë i Central (referenca: `docs/M4_ARCHITECTURE.md` §M4-d)
+Staf i vetin (`users`, migrimi `0003`), Argon2id, JWT HS256 me sekret `CENTRAL_AUTH_SECRET`, RBAC `admin|operator`, CLI `create_admin`, endpoint-e vetëm auth/probë; pa Product/CRUD/sync/regjistrim.
 
 - **Objective:** ekziston Central si aplikacion i veçantë administrativ me identitet, audit dhe API shërbimi.
 - **Tables (DB Central):** `enterprises` (burimi i të vërtetës për ID/status), `staff_users`, `staff_roles`, `audit_log`, `service_credentials`.

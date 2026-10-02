@@ -116,3 +116,57 @@ Pa sync runtime (pa event, polling, scheduler, webhook, worker, dual-write, tran
 3. Pa `--dry-run` për të aplikuar; përsërit për verifikim (`Create: 0`, `Matching: N`).
 4. Pas bootstrap-it, emrat provizorë ndryshohen te Central (`rename`).
 Kodet e daljes: 0 ok · 1 konflikte/të pavlefshme (asgjë e shkruar) · 2 konfigurim/lidhje/gabim.
+
+---
+## M4-d — Autentikimi dhe autorizimi bazë i Central
+
+### Audit i autentikimit ekzistues (Enterprise) — çfarë ripërdoret vetëm si ide
+| Pjesë | Sot në Enterprise (`app/core/security.py`, `totp.py`, `models/admin.py`) | Për Central |
+|---|---|---|
+| Identitet | **Nuk ka model përdoruesi/fjalëkalimi.** Autentikimi = çelësa API (`sms_<prefix>_<sekret>`, SHA-256 i sekretit, `compare_digest`) + çelës bootstrap `SMS_ADMIN_API_KEY` | Central ka nevojë për **staf me email+fjalëkalim** (njeri në konsolë), jo çelësa makine |
+| Fjalëkalime | s'ka (SHA-256 është i përshtatshëm vetëm për sekrete të rastit me entropi të lartë, jo për fjalëkalime) | KDF e ngadaltë e provuar: **Argon2id** |
+| Token/seancë | s'ka (çelësi është kredenciali; `last_used_at`) | token me afat të shkurtër |
+| Role/leje | `ROLE_PERMS` (superadmin, finance, pricing, approver, support, client) + `Principal.has()` | **vetëm 2 role** (`admin`, `operator`); pa matricë lejesh |
+| 2FA | TOTP (RFC 6238) si hap i dytë te çelësat e stafit për veprime të ndjeshme | jashtë scope-it të M4-d (rrugë e hapur, shih borxhin) |
+| Mbrojtje brute-force | tabela `AuthFailure` për IP (429) | **jo implementuar** (borxh i shënuar) |
+Përfundim: asnjë primitive e Enterprise nuk ripërdoret as importohet; vetëm idetë (krahasim në kohë konstante, përgjigje e njëtrajtshme, rol i ndarë nga identiteti). Pa tabelë, sekret ose rol të përbashkët.
+
+### Skema (`users`, migrimi `0003`)
+`id` UUID PK (v4) · `email` String(254) UNIK, i ruajtur i normalizuar (`strip` + `lower`; CHECK `email = lower(trim(email))`) · `password_hash` String(255) (Argon2id, format vetë-përshkrues) · `role` `admin|operator` (CHECK; një kolonë, jo tabelë rolesh) · `status` `active|disabled` (CHECK) · `created_at`, `updated_at`.
+Email: formë minimale `local@domain.tld`, pa hapësira/karaktere kontrolli, max 254; pa verifikim email-i; krahasimi vetëm në formën e normalizuar.
+
+### Mekanizmi
+- **Login:** `POST /auth/token` `{email, password}` → `{access_token, token_type:"bearer", expires_in}`. Përgjigje **e njëtrajtshme 401** për email të panjohur / fjalëkalim gabim / përdorues i çaktivizuar (pa zbuluar ekzistencën; kosto e njëjtë me hash fiktiv kur përdoruesi s'ekziston). Sekreti i paconfiguruar → 503.
+- **Token:** JWT **HS256** (PyJWT), algoritmi konstant (nuk lexohet nga token-i), `iss=sms-central`, `aud=sms-central-admin`, `sub`=user id, `iat`, `exp`, `jti`; **roli dhe statusi s'janë në token**. TTL `CENTRAL_AUTH_TTL_SECONDS` (default 900 s, 60..86400); pa refresh token.
+- **Çdo kërkesë e mbrojtur:** dekodim (nënshkrim, `exp`, `iss`, `aud`, claims të kërkuara) → lexim i përdoruesit nga DB → duhet `active`. Roli lexohet nga DB në çdo kërkesë.
+- **Kufizimet e revokimit (stateless):** s'ka revokim për token të veçantë/logout; një token i vlefshëm i një përdoruesi aktiv punon deri në `exp`. Çaktivizimi i përdoruesit dhe ndryshimi i rolit vlejnë **menjëherë** (kontroll DB). Rikthimi i përdoruesit aktiv ri-aktivizon token-at ende të pa-skaduar. Ndryshimi i fjalëkalimit nuk i anulon token-at ekzistues (s'ka ende rrjedhë ndryshimi fjalëkalimi).
+- **Sekreti:** `CENTRAL_AUTH_SECRET` (min 32 karaktere; i veçantë nga çdo sekret i Enterprise). Bosh/i shkurtër → login dhe endpoint-et e mbrojtura 503; me `CENTRAL_ENV=production` aplikacioni **refuzon të niset**. Rotacioni i sekretit i pavlefëson menjëherë të gjitha token-at (s'ka `kid` ende).
+- **Fjalëkalime:** Argon2id (argon2-cffi, parametrat e paracaktuar të bibliotekës; asnjë algoritëm i vetë-shkruar), gjatësi 12..128; hash i keq/i prishur → verifikim `False` (kurrë përjashtim); rehash automatik në login nëse parametrat e bibliotekës rriten.
+
+### RBAC minimal
+`admin`, `operator`; `require_role(*roles)` si dependency eksplicite (403 `forbidden` për rol tjetër, 401 pa token). Sot: `/auth/me` për çdo përdorues aktiv; `/admin/ping` vetëm `admin`. Pa policy engine dhe pa matricë lejesh; lejet fine shtohen kur të ketë CRUD (M5+).
+
+### Endpoint-et (vetëm auth/probë; pa CRUD biznesi)
+`POST /auth/token`, `GET /auth/me`, `GET /admin/ping`, plus `/healthz`, `/readyz`. Pa regjistrim/self-signup: stafi krijohet vetëm nga CLI.
+
+### Admin-i i parë
+`python -m apps.central.tools.create_admin --email x@y.com [--role admin|operator]` me `CENTRAL_DATABASE_URL`; fjalëkalimi nga `CENTRAL_ADMIN_PASSWORD` ose terminal (getpass, dy herë), **kurrë nga argumentet**, pa parazgjedhje. Idempotent: ekziston me të njëjtin fjalëkalim+rol → no-op (0); ekziston me ndryshe → dështim i pastër pa ndryshim (1); gabim input/konfigurim (2). Nuk printon fjalëkalim, hash, token ose URL.
+
+### Logim
+`central.auth`: `login ok user=<uuid> ip=…`, `login failed reason=<unknown_user|bad_password|disabled> ip=…` (arsyeja vetëm në log, jo në përgjigje); asnjëherë fjalëkalim/hash/token/email (testuar me `caplog`). Veprimet e ndjeshme (krijim, çaktivizim) kalojnë nga funksione të vetme të service-it, gati për audit të ardhshëm; nuk u ndërtua `AuditLog` i plotë.
+
+### Dizajn i ardhshëm: auth shërbim-te-shërbim Central↔Enterprise (NUK implementohet)
+| Opsion | Vlerësim |
+|---|---|
+| **Client credentials + token i shkurtër i nënshkruar asimetrikisht (EdDSA/RS256, `kid`, `aud`=shërbimi, `scope`)** | **Rekomandimi.** Central lëshon token 5 min për identitet shërbimi (tabela `service_credentials` e planifikuar, sekret i hash-uar); Enterprise verifikon me çelës publik, pa sekret të përbashkët; rotacion me `kid`; kontratat e kërkesës/përgjigjes në `contracts` të versionuara |
+| HMAC mbi kërkesën (si webhook V1: `ts.body`) | e thjeshtë, por sekret i përbashkët + menaxhim çelësash për çdo çift; mirë për dërgime push nga Central |
+| mTLS | shtresë rrjeti shtesë (identitet transporti), jo zëvendësim i autorizimit; opsionale kur ka infrastrukturë |
+| JWT HS256 i përbashkët | **refuzohet**: sekret i përbashkët mes planeve |
+Këto kanë kuptim vetëm me M7 (sync); në M4-d s'ka endpoint sync as thirrje drejt Enterprise.
+
+### Borxhe / risqe të M4-d
+- **Pa limitim përpjekjesh login** (brute-force/credential stuffing): zbutje e rekomanduar te reverse proxy (nginx `limit_req`) ose tabelë dështimesh/mbyllje llogarie (kujdes DoS mbi llogari admin); i regjistruar para go-live.
+- Pa MFA/TOTP për stafin e Central; pa rrjedhë ndryshimi/rivendosjeje fjalëkalimi; pa revokim për token; pa `kid` për rotacion sekreti.
+- `argon2-cffi` dhe `PyJWT` u shtuan te `requirements.txt` të përbashkët (imazhi Enterprise i instalon, por nuk i përdor).
+- Aplikacioni Central ende nuk ka imazh Docker/proxy; TLS pritet nga proxy.
+- Email-i normalizohet me `lower()` (jo `casefold`/IDNA): domene IDN me dallime Unicode trajtohen si të ndryshme.
