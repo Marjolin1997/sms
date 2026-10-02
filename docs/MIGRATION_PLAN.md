@@ -154,6 +154,8 @@ Staf i vetin (`users`, migrimi `0003`), Argon2id, JWT HS256 me sekret `CENTRAL_A
 - **Acceptance:** Central nis, migron, ka audit dhe 2FA staf; regjistri i enterprises përputhet 1:1 me Enterprise.
 
 ## M5 · Katalogu i produkteve dhe `EnterpriseProduct` (Central)
+### M5-a — katalogu i produkteve + audit minimal (referenca: `docs/M5_CENTRAL_CATALOG.md`)
+Zbatuar: `products` (`code` i pandryshueshëm, `channel` sms|email, `status` active|retired), API admin (admin shkruan, operator lexon), `audit_log` vetëm-shtim. Fazat e mbetura: M5-b assignment, M5-c config/mapim (vetëm nëse justifikohet), M5-d pricing. Pa sync me Enterprise.
 - **Objective:** produktet menaxhohen te Central; caktohen te Enterprise pa kopjuar të dhëna.
 - **Tables (Central):** `products(code, name, channel, description, active, visible, self_registration_enabled, auto_approval_enabled, requires_manual_approval, requires_payment, requires_sender_registration, requires_external_account, default_config JSONB)`, `product_country_rules(product_id, country, allowed, requires_approval)`, `enterprise_products(enterprise_id, product_id, status, activation_date, pricing_config/rate_card_id, external_account_mapping JSONB, limits JSONB, config JSONB; UNIQUE(enterprise_id,product_id))`, `rate_cards/versions/rates` (të lëvizura ose të lidhura), `provider_accounts` (kredencialet vetëm këtu/Gateway).
 - **Files/modules:** `apps/central/catalog/*`; `GET /api/public/catalog/products` (vetëm `active ∧ visible ∧ self_registration_enabled`, pa fusha të brendshme, cache, rate limit).

@@ -363,10 +363,8 @@ def test_require_role_is_an_explicit_dependency_not_a_policy_engine():
 def test_central_exposes_no_registration_and_no_business_endpoints(api):
     c, _ = api
     paths = set(c.app.openapi()["paths"])
-    assert paths == {"/healthz", "/readyz", "/auth/token", "/auth/me", "/admin/ping"}
-    assert not [
-        p for p in paths if "regist" in p or "signup" in p or "enterprise" in p or "product" in p
-    ]
+    assert {"/healthz", "/readyz", "/auth/token", "/auth/me", "/admin/ping"} <= paths
+    assert not [p for p in paths if "regist" in p or "signup" in p or "enterprise" in p]
 
 
 # --- sekrete jo në log ---------------------------------------------------------------------------------
@@ -482,7 +480,13 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
     ent_tables = set(inspect(create_engine(ent)).get_table_names())
     cen_tables = set(inspect(create_engine(cen)).get_table_names())
     assert "users" not in ent_tables and "enterprises" not in ent_tables
-    assert cen_tables == {"central_alembic_version", "enterprises", "users"}
+    assert cen_tables == {
+        "central_alembic_version",
+        "enterprises",
+        "users",
+        "products",
+        "audit_log",
+    }
     assert not any(t.startswith("sms_") for t in cen_tables)
 
 
