@@ -28,6 +28,7 @@ from app.providers.email import EmailRequest
 from app.queue.dispatch import DispatchSpec
 from app.queue.postgres import PostgresDispatchQueue
 from app.services import consent, email_domains, email_mime, events, switches
+from app.services import control_plane_shadow as shadow
 
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30
@@ -110,6 +111,7 @@ def submit(
 
         raise SendingPaused("sending is temporarily paused")
     plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
+    shadow.observe(db, plan, owner, "email", plan is not None and bool(plan.enabled))  # M7-e
     if plan is None or not plan.enabled:
         from app.services.messages import AccountDisabled
 

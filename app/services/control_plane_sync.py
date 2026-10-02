@@ -28,7 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
-from app.core.timeutil import utcnow
+from app.core.timeutil import as_utc, utcnow
 from app.models.control_plane import (
     ENTITLEMENT_WITHDRAWN,
     CpCursor,
@@ -48,6 +48,9 @@ SYSTEM_ACTOR = "system:control_plane_sync"
 ACTION_ENTERPRISE = "control_plane.enterprise.apply"
 ACTION_ENTITLEMENT = "control_plane.entitlement.apply"
 ACTION_SNAPSHOT = "control_plane.snapshot.apply"
+
+ALERT_AGE_S = 300  # ~5 min: alarm i vjetërsisë (vetëm monitorim)
+SLO_AGE_S = 900  # 15 min: SLO për gjendjen që ndikon pezullimin
 
 APPLIED, NOOP, STALE, UNKNOWN_ENTERPRISE = "applied", "noop", "stale", "unknown_enterprise"
 
@@ -277,26 +280,52 @@ class SnapshotResult:
     entitlements_withdrawn: int = 0
     skipped_unknown_enterprise: int = 0
     reset: bool = False  # epokë e re: gjendja u zëvendësua pa kufizim nga revision
+    full_scope: bool = True
+    entitlements_out_of_scope: int = 0  # withdrawn sepse enterprise-i s'është më i autorizuar
+    enterprises_out_of_scope: int = 0
 
 
-def apply_snapshot(db: Session, snap: SnapshotV1, *, now: datetime | None = None) -> SnapshotResult:
-    """Aplikon një snapshot të plotë (të autorizuarit për këtë konsumator), atomikisht.
+def apply_snapshot(
+    db: Session, snap: SnapshotV1, *, now: datetime | None = None, full_scope: bool = True
+) -> SnapshotResult:
+    """Aplikon një snapshot, atomikisht.
 
-    * E njëjta epokë: çdo entitet kalon nga rregulli i `revision` (snapshot i përsëritur = no-op;
-      snapshot më i ri përditëson; `snapshot_seq` < kursor ⇒ StaleSnapshot).
-    * Epokë e re (Central u rivendos): gjendja zëvendësohet pa kontroll revision (revision-et mund
-      të rinisin), kursori rinis nga `snapshot_seq`.
-    * Entitlement lokal i enterprise-it në snapshot por pa assignment në të ⇒ `withdrawn`
-      (kurrë fshirje; rishfaqja e rikthen). Enterprise-et jashtë snapshot-it NUK preken (as
-      entitlement-et e tyre): s'fshihet asnjë tenant lokal nga një snapshot i pjesshëm.
+    `full_scope=True` (parazgjedhja): snapshot pa `?enterprise_id=` = TËRË bashkësia e autorizuar e
+    kredencialit. Vetëm ai mund të (a) lëvizë kursorin dhe (b) rakordojë bashkësinë e synuar.
+    `full_scope=False` (snapshot i pjesshëm `?enterprise_id=`): aplikon vetëm entitetet e tij,
+    NUK prek kursorin dhe NUK nxjerr përfundime për enterprise-et e tjera; kërkon epokë dhe
+    generation të njëjta me kursorin (përndryshe `SnapshotRequired`).
+
+    * E njëjta epokë: çdo entitet kalon nga rregulli i `revision` (përsëritje = no-op; më i ri
+      përditëson; `snapshot_seq` < kursor ⇒ `StaleSnapshot`, vetëm full).
+    * Epokë e re (Central u rivendos): zëvendësim pa kontroll revision; kursori rinis.
+    * Entitlement lokal i enterprise-it në snapshot por pa assignment në të ⇒ `withdrawn`.
+    * FULL: enterprise me `cp_revision` > 0 (dikur i menaxhuar nga Central) që MUNGON nga snapshot-i
+      ka dalë nga fusha e autorizimit të kredencialit ⇒ entitlement-et e tij bëhen `withdrawn`
+      (arsye `out_of_authorization_scope`): nuk konsiderohen më autoritet aktual i Central.
+      `sms_enterprises` dhe historiku i entitlement-eve NUK fshihen; `status`/`cp_revision` të
+      enterprise-it mbeten si gjendja e fundit e njohur. Rikthimi në fushë (snapshot ose
+      ngjarje me revision ≥) i rikthen entitlement-et. Enterprise-et që s'kanë qenë kurrë të
+      menaxhuar (`cp_revision` = 0) nuk preken.
     """
     now = now or utcnow()
-    res = SnapshotResult()
+    res = SnapshotResult(full_scope=full_scope)
     with db.begin_nested():
         cur = _lock_cursor(db)
-        if cur.epoch == snap.epoch and snap.snapshot_seq < cur.last_seq:
-            raise StaleSnapshot(f"snapshot_seq {snap.snapshot_seq} < local cursor {cur.last_seq}")
-        force = res.reset = cur.epoch is not None and cur.epoch != snap.epoch
+        if full_scope:
+            if cur.epoch == snap.epoch and snap.snapshot_seq < cur.last_seq:
+                raise StaleSnapshot(
+                    f"snapshot_seq {snap.snapshot_seq} < local cursor {cur.last_seq}"
+                )
+            force = res.reset = cur.epoch is not None and cur.epoch != snap.epoch
+        else:
+            if cur.epoch is None:
+                raise SnapshotRequired("no_snapshot")
+            if cur.epoch != snap.epoch:
+                raise SnapshotRequired("epoch_mismatch")
+            if cur.authorization_generation != snap.authorization_generation:
+                raise SnapshotRequired("generation_mismatch")
+            force = False
         ref = {"snapshot_seq": snap.snapshot_seq, "epoch": str(snap.epoch)}
         present: set[uuid.UUID] = set()
         for rev, st in snap.enterprises:
@@ -331,25 +360,55 @@ def apply_snapshot(db: Session, snap: SnapshotV1, *, now: datetime | None = None
             for row in gone:
                 if row.assignment_id in kept:
                     continue
-                audit.system_event(
-                    db, SYSTEM_ACTOR, ACTION_ENTITLEMENT, "entitlement", row.assignment_id,
-                    {"from": {"status": row.status, "revision": row.revision},
-                     "to": {"status": ENTITLEMENT_WITHDRAWN, "revision": row.revision},
-                     "enterprise_id": str(row.enterprise_id), "reason": "absent_from_snapshot",
-                     **ref},
-                )  # fmt: skip
-                row.status, row.updated_at = ENTITLEMENT_WITHDRAWN, now
+                _withdraw(db, row, "absent_from_snapshot", ref, now)
                 res.entitlements_withdrawn += 1
-        cur.epoch, cur.authorization_generation = snap.epoch, snap.authorization_generation
-        cur.last_seq, cur.last_snapshot_at, cur.last_success_at = snap.snapshot_seq, now, now
+        if full_scope:
+            snap_ids = {uuid.UUID(st.id) for _, st in snap.enterprises}
+            orphans = db.scalars(
+                select(Entitlement)
+                .join(Enterprise, Enterprise.id == Entitlement.enterprise_id)
+                .where(
+                    Enterprise.cp_revision > 0,
+                    Entitlement.enterprise_id.not_in(snap_ids),
+                    Entitlement.status != ENTITLEMENT_WITHDRAWN,
+                )
+                .with_for_update(of=Entitlement)
+                .execution_options(populate_existing=True)
+            ).all()
+            for row in orphans:
+                _withdraw(db, row, "out_of_authorization_scope", ref, now)
+            res.entitlements_out_of_scope = len(orphans)
+            res.enterprises_out_of_scope = len({r.enterprise_id for r in orphans})
+            cur.epoch, cur.authorization_generation = snap.epoch, snap.authorization_generation
+            cur.last_seq, cur.last_snapshot_at, cur.last_success_at = snap.snapshot_seq, now, now
         audit.system_event(
             db, SYSTEM_ACTOR, ACTION_SNAPSHOT, "control_plane", "snapshot",
             {**ref, "authorization_generation": snap.authorization_generation,
+             "full_scope": full_scope,
              "enterprises": len(snap.enterprises), "assignments": len(snap.assignments),
              "reset": res.reset, "withdrawn": res.entitlements_withdrawn,
+             "out_of_scope_entitlements": res.entitlements_out_of_scope,
              "skipped_unknown_enterprise": res.skipped_unknown_enterprise},
         )  # fmt: skip
     return res
+
+
+def _withdraw(db: Session, row: Entitlement, reason: str, ref: dict, now: datetime) -> None:
+    audit.system_event(
+        db, SYSTEM_ACTOR, ACTION_ENTITLEMENT, "entitlement", row.assignment_id,
+        {"from": {"status": row.status, "revision": row.revision},
+         "to": {"status": ENTITLEMENT_WITHDRAWN, "revision": row.revision},
+         "enterprise_id": str(row.enterprise_id), "reason": reason, **ref},
+    )  # fmt: skip
+    row.status, row.updated_at = ENTITLEMENT_WITHDRAWN, now
+
+
+def sync_age_seconds(cursor: CpCursor, now: datetime | None = None) -> float | None:
+    """Mosha e sinkronizimit të suksesshëm të fundit (None = kurrë). Vetëm për monitorim:
+    NUK shkakton asnjë çaktivizim automatik (fail-static)."""
+    if cursor.last_success_at is None:
+        return None
+    return (as_utc(now or utcnow()) - as_utc(cursor.last_success_at)).total_seconds()
 
 
 # --- feed --------------------------------------------------------------------------------------

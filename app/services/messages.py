@@ -30,6 +30,7 @@ from app.providers import ProviderError, SendRequest, get_provider
 from app.queue.dispatch import DispatchSpec
 from app.queue.postgres import PostgresDispatchQueue
 from app.services import consent, events, rates, sender_ids, switches, templates
+from app.services import control_plane_shadow as shadow
 from app.services import wallet as wallets
 from app.services.sms_text import count_segments
 
@@ -123,6 +124,9 @@ def submit(
     if not switches.is_enabled(db, switches.SUBMIT):
         raise SendingPaused("sending is temporarily paused")
     plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
+    shadow.observe(
+        db, plan, owner, "sms", plan is not None and bool(plan.enabled)
+    )  # M7-e: vetëm vëzhgim
     if plan is None or not plan.enabled:
         raise AccountDisabled("account has no active sending plan")
     limit = plan.rate_limit_per_min or DEFAULT_RATE_LIMIT

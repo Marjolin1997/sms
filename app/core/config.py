@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -88,6 +88,20 @@ class Settings(BaseSettings):
     # Sa kohë presim DLR pas SENT para se ta konsiderojmë të humbur.
     dlr_timeout_hours: int = 72
 
+    # M7-e: sinkronizimi me Control Plane (Central). `off` = asgjë nuk nisë/vëzhgohet;
+    # `shadow` = poller + krahasim vetëm-vëzhgim (asnjë vendim trafiku nuk ndryshon). Pa `enforce`.
+    # Çelësi privat Ed25519 vjen VETËM nga skedari (mount sekret), kurrë nga DB ose log.
+    cp_sync_mode: Literal["off", "shadow"] = "off"
+    cp_base_url: str = ""
+    cp_client_id: str = ""
+    cp_key_id: str = ""
+    cp_private_key_path: str = ""
+    cp_poll_interval_seconds: int = Field(30, ge=5, le=3600)
+    cp_request_timeout_seconds: float = Field(10.0, ge=1, le=120)
+    cp_snapshot_interval_seconds: int = Field(
+        3600, ge=300
+    )  # rakordim i plotë periodik (i detyrueshëm)
+
     def production_problems(self) -> list[str]:
         """Konfigurime që nuk lejohen në prodhim (lista bosh = në rregull)."""
         bad = []
@@ -110,6 +124,8 @@ class Settings(BaseSettings):
             bad.append("SMS_EMAIL_PROVIDER must not be 'fake'")
         if self.payment_provider == "fake":
             bad.append("SMS_PAYMENT_PROVIDER must not be 'fake' (use 'disabled' for now)")
+        if self.cp_sync_mode != "off" and not self.cp_base_url.startswith("https://"):
+            bad.append("SMS_CP_BASE_URL must be https:// when SMS_CP_SYNC_MODE is not off")
         return bad
 
     def validate_production(self) -> None:

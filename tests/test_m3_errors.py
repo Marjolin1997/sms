@@ -87,8 +87,8 @@ def test_every_runtime_error_class_keeps_name_code_message_args_and_inheritance(
     expected, _ = _golden_after_known_moves()
     assert (
         now_classes == expected
-    )  # 47 klasa + 3 të M7-d: .code, str, args, __init__, zinxhiri i trashëgimisë
-    assert len(expected) == 50
+    )  # 47 klasa + 3 (M7-d) + 7 (M7-e): .code, str, args, __init__, zinxhiri i trashëgimisë
+    assert len(expected) == 57
 
 
 def test_http_status_mapping_dictionaries_are_identical():

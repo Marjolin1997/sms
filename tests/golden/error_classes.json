@@ -310,6 +310,128 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.services.control_plane_client.ConfigError": {
+   "app_mro": [
+    "ConfigError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "ConfigError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.control_plane_client.CpAuthError": {
+   "app_mro": [
+    "CpAuthError",
+    "CpError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "CpAuthError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.control_plane_client.CpError": {
+   "app_mro": [
+    "CpError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "CpError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.control_plane_client.CpForbidden": {
+   "app_mro": [
+    "CpForbidden",
+    "CpError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "CpForbidden",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.control_plane_client.CpProtocolError": {
+   "app_mro": [
+    "CpProtocolError",
+    "CpError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "CpProtocolError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.control_plane_client.CpSnapshotRequired": {
+   "app_mro": [
+    "CpSnapshotRequired",
+    "CpError"
+   ],
+   "args": null,
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "CpSnapshotRequired",
+   "own_init": true,
+   "str": null
+  },
+  "app.services.control_plane_client.CpTransportError": {
+   "app_mro": [
+    "CpTransportError",
+    "CpError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_client",
+   "name": "CpTransportError",
+   "own_init": false,
+   "str": "boom"
+  },
   "app.services.control_plane_sync.ApplyError": {
    "app_mro": [
     "ApplyError"

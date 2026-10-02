@@ -213,7 +213,9 @@ def test_missing_entitlement_is_withdrawn_not_deleted_and_can_return(db):
     r = do_snapshot(db, ents=[ent_item(e.id, 1)], asgs=[asg_item(e.id, a1, 1, "sms_std")], seq=11)
     st = {x.assignment_id: x.status for x in db.scalars(select(Entitlement))}
     assert st[a1] == "active" and st[a2] == "withdrawn"
-    assert st[a3] == "active"  # enterprise jashtë snapshot-it: i paprekur (fail-static)
+    assert st[a3] == "withdrawn"  # M7-e: dalje nga fusha e autorizimit (snapshot FULL)
+    assert r.entitlements_out_of_scope == 1 and r.enterprises_out_of_scope == 1
+    assert db.get(Enterprise, other.id) is not None  # tenant-i s'fshihet kurrë
     assert r.entitlements_withdrawn == 1 and len(st) == 3
     assert not entitlement_enabled("active", st[a2])
     # rishfaqja me të njëjtin revision e rikthen

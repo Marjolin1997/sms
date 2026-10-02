@@ -62,6 +62,23 @@ services:
       interval: 30s
       start_period: 30s
 
+  # M7-e (opsional, `docker compose --profile control-plane up -d`): poller i Control Plane në modalitet
+  # shadow. Një aktiv për DB (kyç advisory). Çelësi privat Ed25519 vetëm si mount sekret; konfigurimi
+  # SMS_CP_* vjen nga .env (SMS_CP_SYNC_MODE=shadow duhet edhe te `api` që të vëzhgohet krahasimi).
+  cp-sync:
+    <<: *app
+    profiles: ["control-plane"]
+    command: python -m app.worker --role control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
   web:
     build:
       context: .
