@@ -8,6 +8,8 @@ RUN pip install -r requirements.txt
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+# cp.v1 (kontratë e përbashkët, stdlib-only): `app.services.control_plane_sync` e importon
+COPY packages ./packages
 COPY scripts ./scripts
 RUN useradd -r -u 10001 sms && chown -R sms /srv
 USER sms

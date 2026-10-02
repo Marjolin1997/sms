@@ -85,8 +85,10 @@ def _golden_after_known_moves():
 def test_every_runtime_error_class_keeps_name_code_message_args_and_inheritance():
     now_classes, _ = _runtime_snapshot()
     expected, _ = _golden_after_known_moves()
-    assert now_classes == expected  # 47 klasa: .code, str, args, __init__, zinxhiri i trashëgimisë
-    assert len(expected) == 47
+    assert (
+        now_classes == expected
+    )  # 47 klasa + 3 të M7-d: .code, str, args, __init__, zinxhiri i trashëgimisë
+    assert len(expected) == 50
 
 
 def test_http_status_mapping_dictionaries_are_identical():

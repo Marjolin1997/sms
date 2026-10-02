@@ -17,6 +17,7 @@ from app.models.contacts import (  # noqa: F401
     ContactList,
     ListMember,
 )
+from app.models.control_plane import CpCursor, Entitlement  # noqa: F401
 from app.models.email import Email, EmailDomain, EmailEvent  # noqa: F401
 from app.models.enterprise import Enterprise  # noqa: F401
 from app.models.events import Event, WebhookDelivery, WebhookEndpoint  # noqa: F401

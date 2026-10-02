@@ -57,3 +57,14 @@ def cross_tenant(db, ctx: SystemContext, resource: str, action: str, detail: dic
         db, actor=ctx.actor, role="system", action=action_name, target_type=resource,
         target_id="*", detail={"reason": ctx.reason, **(detail or {})},
     )  # fmt: skip
+
+
+def system_event(
+    db: Session, actor: str, action: str, target_type: str, target_id, detail: dict | None = None
+) -> None:
+    """Veprim automatik i sistemit (jo njeri): role="system", i njëjti transaksion me ndryshimin.
+    Thirrësi s'duhet të vendosë sekrete/JWT/çelësa në `detail`."""
+    _append(
+        db, actor=actor, role="system", action=action, target_type=target_type,
+        target_id=str(target_id), detail=detail,
+    )  # fmt: skip

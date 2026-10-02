@@ -363,7 +363,7 @@ def test_0019_adds_nullable_indexed_column_to_all_21_tables_and_nothing_else(at_
         t: [(c["name"], str(c["type"])) for c in insp.get_columns(t)]
         for t in insp.get_table_names()
     }
-    alembic(at_0018, "upgrade", "head")
+    alembic(at_0018, "upgrade", "0019")
     insp = inspect(create_engine(at_0018))
     for t in svc.LEGACY_OWNER_TABLES:
         cols = {c["name"]: c for c in insp.get_columns(t)}

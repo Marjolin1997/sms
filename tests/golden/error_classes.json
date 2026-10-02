@@ -310,6 +310,57 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.services.control_plane_sync.ApplyError": {
+   "app_mro": [
+    "ApplyError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_sync",
+   "name": "ApplyError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.control_plane_sync.SnapshotRequired": {
+   "app_mro": [
+    "SnapshotRequired"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_sync",
+   "name": "SnapshotRequired",
+   "own_init": true,
+   "str": "boom"
+  },
+  "app.services.control_plane_sync.StaleSnapshot": {
+   "app_mro": [
+    "StaleSnapshot"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.control_plane_sync",
+   "name": "StaleSnapshot",
+   "own_init": false,
+   "str": "boom"
+  },
   "app.services.dns_check.DnsError": {
    "app_mro": [
     "DnsError"

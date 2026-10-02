@@ -5,7 +5,7 @@ normalizim); `id` (UUID) krijohet një herë dhe është identiteti i ri për fa
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, String, Uuid, func, text
+from sqlalchemy import BigInteger, DateTime, Index, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -19,8 +19,10 @@ class Enterprise(Base):
     owner_ref: Mapped[str] = mapped_column(String(64), unique=True)
     external_id: Mapped[str | None] = mapped_column(String(64))
     legal_name: Mapped[str | None] = mapped_column(String(200))
-    short_name: Mapped[str | None] = mapped_column(String(64))
+    short_name: Mapped[str | None] = mapped_column(String(200))  # M7-d: ← Central `name` (≤200)
     status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    # M7-d: rishikimi i fundit i Central i aplikuar (0 = asnjë gjendje autoritative e aplikuar ende)
+    cp_revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

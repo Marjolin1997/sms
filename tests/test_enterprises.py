@@ -396,10 +396,12 @@ def test_enterprise_id_is_written_only_by_the_centralized_hook():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "app"
+    # M7-d: models/control_plane.py dhe services/control_plane_sync.py kanë tabelat e veta (jo kolona legacy)
     allowed = {"core/tenancy.py", "services/enterprises.py", "models/tenant.py", "models/enterprise.py",
                "models/__init__.py", "core/config.py", "core/context.py", "core/scope.py", "api/tenant.py",
                "core/security.py", "services/events.py", "core/readiness.py",
-               "models/enterprise_registry.py"}  # fmt: skip
+               "models/enterprise_registry.py",
+               "models/control_plane.py", "services/control_plane_sync.py"}  # fmt: skip
     offenders = [
         p.relative_to(root).as_posix()
         for p in root.rglob("*.py")

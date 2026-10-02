@@ -1234,6 +1234,69 @@
    "ix_sms_contacts_owner_id:['owner_ref', 'id']:False"
   ]
  },
+ "sms_cp_cursor": {
+  "columns": {
+   "authorization_generation": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "epoch": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "id": {
+    "default": "scalar:1",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "last_seq": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "BIGINT"
+   },
+   "last_snapshot_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "last_success_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_cp_cursor_singleton",
+   "PrimaryKeyConstraint:pk_sms_cp_cursor"
+  ],
+  "indexes": []
+ },
  "sms_dlr_receipts": {
   "columns": {
    "id": {
@@ -1739,6 +1802,15 @@
  },
  "sms_enterprises": {
   "columns": {
+   "cp_revision": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "BIGINT"
+   },
    "created_at": {
     "default": "callable",
     "fks": [],
@@ -1791,7 +1863,7 @@
     "onupdate": null,
     "pk": false,
     "server_default": null,
-    "type": "VARCHAR(64)"
+    "type": "VARCHAR(200)"
    },
    "status": {
     "default": "scalar:'active'",
@@ -1819,6 +1891,112 @@
   "indexes": [
    "uq_sms_enterprises_external_id:['external_id']:True",
    "uq_sms_enterprises_owner_ref_lower:['owner_ref']:True"
+  ]
+ },
+ "sms_entitlements": {
+  "columns": {
+   "assignment_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "channel": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [
+     "sms_enterprises.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "id": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "product_code": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(32)"
+   },
+   "product_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "revision": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "status": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "updated_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_entitlements_status",
+   "ForeignKeyConstraint:fk_sms_entitlements_enterprise_id_sms_enterprises",
+   "PrimaryKeyConstraint:pk_sms_entitlements",
+   "UniqueConstraint:uq_sms_entitlements_assignment_id",
+   "UniqueConstraint:uq_sms_entitlements_enterprise_id"
+  ],
+  "indexes": [
+   "ix_sms_entitlements_enterprise_id:['enterprise_id']:False"
   ]
  },
  "sms_events": {
