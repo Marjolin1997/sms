@@ -178,6 +178,7 @@ Zbatuar: `products` (`code` i pandryshueshëm, `channel` sms|email, `status` act
 - **Acceptance:** përdorues me role kufizuar sipas modulit; audit për person; asnjë regres i çelësave API.
 
 ## M7 · Sinkronizimi Central → Enterprise
+### M7-a — dizajni (vetëm dokument): `docs/M7_SYNC_DESIGN.md`. M5-c: audit i mbyllur, implementim i shtyrë te M7; M5-d pricing i shtyrë te M9.
 - **Objective:** Enterprise mban read models lokale të konfigurimit të Central; ndryshimet vijnë me evente të nënshkruara dhe të versionuara.
 - **Tables:** Central: `sync_outbox(event_id UUID, enterprise_id, type, version BIGINT, payload JSONB, status, attempts, next_attempt_at)`, `enterprise_config_versions`. Enterprise: `sync_inbox(event_id UNIQUE, version, applied_at, result)`, `synced_config(version, snapshot JSONB)`, `synced_products`, `synced_prices`, `synced_sender_approvals`, `synced_limits`.
 - **Files/modules:** `apps/central/sync/` (dispatcher me retry/circuit breaker), `app/sync/` në Enterprise (`POST /internal/sync/events`, puller `GET /api/sync/v1/config?since=`), `contracts/sync_v1`.
