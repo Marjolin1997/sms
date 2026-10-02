@@ -35,7 +35,7 @@ Evidencë: `sms_enterprises(id, owner_ref, external_id, legal_name, short_name, 
 | Produkti i tretë | **kolonë e re çdo herë** (jo shkallëzon) | **rresht i ri**, pa ndryshim skeme | s'shprehet |
 | Kompleksiteti i migrimit | i ulët (4 kolona) | mesatar (tabelë e re + applier) | zero |
 | SQL në hot path | 0 shtesë | **0 shtesë** nëse lexohet me një `JOIN` (§3.1); përndryshe +1 në SMS, 0 në email | 0 |
-| Prprapavajtje | po | po (fallback te `AccountPlan` kur s'ka rresht) | po |
+| Prapavajtje | po | po (fallback te `AccountPlan` kur s'ka rresht) | po |
 | Semantika M1 (tenant) | `owner_ref` unik i trashëguar | tabelë e re me `enterprise_id` kanonik (pa `owner_ref`) | trashëgon `owner_ref` |
 | Varësia nga billing | email mbetet i lidhur me `rate_card_id` NOT NULL | **e zgjidh**: email s'lexon `AccountPlan` | e ruan lidhjen |
 | Pastrimi `owner_ref` (M13) | rritet borxhi | pastër (s'ka `owner_ref`) | rritet borxhi |
