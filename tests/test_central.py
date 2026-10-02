@@ -125,6 +125,8 @@ def test_central_has_only_health_routes_and_no_docs():
     assert paths == {
         "/healthz", "/readyz", "/auth/token", "/auth/me", "/admin/ping",
         "/admin/products", "/admin/products/{product_id}",
+        "/admin/enterprises/{enterprise_id}/products",
+        "/admin/enterprises/{enterprise_id}/products/{assignment_id}",
     }  # fmt: skip
 
 
@@ -154,8 +156,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0006_next.py").write_text(
-        'revision = "0006"\ndown_revision = "0005"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0007_next.py").write_text(
+        'revision = "0007"\ndown_revision = "0006"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -174,7 +176,14 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
     assert set(inspect(create_engine(url)).get_table_names()) == {"central_alembic_version"}
     central_alembic(url, "upgrade", "head")
     tables = set(inspect(create_engine(url)).get_table_names())
-    assert tables == {"central_alembic_version", "enterprises", "users", "products", "audit_log"}
+    assert tables == {
+        "central_alembic_version",
+        "enterprises",
+        "users",
+        "products",
+        "audit_log",
+        "enterprise_products",
+    }
     assert not any(t.startswith("sms_") for t in tables)
     central_alembic(url, "downgrade", "base")
     central_alembic(url, "upgrade", "head")  # up/down/up
@@ -185,7 +194,13 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
     from app.core.db import Base as EnterpriseBase
 
     assert Base is not EnterpriseBase and Base.metadata is not EnterpriseBase.metadata
-    assert set(Base.metadata.tables) == {"enterprises", "users", "products", "audit_log"}
+    assert set(Base.metadata.tables) == {
+        "enterprises",
+        "users",
+        "products",
+        "audit_log",
+        "enterprise_products",
+    }
     assert "enterprises" not in EnterpriseBase.metadata.tables
     assert "sms_enterprises" not in Base.metadata.tables
     assert not set(Base.metadata.tables) & set(EnterpriseBase.metadata.tables)
@@ -209,6 +224,7 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "users",
         "products",
         "audit_log",
+        "enterprise_products",
     }
     assert "enterprises" not in ent_tables and not any(
         t.startswith("sms_") for t in inspect(cen).get_table_names()

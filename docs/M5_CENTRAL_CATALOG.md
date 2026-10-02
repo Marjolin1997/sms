@@ -1,6 +1,6 @@
 # M5 — Katalogu i produkteve dhe assignment-i te Enterprise (Central)
 
-Statusi: **M5-a (katalogu + audit minimal) zbatuar.** M5-b/c/d të planifikuara, jo të nisura.
+Statusi: **M5-a (katalogu + audit minimal) dhe M5-b (assignment Enterprise↔Product) zbatuar.** M5-c/d të planifikuara, jo të nisura.
 Pa sync me Enterprise; Product/EnterpriseProduct jetojnë vetëm në Central DB.
 
 ## 1. Audit i koncepteve produkt-ngjashme në Enterprise
@@ -63,3 +63,53 @@ Rreziku i "dump në JSON": çdo çelës i lejuar kërkon skemë, kufi madhësie 
 
 ## 7. Borxh i mbetur komercial/çmimi
 Rate cards, versione, vende/operatorë, nivele, monedha, VAT/faturim, plan mujor dhe `included_emails` janë ende vetëm te Enterprise; asnjë çmim s'është në Central. Katalogu publik, `visible`/vetë-regjistrim, rregulla sipas vendit dhe miratime → M8/M10. Audit i plotë (users, CLI) → gate para M8/M9. `retired` si vokabular: i kthyeshëm (nuk është gjendje terminale).
+
+---
+## 8. M5-b — `EnterpriseProduct` (assignment)
+
+### Audit i koncepteve të assignment-it (çfarë është identitet / çmim / runtime)
+| Koncept | Pronari | Fusha | Identitet assignment? | Çmim? | Runtime operacional? | M5-b | Më vonë |
+|---|---|---|---|---|---|---|---|
+| `Subscription` (`sms_subscriptions`) | Enterprise/billing | `owner_ref` unik, `plan_id`, `pending_plan_id`, `status active|cancelled`, `started_at`, `periods_billed`, `cancel_at_period_end` | po (enterprise↔plan) | indirekt (`plan`) | po: `periods_billed`, `started_at` si ankorë faturimi | vetëm **identiteti** (çifti + status) | cancel/pending, periudha → M9 |
+| `AccountPlan` (`sms_account_plans`) | Enterprise | `owner_ref` unik, `rate_card_id`, `enabled`, `rate_limit_per_min`, `email_rate_limit_per_min` | po (enterprise↔SMS) | `rate_card_id` (referencë çmimi) | po: `enabled` (kill switch), limite në dërgim | vetëm `status` ≈ `enabled` në kuptim administrativ | `rate_card_id` → pricing (M5-d/M9); limite → M5-c |
+| `Plan` | Enterprise/billing | `code`, `monthly_fee`, `included_emails`, `email_overage_price`, `status active|retired` | jo (katalog) | po | jo | identiteti u modelua në `Product` (M5-a) | çmimet → pricing |
+| `rate_card_id` | Enterprise | FK te `sms_rate_cards` | jo | po | po (tarifim) | **jo** | M5-d/M9 |
+| `enabled` | Enterprise (`AccountPlan`), `Switch` globale | boolean | jo | jo | po (kill switch operacional) | **jo**: `status` i Central është vendim administrativ, jo kill switch runtime | sync i statusit → M7 |
+| limite (`rate_limit_per_min`…) | Enterprise | int | jo | jo | po | **jo** | M5-c (propozim: JSON `limits` me skemë sipas kanalit) |
+| provider/account config | `Route` (global), asnjë per-enterprise | — | jo | jo | po | **jo** | M5-c/M7/M12, vetëm me nevojë reale |
+Asnjë nuk kopjohet verbatim: `EnterpriseProduct` mban vetëm çiftin + statusin administrativ.
+
+### Skema (`enterprise_products`, migrimi `0006`)
+`id` UUID PK (v4) · `enterprise_id` UUID FK `enterprises.id` **RESTRICT** · `product_id` UUID FK `products.id` **RESTRICT** · `status` `active|suspended` (CHECK) · `created_at`, `updated_at` · **UNIQUE `(enterprise_id, product_id)`** · asnjë kolonë tjetër (pa config, çmim, monedhë, rate_card, limite, llogari të jashtme; testuar).
+- **PK UUID, jo kyç i përbërë:** URL-të, audit-i (`resource_id`) dhe lidhjet e ardhshme (M7/M9) përdorin një id të vetëm; çifti mbetet unik me constraint. Pa indeks shtesë: UNIQUE mbulon kërkimet sipas `enterprise_id` (kolona e parë); sipas produktit nuk ka model përdorimi sot.
+- **Pandryshueshmëria:** ORM refuzon ndryshimin e `enterprise_id`/`product_id` ("move assignment") dhe `DELETE`; API s'i pranon në PATCH (422).
+- Identiteti i produktit (`code`, `name`, `channel`, `status`) **nuk denormalizohet**; lista bën JOIN.
+
+### Lifecycle dhe semantika
+- `active`: assignment i lejuar nga control plane. `suspended`: ekziston por i çaktivizuar administrativisht. Pa `pending/approved/rejected/cancelled/expired` (s'ka workflow; vjen në M8).
+- **POST ekzistues → 409** (pavarësisht statusit), mesazhi përmban `id` dhe `status`. Zgjedhur për konsistencë me `Product` (409 për code ekzistues) dhe sepse POST **nuk riaktivizon fshehurazi**: aktivizimi është PATCH eksplicit. Unique në DB është burimi i së vërtetës ndaj garës (IntegrityError → 409).
+- `PATCH` me statusin e njëjtë = no-op (200, pa audit).
+
+### Matrica e ndërveprimit të statuseve
+| Veprim | Enterprise `active` + Product `active` | Enterprise `suspended` | Product `retired` |
+|---|---|---|---|
+| assign i ri (POST) | lejohet | **409** | **409** |
+| `suspend` assignment | lejohet | lejohet | lejohet |
+| `activate` assignment (suspended→active) | lejohet | **409** | **409** |
+| statusi i njëjtë | no-op | no-op | no-op |
+| suspendim Enterprise / `retired` Product | — | **nuk ndryshon asnjë assignment** | **nuk ndryshon asnjë assignment** |
+Assignment-et ekzistuese ruhen për histori; asnjë cascade. Enterprise lifecycle ≠ assignment lifecycle.
+
+### API (admin, Bearer JWT)
+`GET /admin/enterprises/{enterprise_id}/products?status=&channel=&limit=&offset=` (admin, operator) · `POST` `{"product_id"}` → 201 (admin) · `GET …/{assignment_id}` (admin, operator; assignment i enterprise-it tjetër → 404) · `PATCH …/{assignment_id}` `{"status"}` (admin; fusha të tjera → 422). Pa DELETE (405). Përgjigja: `id, enterprise_id, product_id, product_code, product_name, product_channel, product_status, status, created_at, updated_at`. Gabime: 404 (Enterprise/Product/assignment i panjohur), 409 (konflikt/rregull statusi), 422 (UUID/status i pavlefshëm); UUID parse-ohen pa normalizim tjetër.
+
+### Audit
+`enterprise_product.assign` (`{"after": {enterprise_id, product_id, status}}`) dhe `enterprise_product.update` (`{enterprise_id, product_id, before, after}` vetëm `status`), `resource_type=enterprise_product`, `resource_id`=id e assignment-it; në të njëjtin transaksion; kërkesat e refuzuara dhe no-op nuk lënë rresht; rollback heq edhe audit-in.
+
+### Pa sync, pa pricing/config
+Asnjë thirrje drejt Enterprise, event, polling, worker, dual-write ose provisioning; Enterprise nuk e konsumon assignment-in. Pa kontratë të përbashkët (konsumatori i dytë vjen në M7).
+
+### Përgjegjësi të ardhshme
+- **M5-c:** `limits`/config (vetëm JSON me skemë sipas kanalit) dhe mapim i jashtëm, **vetëm nëse ka nevojë reale**; `activation_date` nëse kërkohet.
+- **M5-d / M9–M10:** pricing (rate cards), faturim, miratime sender ID/shtet.
+- **M7:** sync i `status` të assignment-it drejt `AccountPlan.enabled`/runtime (Central → Enterprise), me kontratë të versionuar.

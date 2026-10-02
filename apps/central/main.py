@@ -3,7 +3,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 import apps.central.models  # noqa: F401  (regjistron tabelat në Base.metadata)
-from apps.central.api import admin, auth, errors, health, products
+from apps.central.api import admin, auth, enterprise_products, errors, health, products
 from apps.central.core import tokens
 from apps.central.core.config import settings
 from apps.central.core.db import engine as default_engine
@@ -21,6 +21,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(admin.router)
     app.include_router(products.router)
+    app.include_router(enterprise_products.router)
     errors.install(app)
     return app
 

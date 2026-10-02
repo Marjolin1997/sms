@@ -364,7 +364,8 @@ def test_central_exposes_no_registration_and_no_business_endpoints(api):
     c, _ = api
     paths = set(c.app.openapi()["paths"])
     assert {"/healthz", "/readyz", "/auth/token", "/auth/me", "/admin/ping"} <= paths
-    assert not [p for p in paths if "regist" in p or "signup" in p or "enterprise" in p]
+    assert not [p for p in paths if "regist" in p or "signup" in p]
+    assert all("/products" in p for p in paths if "enterprise" in p)  # pa CRUD Enterprise
 
 
 # --- sekrete jo në log ---------------------------------------------------------------------------------
@@ -486,6 +487,7 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "users",
         "products",
         "audit_log",
+        "enterprise_products",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 

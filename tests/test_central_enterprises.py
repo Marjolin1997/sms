@@ -134,6 +134,7 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "users",
         "products",
         "audit_log",
+        "enterprise_products",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 
@@ -275,7 +276,8 @@ def test_no_hard_delete_exists_anywhere_in_central():
 
 def test_central_has_no_management_routes_yet():
     paths = set(client_for("sqlite://")[0].app.openapi()["paths"])
-    assert not [p for p in paths if "enterprise" in p]  # pa CRUD biznesi
+    # pa CRUD Enterprise: vetëm rrugët e assignment-it nën /admin/enterprises/{id}/products
+    assert all("/products" in p for p in paths if "enterprise" in p)
 
 
 def test_service_layer_has_no_enterprise_or_sync_dependencies():

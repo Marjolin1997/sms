@@ -356,7 +356,7 @@ def test_api_exposes_no_delete_and_no_assignment_routes(api):
     methods = {m for p in paths.values() for m in p}
     assert "delete" not in methods and "put" not in methods
     assert api.delete("/admin/products/" + str(uuid.uuid4()), headers=api.admin).status_code == 405
-    assert not [p for p in paths if "enterprises" in p or "assign" in p]
+    assert all(p.endswith("/products") or "/products/" in p for p in paths if "enterprises" in p)
 
 
 # --- audit -------------------------------------------------------------------------------------------------------
@@ -473,7 +473,7 @@ def test_metadata_isolation_new_tables_only_in_central():
     new = {"products", "audit_log"}
     assert new <= set(Base.metadata.tables) and not new & set(EnterpriseBase.metadata.tables)
     assert "sms_audit_log" in EnterpriseBase.metadata.tables  # i Enterprise mbetet i ndarë
-    assert "enterprise_products" not in Base.metadata.tables  # M5-b ende jo
+    assert "enterprise_products" in Base.metadata.tables  # M5-b
 
 
 def test_product_domain_has_no_network_sync_or_enterprise_imports():

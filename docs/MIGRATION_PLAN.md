@@ -154,6 +154,8 @@ Staf i vetin (`users`, migrimi `0003`), Argon2id, JWT HS256 me sekret `CENTRAL_A
 - **Acceptance:** Central nis, migron, ka audit dhe 2FA staf; regjistri i enterprises përputhet 1:1 me Enterprise.
 
 ## M5 · Katalogu i produkteve dhe `EnterpriseProduct` (Central)
+### M5-b — assignment Enterprise↔Product (zbatuar; `docs/M5_CENTRAL_CATALOG.md` §8)
+`enterprise_products` (UUID PK, FK RESTRICT, UNIQUE çift, `active|suspended`), API admin, audit, pa config/çmim/sync.
 ### M5-a — katalogu i produkteve + audit minimal (referenca: `docs/M5_CENTRAL_CATALOG.md`)
 Zbatuar: `products` (`code` i pandryshueshëm, `channel` sms|email, `status` active|retired), API admin (admin shkruan, operator lexon), `audit_log` vetëm-shtim. Fazat e mbetura: M5-b assignment, M5-c config/mapim (vetëm nëse justifikohet), M5-d pricing. Pa sync me Enterprise.
 - **Objective:** produktet menaxhohen te Central; caktohen te Enterprise pa kopjuar të dhëna.
