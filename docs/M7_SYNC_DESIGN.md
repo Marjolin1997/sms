@@ -166,3 +166,7 @@ Pasi snapshot-i ekziston: `EnterpriseProduct.rate_limit_per_min` (Central, kolon
 - **Pranim i dokumentuar:** mjeti i bootstrap-it M4-c (ORM direkt) krijon enterprise me `revision = 1` pa ngjarje outbox (mbulohet nga snapshot); import pas go-live kërkon rikonsilim.
 - **Rregull shkruesish:** çdo shkrues i këtyre entiteteve kalon nga service-t (`services/sync.py`); SQL i drejtpërdrejtë anashkalon disiplinën.
 - Pa endpoint, kredenciale shërbimi, kontratë të shpërndarë, tabela/applier në Enterprise, worker.
+
+### Scalability boundary (V1) dhe M7-b2
+- **Global sync lock: i pranuar për V1** (volum i ulët i shkrimeve të control plane). Nëse throughput i shkrimeve bëhet realisht pengesë, arkitektura e sekuencimit mund të rishikohet, por **korrektësia (rendi i commit-it të `seq`) nuk sakrifikohet**.
+- **M7-b2:** kontrata `cp.v1` në `packages/contracts/control_plane/` (leaf, stdlib-only), mapper `sync_outbox → cp.v1 → bytes`, golden; shih `docs/CONTROL_PLANE_CONTRACT_V1.md`. Emrat e event-eve mbeten `enterprise.upserted` / `enterprise_product.upserted` (pa migrim).

@@ -178,6 +178,8 @@ Zbatuar: `products` (`code` i pandryshueshëm, `channel` sms|email, `status` act
 - **Acceptance:** përdorues me role kufizuar sipas modulit; audit për person; asnjë regres i çelësave API.
 
 ## M7 · Sinkronizimi Central → Enterprise
+### M7-b2 — kontrata `cp.v1` (zbatuar; `docs/CONTROL_PLANE_CONTRACT_V1.md`)
+`packages/contracts/control_plane/v1.py` (leaf, stdlib-only), mapper outbox→kontratë→bytes, golden; webhook V1 i pandryshuar; pa endpoint/auth/applier.
 ### M7-b1 — Central revision + outbox transaksional (zbatuar; `docs/M7_SYNC_DESIGN.md` §18)
 `revision` per entitet, `sync_sequence` (numërues global transaksional, jo identity), `sync_outbox` (snapshot i ngrirë), migrimi `0007`; pa endpoint/worker/kontratë/Enterprise.
 ### M7-a — dizajni (vetëm dokument): `docs/M7_SYNC_DESIGN.md`. M5-c: audit i mbyllur, implementim i shtyrë te M7; M5-d pricing i shtyrë te M9.

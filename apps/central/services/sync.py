@@ -19,12 +19,13 @@ from apps.central.models.enterprise import Enterprise
 from apps.central.models.enterprise_product import EnterpriseProduct
 from apps.central.models.product import Product
 from apps.central.models.sync import SyncOutbox, SyncSequence
+from packages.contracts.control_plane import v1
 
-ENTITY_ENTERPRISE = "enterprise"
-ENTITY_ASSIGNMENT = "enterprise_product"
-# Emra të përkohshëm: finalizohen te kontrata `cp.v1` (M7-b2).
-EVENT_ENTERPRISE = "enterprise.upserted"
-EVENT_ASSIGNMENT = "enterprise_product.upserted"
+# Emrat vijnë nga kontrata `cp.v1` (burimi i vetëm); vlerat e DB nuk ndryshuan nga M7-b1.
+ENTITY_ENTERPRISE = v1.ENTITY_ENTERPRISE
+ENTITY_ASSIGNMENT = v1.ENTITY_ENTERPRISE_PRODUCT
+EVENT_ENTERPRISE = v1.EVENT_ENTERPRISE_UPSERTED
+EVENT_ASSIGNMENT = v1.EVENT_ENTERPRISE_PRODUCT_UPSERTED
 
 _SEQ = SyncSequence.__table__
 

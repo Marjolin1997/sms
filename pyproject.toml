@@ -37,6 +37,7 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "tests/*" = ["E501"]
 "tests/test_central_assignments.py" = ["F811"]  # fixtures të importuara
 "tests/test_central_sync_outbox.py" = ["F811"]  # fixtures të importuara
+"tests/test_control_plane_contract.py" = ["F811"]  # fixtures të importuara
 "app/services/invoice_render.py" = ["E501"]
 "app/core/openapi.py" = ["E501"]
 "scripts/bench.py" = ["E501"]
@@ -48,4 +49,4 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "app/core/tenancy.py" = ["E501"]
 
 [tool.setuptools.packages.find]
-include = ["app*", "apps*"]
+include = ["app*", "apps*", "packages*"]
