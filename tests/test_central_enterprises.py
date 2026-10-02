@@ -137,6 +137,10 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "enterprise_products",
         "sync_sequence",
         "sync_outbox",
+        "service_clients",
+        "service_keys",
+        "service_client_enterprises",
+        "service_assertion_jti",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 
@@ -271,6 +275,8 @@ def test_no_hard_delete_exists_anywhere_in_central():
     for f in mod.rglob("*.py"):
         if "migrations" in f.parts:
             continue
+        if f.relative_to(mod).as_posix() == "services/service_auth.py":
+            continue  # përjashtim i vetëm: rreshti i objektivit të klientit (revoke) — jo entitet biznesi
         for n in ast.walk(ast.parse(f.read_text())):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
                 assert n.func.attr not in {"delete", "merge"}, (f, n.func.attr)

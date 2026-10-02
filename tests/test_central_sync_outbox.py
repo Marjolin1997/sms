@@ -602,10 +602,6 @@ def test_sync_modules_have_no_network_workers_or_enterprise_imports():
             mods = ([n.module] if isinstance(n, ast.ImportFrom) and n.module else
                     [a.name for a in n.names] if isinstance(n, ast.Import) else [])  # fmt: skip
             assert not [m for m in mods if m.split(".")[0] in banned], (name, mods)
-    api_dir = ROOT / "apps/central/api"
-    assert not [
-        p.name for p in api_dir.glob("*.py") if "sync" in p.name.lower()
-    ]  # pa endpoint feed
 
 
 def test_metadata_isolation_and_no_enterprise_tables_touched():

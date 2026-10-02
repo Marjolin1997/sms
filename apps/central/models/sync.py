@@ -40,10 +40,15 @@ class SyncSequence(Base):
 
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=False)
     last_seq: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    # Epoka e feed-it: UUID i qëndrueshëm për jetën e linjës së DB-së (jo i gjeneruar nga procesi).
+    epoch: Mapped[uuid.UUID] = mapped_column(Uuid, default=uuid.uuid4)
+    # Kursori më i vogël `after_seq` me histori të plotë (rritet nga pastrimi i ardhshëm).
+    floor_seq: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
 
     __table_args__ = (
         CheckConstraint("id = 1", name="singleton"),
         CheckConstraint("last_seq >= 0", name="last_seq_non_negative"),
+        CheckConstraint("floor_seq >= 0 and floor_seq <= last_seq", name="floor_within_range"),
     )
 
 

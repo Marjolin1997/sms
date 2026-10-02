@@ -178,6 +178,8 @@ Zbatuar: `products` (`code` i pandryshueshëm, `channel` sms|email, `status` act
 - **Acceptance:** përdorues me role kufizuar sipas modulit; audit për person; asnjë regres i çelësave API.
 
 ## M7 · Sinkronizimi Central → Enterprise
+### M7-c — Central sync API + service auth (zbatuar; `docs/M7_SYNC_DESIGN.md` §19)
+`GET /internal/sync/changes|snapshot`, client assertions Ed25519, `service_*` tabela, replay `jti`, epoch, `auth_generation`, snapshot REPEATABLE READ; vetëm Central, pa Enterprise.
 ### M7-b2 — kontrata `cp.v1` (zbatuar; `docs/CONTROL_PLANE_CONTRACT_V1.md`)
 `packages/contracts/control_plane/v1.py` (leaf, stdlib-only), mapper outbox→kontratë→bytes, golden; webhook V1 i pandryshuar; pa endpoint/auth/applier.
 ### M7-b1 — Central revision + outbox transaksional (zbatuar; `docs/M7_SYNC_DESIGN.md` §18)

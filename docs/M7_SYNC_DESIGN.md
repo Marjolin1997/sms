@@ -170,3 +170,38 @@ Pasi snapshot-i ekziston: `EnterpriseProduct.rate_limit_per_min` (Central, kolon
 ### Scalability boundary (V1) dhe M7-b2
 - **Global sync lock: i pranuar për V1** (volum i ulët i shkrimeve të control plane). Nëse throughput i shkrimeve bëhet realisht pengesë, arkitektura e sekuencimit mund të rishikohet, por **korrektësia (rendi i commit-it të `seq`) nuk sakrifikohet**.
 - **M7-b2:** kontrata `cp.v1` në `packages/contracts/control_plane/` (leaf, stdlib-only), mapper `sync_outbox → cp.v1 → bytes`, golden; shih `docs/CONTROL_PLANE_CONTRACT_V1.md`. Emrat e event-eve mbeten `enterprise.upserted` / `enterprise_product.upserted` (pa migrim).
+
+---
+## 19. M7-c — sipërfaqja e sync-ut të Central dhe auth shërbim-te-shërbim (zbatuar; vetëm Central)
+
+### Auth (Ed25519 client assertion)
+- **Header:** `alg=EdDSA`, `kid`. **Claims të detyrueshme:** `iss` = `sub` = `client_id` · `aud` = `sms-central-sync` · `iat` · `exp` (**`exp − iat ≤ 300 s`**) · `jti` (8..64 karaktere) · `scope` (hapësirë-ndarë; duhet të përmbajë `sync:read`). Leeway ±5 s. Algoritmi fiks (`none`, HS*, RS* refuzohen); token-at e stafit (HS256) nuk pranohen.
+- **Rrjedha në Central:** header+`iss` (pa besim) → kërkim `(client_id, kid)` → klienti dhe çelësi `active` → verifikim EdDSA + `aud` + `exp` + claims të detyrueshme → `sub == iss` → lifetime → scope (token **dhe** klienti) → konsumim `jti`.
+- **Gabime:** çdo dështim identiteti/nënshkrimi/claims/replay/skadimi → **401 gjenerik identik** (`unauthorized`; pa zbulim të regjistrit); scope mungon → **403**; arsyeja e saktë vetëm në log (`client`, `kid`, `reason`, IP; asnjëherë token/nënshkrim/çelës).
+- **Skema:** `service_clients` (`client_id` unik, `status`, `scopes`, `auth_generation`) · `service_keys` (`client_pk`, `kid`, `public_key` PEM Ed25519, `status`; UNIQUE `(client_pk, kid)`) · `service_client_enterprises` (objektivat) · `service_assertion_jti` (PK `(client_pk, jti)`, `expires_at`). **Vetëm çelësa publikë**; privati s'hyn kurrë në Central (CLI refuzon çelës privat/jo-Ed25519).
+- **Rotacion:** disa `kid` aktivë për një klient; shtohet çelësi i ri, kalohet thirrësi, `disable-key` për të vjetrin.
+- **Replay:** `jti` ruhet pas verifikimit të plotë, në **transaksion të veçantë që mbetet edhe kur kërkesa dështon më vonë**; pastrimi i rreshtave të skaduar bëhet lazy në çdo shkrim (pa worker). Trade-off: një shkrim DB per kërkesë (sync në ~30 s: i papërfillshëm), funksionon mes proceseve/instancave pa Redis; tabela rritet maksimumi ≈ kërkesa në 5 min.
+- **Scope-e:** vetëm `sync:read`; feed dhe snapshot e kërkojnë.
+- **CLI (manual):** `create_service_credential` (klient+çelës publik+objektiva; idempotent; kid i njëjtë me çelës tjetër → konflikt) dhe `service_credential_admin` (`grant`, `revoke`, `disable-key`, `disable-client`). Çifti i çelësave gjenerohet jashtë: `openssl genpkey -algorithm ed25519 -out k.pem && openssl pkey -in k.pem -pubout -out k.pub.pem`.
+
+### Objektivat dhe `auth_generation`
+Një klient lexon vetëm enterprise-et e dhëna (`service_client_enterprises`; pa supozim single-tenant). **Problemi:** kursori `seq` është global; nëse bashkësia zgjerohet më vonë, kapërcimi i `seq` të enterprise-it të ri do të humbiste historinë e tij. **Politika:** `auth_generation` rritet te çdo ndryshim real (create me N enterprise, grant, revoke; no-op jo). Feed **kërkon** `generation`; mospërputhje → **409 `sync_authorization_changed`** → konsumatori bën snapshot të plotë (që e sjell gjendjen e tanishme të enterprise-it të ri) dhe vazhdon nga `snapshot_seq`. Revoke: snapshot-i s'e përfshin më (fshirja lokale është vendim i Enterprise).
+
+### Feed: `GET /internal/sync/changes?after_seq=&epoch=&generation=&limit=` (1..500)
+Përgjigje: `{"epoch","authorization_generation","events":[cp.v1…],"next_seq","latest_seq","oldest_available_seq","has_more"}` (wrapper i Central API, jo kontratë e përbashkët). Ngjarjet vijnë nga `sync_outbox` + mapper `cp.v1` (kurrë nga tabelat e biznesit), `seq ASC`, vetëm enterprise-et e autorizuara; pa mutacion, pa ack, pa gjendje konsumatori.
+- **Kursori:** kthen `seq` në `(after_seq, latest_seq]`; `latest_seq` lexohet një herë (vlera e commit-uar e numëruesit; çdo `seq` ≤ saj është i commit-uar sepse numëruesi dhe outbox-i ndryshojnë në të njëjtin commit, në rend). Pa nevojë për overlap për korrektësi (konsumatori mund ta përdorë si mbrojtje shtesë).
+- **`next_seq`:** nëse `has_more` → `seq` i fundit i kthyer; përndryshe `latest_seq` (kapërcimi i `seq` të tenant-eve të tjerë është i sigurt për shkak të generation/epoch; **devijim i shënuar** nga formulimi "highest seq returned / mbetet after_seq": një konsumator i qetë do të mbetej përgjithmonë "prapa" `latest_seq` kur tenant-et e tjerë ndryshojnë, duke prishur monitorimin e vjetërsisë dhe duke rishkanuar boshllëqet). Nuk lëviz kurrë mbrapsht.
+- **Epoka:** UUID i persistuar te `sync_sequence` (gjeneruar një herë në migrim, jo nga procesi); i qëndrueshëm në restart; ndryshon vetëm me `rotate_epoch` (procedurë eksplicite për restore/reseed). Mospërputhje → **409 `sync_epoch_mismatch`**.
+- **Retention/kursor i vjetër:** `sync_sequence.floor_seq` = kursori më i vogël i shërbyeshëm me histori të plotë (0 sot; pastrimi i ardhshëm e rrit). `after_seq < floor_seq` → **410 `sync_cursor_expired`** (pa histori të pjesshme, pa `events`); `after_seq > latest_seq` → **409 `sync_cursor_ahead`**; të gjitha me `action: "snapshot"`. `oldest_available_seq = floor_seq + 1`. Pa worker pastrimi.
+- **Rregull i konsumatorit:** fillo gjithmonë me snapshot (feed pa `epoch`/`generation` të marrë nga snapshot s'thirret dot; `after_seq=0` pa snapshot do humbiste gjendjen para-M7 pa ngjarje).
+
+### Snapshot: `GET /internal/sync/snapshot[?enterprise_id=]`
+Përgjigje: `{"epoch","authorization_generation","snapshot_seq","enterprises":[{entity,enterprise_id,revision,data}],"assignments":[…]}`; `data` = `EnterpriseStateV1`/`EnterpriseProductStateV1` (me `product{id,code,channel}`); pa katalog produktesh, users, audit; vetëm enterprise-et e autorizuara; `enterprise_id` i paautorizuar → **403**. Pa faqosje në V1 (borxh).
+**Konsistenca:** transaksion i vetëm **`REPEATABLE READ` vetëm-lexim** (PostgreSQL). Kufiri (`last_seq`) lexohet i pari, pastaj gjendja, në të njëjtin snapshot të DB-së. Numëruesi dhe rreshtat e entiteteve ndryshojnë gjithmonë në të njëjtin commit, ndaj snapshot-i i sheh të dyja në të njëjtin çast: gjendja = të gjitha ndryshimet me `seq ≤ snapshot_seq`, asnjë më shumë; `generation` dhe bashkësia lexohen po aty. Handoff: snapshot → kursor = `snapshot_seq` → feed `after_seq=snapshot_seq` pa humbje; zbatimi sipas `revision`.
+**Provat PG:** (1) ndryshim që commit-ohet mes leximit të kufirit dhe gjendjes → snapshot e përjashton plotësisht dhe feed e sjell; (2) kontroll negativ: nën READ COMMITTED gjendja do përmbante ndryshimin me `snapshot_seq` të vjetër (gjysmë-konsistente), pra testi është i ndjeshëm; (3) tx me `seq` të alokuar pa commit gjatë snapshot-it → jashtë snapshot-it, brenda feed-it pas commit-it; (4) 4 shkrues paralelë (48 ndryshime) gjatë snapshot-it → snapshot + feed = gjendja finale, revision +1 pa boshllëk.
+
+### Sjellja në dështim
+Central poshtë → konsumatori vazhdon fail-static; auth i dështuar → 401/403 pa efekt; epoch/generation/kursor → 409/410 me `action: snapshot`; kërkesa e dështuar nuk e liron `jti` (replay mbetet i refuzuar).
+
+### Borxhi i sigurisë (para go-live)
+Pa limitim kërkesash për auth (kërkon `limit_req` në proxy; s'ka Redis); TLS/proxy nuk ekzistojnë ende; ndryshimet e kredencialeve me CLI nuk shkruhen te `audit_log` (pa aktor); pa JWS të përgjigjes (vetëm TLS); snapshot pa faqosje; çelësat publikë s'kanë datë skadimi/rotacion të detyruar; leeway 5 s mbështetet te ora e Central.
