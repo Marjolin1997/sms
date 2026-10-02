@@ -488,6 +488,8 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "products",
         "audit_log",
         "enterprise_products",
+        "sync_sequence",
+        "sync_outbox",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 

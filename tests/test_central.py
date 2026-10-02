@@ -156,8 +156,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0007_next.py").write_text(
-        'revision = "0007"\ndown_revision = "0006"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0008_next.py").write_text(
+        'revision = "0008"\ndown_revision = "0007"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -183,6 +183,8 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "products",
         "audit_log",
         "enterprise_products",
+        "sync_sequence",
+        "sync_outbox",
     }
     assert not any(t.startswith("sms_") for t in tables)
     central_alembic(url, "downgrade", "base")
@@ -200,6 +202,8 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "products",
         "audit_log",
         "enterprise_products",
+        "sync_sequence",
+        "sync_outbox",
     }
     assert "enterprises" not in EnterpriseBase.metadata.tables
     assert "sms_enterprises" not in Base.metadata.tables
@@ -225,6 +229,8 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "products",
         "audit_log",
         "enterprise_products",
+        "sync_sequence",
+        "sync_outbox",
     }
     assert "enterprises" not in ent_tables and not any(
         t.startswith("sms_") for t in inspect(cen).get_table_names()

@@ -275,6 +275,8 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "products",
         "audit_log",
         "enterprise_products",
+        "sync_sequence",
+        "sync_outbox",
     }  # bootstrap s'ndryshon skemë
     assert not any(t.startswith("sms_") for t in cen_tables)
     assert "enterprises" not in tables and "central_alembic_version" not in tables
@@ -333,4 +335,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0004_products.py",
         "0005_audit_log.py",
         "0006_enterprise_products.py",
+        "0007_sync_outbox.py",
     ]

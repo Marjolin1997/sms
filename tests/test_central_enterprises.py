@@ -49,7 +49,7 @@ def test_enterprise_model_lives_only_in_central_metadata():
     assert "enterprises" not in EnterpriseBase.metadata.tables
     assert "sms_enterprises" not in Base.metadata.tables
     cols = {c.name for c in Enterprise.__table__.columns}
-    assert cols == {"id", "name", "status", "created_at", "updated_at"}  # pa owner_ref/operacional
+    assert cols == {"id", "name", "status", "revision", "created_at", "updated_at"}  # pa owner_ref
 
 
 def test_enterprise_app_metadata_is_unchanged():
@@ -135,6 +135,8 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "products",
         "audit_log",
         "enterprise_products",
+        "sync_sequence",
+        "sync_outbox",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 

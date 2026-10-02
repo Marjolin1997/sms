@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from apps.central.core.db import Base
 from apps.central.core.timeutil import utcnow
 from apps.central.models.product import ImmutableError
+from apps.central.models.sync import guard_revision
 
 
 class AssignmentStatus(enum.StrEnum):
@@ -44,6 +46,7 @@ class EnterpriseProduct(Base):
     status: Mapped[str] = mapped_column(
         String(16), default=AssignmentStatus.ACTIVE.value, server_default="active"
     )
+    revision: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -52,6 +55,7 @@ class EnterpriseProduct(Base):
             "enterprise_id", "product_id", name="uq_enterprise_products_enterprise_id_product_id"
         ),
         CheckConstraint("status in ('active', 'suspended')", name="status"),
+        CheckConstraint("revision >= 1", name="revision_positive"),
     )
 
 
@@ -66,3 +70,6 @@ def _immutable_pair(_mapper, _conn, target: EnterpriseProduct) -> None:
 @event.listens_for(EnterpriseProduct, "before_delete")
 def _no_hard_delete(*_) -> None:
     raise ImmutableError("assignments are never deleted; set status=suspended")
+
+
+guard_revision(EnterpriseProduct, ("status",))

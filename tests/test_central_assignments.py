@@ -286,7 +286,9 @@ def test_service_never_commits(db):
 
 def test_schema_has_no_pricing_config_or_external_account_fields():
     cols = {c.name for c in EnterpriseProduct.__table__.columns}
-    assert cols == {"id", "enterprise_id", "product_id", "status", "created_at", "updated_at"}
+    assert cols == {
+        "id", "enterprise_id", "product_id", "status", "revision", "created_at", "updated_at",
+    }  # fmt: skip
     forbidden = {
         "config",
         "limits",

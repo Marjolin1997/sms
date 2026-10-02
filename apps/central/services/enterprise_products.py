@@ -21,6 +21,7 @@ from apps.central.models.enterprise import EnterpriseStatus
 from apps.central.models.enterprise_product import AssignmentStatus, EnterpriseProduct
 from apps.central.models.product import Channel, Product, ProductStatus
 from apps.central.services import enterprises as enterprise_svc
+from apps.central.services import sync
 
 
 def _uuid(value: uuid.UUID | str, field: str) -> uuid.UUID:
@@ -64,8 +65,9 @@ def assign_product(
     if existing is not None:
         raise Conflict(f"assignment already exists (id={existing.id}, status={existing.status})")
     now = now or utcnow()
+    sync.lock_sequence(db)  # numëruesi global fillon (rendi i kyçjeve)
     row = EnterpriseProduct(
-        enterprise_id=enterprise.id, product_id=product.id,
+        enterprise_id=enterprise.id, product_id=product.id, revision=1,
         status=AssignmentStatus.ACTIVE.value, created_at=now, updated_at=now,
     )  # fmt: skip
     db.add(row)
@@ -75,6 +77,7 @@ def assign_product(
         IntegrityError
     ) as e:  # garë: unique(enterprise_id, product_id) është burimi i së vërtetës
         raise Conflict("assignment already exists") from e
+    _emit(db, row, product, now)
     return row, product
 
 
@@ -119,6 +122,14 @@ def list_enterprise_products(
     return [(ep, p) for ep, p in db.execute(q)]
 
 
+def _emit(db: Session, ep: EnterpriseProduct, product: Product, now) -> None:
+    sync.emit(
+        db, entity_type=sync.ENTITY_ASSIGNMENT, entity_id=ep.id, enterprise_id=ep.enterprise_id,
+        revision=ep.revision, event_type=sync.EVENT_ASSIGNMENT,
+        payload=sync.assignment_payload(ep, product), now=now,
+    )  # fmt: skip
+
+
 def _set_status(db, enterprise_id, assignment_id, target: AssignmentStatus, now):
     row, product = get_assignment(db, enterprise_id, assignment_id)
     if row.status == target.value:
@@ -129,9 +140,14 @@ def _set_status(db, enterprise_id, assignment_id, target: AssignmentStatus, now)
             raise Conflict("enterprise is suspended; assignment cannot be activated")
         if product.status != ProductStatus.ACTIVE.value:
             raise Conflict("product is retired; assignment cannot be activated")
-    before = row.status
-    row.status, row.updated_at = target.value, now or utcnow()
+    sync.lock_entity(db, row)  # numëruesi global, pastaj assignment-i (rilexim nën kyç)
+    if row.status == target.value:  # u ndryshua njëkohësisht nga tx tjetër
+        return row, product, {}
+    before, now = row.status, now or utcnow()
+    row.status, row.updated_at = target.value, now
+    row.revision += 1
     db.flush()
+    _emit(db, row, product, now)
     return row, product, {"before": {"status": before}, "after": {"status": target.value}}
 
 
