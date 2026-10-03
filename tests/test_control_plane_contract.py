@@ -136,8 +136,9 @@ def test_exact_envelope_shape_and_state_shapes():
     a = assignment_event().to_dict()
     assert a["entity"] == {"type": "enterprise_product", "id": A_ID}
     assert a["data"] == {"assignment_id": A_ID, "enterprise_id": E_ID,
-                         "product": {"id": P_ID, "code": "sms", "channel": "sms"}, "status": "active"}  # fmt: skip
-    assert "rate_limit_per_min" not in json.dumps(a)  # M5-c i shtyrë
+                         "product": {"id": P_ID, "code": "sms", "channel": "sms"}, "status": "active",
+                         "rate_limit_per_min": None}  # fmt: skip
+    assert "rate_limit_per_min" in json.dumps(a)  # M7-g: shtim additiv (null = default lokal)
 
 
 # --- golden: bytes, JSON, round-trip ------------------------------------------------------------------------
@@ -145,7 +146,7 @@ def test_exact_envelope_shape_and_state_shapes():
 
 def test_fixture_inventory():
     names = [c["name"] for c in CASES]
-    assert len(names) == 13 and len(set(names)) == 13
+    assert len(names) == 15 and len(set(names)) == 15
     assert {p.name for p in GOLDEN.glob("*.body")} == {c["body_file"] for c in CASES}
     required = {"enterprise_active", "enterprise_suspended", "enterprise_non_ascii", "sms_active", "sms_suspended",
                 "email_active", "email_suspended", "edge_high_seq", "edge_high_revision",

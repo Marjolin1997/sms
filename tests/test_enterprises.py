@@ -402,7 +402,8 @@ def test_enterprise_id_is_written_only_by_the_centralized_hook():
                "core/security.py", "services/events.py", "core/readiness.py",
                "models/enterprise_registry.py",
                "models/control_plane.py", "services/control_plane_sync.py", "services/control_plane_client.py",
-               "services/control_plane_poller.py", "services/control_plane_shadow.py"}  # fmt: skip
+               "services/control_plane_poller.py", "services/control_plane_shadow.py",
+               "services/entitlements.py"}  # fmt: skip
     offenders = [
         p.relative_to(root).as_posix()
         for p in root.rglob("*.py")

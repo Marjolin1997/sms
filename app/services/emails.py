@@ -27,8 +27,7 @@ from app.providers import ProviderError, get_email_provider
 from app.providers.email import EmailRequest
 from app.queue.dispatch import DispatchSpec
 from app.queue.postgres import PostgresDispatchQueue
-from app.services import consent, email_domains, email_mime, events, switches
-from app.services import control_plane_shadow as shadow
+from app.services import consent, email_domains, email_mime, entitlements, events, switches
 
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30
@@ -111,12 +110,24 @@ def submit(
 
         raise SendingPaused("sending is temporarily paused")
     plan = db.scalar(select(AccountPlan).where(owned(AccountPlan, owner)))
-    shadow.observe(db, plan, owner, "email", plan is not None and bool(plan.enabled))  # M7-e
+    cp = entitlements.gate(  # M7-g: off → None; shadow → vëzhgim; enforce → Decision
+        db, plan, owner, "email", plan is not None and bool(plan.enabled),
+        (plan.email_rate_limit_per_min or DEFAULT_RATE_LIMIT) if plan is not None else None,
+    )  # fmt: skip
     if plan is None or not plan.enabled:
         from app.services.messages import AccountDisabled
 
-        raise AccountDisabled("account has no active sending plan")
-    limit = plan.email_rate_limit_per_min or DEFAULT_RATE_LIMIT
+        raise AccountDisabled("account has no active sending plan")  # legacy deny fiton
+    if cp is not None and not cp.allow:
+        from app.services.messages import denial
+
+        raise denial(cp)
+    # Vetëm BURIMI i vlerës ndryshon në enforce; numëruesi/algoritmi poshtë mbeten të pandryshuar.
+    limit = (
+        (cp.rate_limit or DEFAULT_RATE_LIMIT)
+        if cp is not None
+        else (plan.email_rate_limit_per_min or DEFAULT_RATE_LIMIT)
+    )
     recent = db.scalar(
         select(func.count())
         .select_from(Email)

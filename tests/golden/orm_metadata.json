@@ -1960,6 +1960,15 @@
     "server_default": null,
     "type": "CHAR(32)"
    },
+   "rate_limit_per_min": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
    "revision": {
     "default": null,
     "fks": [],

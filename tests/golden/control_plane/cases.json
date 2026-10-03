@@ -122,6 +122,7 @@
      "code": "sms",
      "id": "00000000-0000-0000-0000-0000000000a1"
     },
+    "rate_limit_per_min": null,
     "status": "active"
    },
    "enterprise_id": "00000000-0000-0000-0000-000000000111",
@@ -149,7 +150,8 @@
      "code": "sms",
      "channel": "sms"
     },
-    "status": "active"
+    "status": "active",
+    "rate_limit_per_min": null
    },
    "seq": 4,
    "revision": 1,
@@ -169,6 +171,7 @@
      "code": "sms",
      "id": "00000000-0000-0000-0000-0000000000a1"
     },
+    "rate_limit_per_min": null,
     "status": "suspended"
    },
    "enterprise_id": "00000000-0000-0000-0000-000000000111",
@@ -196,7 +199,8 @@
      "code": "sms",
      "channel": "sms"
     },
-    "status": "suspended"
+    "status": "suspended",
+    "rate_limit_per_min": null
    },
    "seq": 5,
    "revision": 2,
@@ -216,6 +220,7 @@
      "code": "email",
      "id": "00000000-0000-0000-0000-0000000000a2"
     },
+    "rate_limit_per_min": null,
     "status": "active"
    },
    "enterprise_id": "00000000-0000-0000-0000-000000000111",
@@ -243,7 +248,8 @@
      "code": "email",
      "channel": "email"
     },
-    "status": "active"
+    "status": "active",
+    "rate_limit_per_min": null
    },
    "seq": 6,
    "revision": 1,
@@ -263,6 +269,7 @@
      "code": "email",
      "id": "00000000-0000-0000-0000-0000000000a2"
     },
+    "rate_limit_per_min": null,
     "status": "suspended"
    },
    "enterprise_id": "00000000-0000-0000-0000-000000000111",
@@ -290,7 +297,8 @@
      "code": "email",
      "channel": "email"
     },
-    "status": "suspended"
+    "status": "suspended",
+    "rate_limit_per_min": null
    },
    "seq": 7,
    "revision": 2,
@@ -518,6 +526,104 @@
    "revision": 1,
    "event_id": "00000000-0000-0000-0000-00000000000d",
    "created_at": "2030-01-01T14:00:00+02:00"
+  }
+ },
+ {
+  "name": "sms_rate_limit_set",
+  "body_file": "sms_rate_limit_set.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "sms",
+     "code": "sms",
+     "id": "00000000-0000-0000-0000-0000000000a1"
+    },
+    "rate_limit_per_min": 120,
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b1",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000e",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 3,
+   "schema": "cp.v1",
+   "seq": 14,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b1",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a1",
+     "code": "sms",
+     "channel": "sms"
+    },
+    "status": "active",
+    "rate_limit_per_min": 120
+   },
+   "seq": 14,
+   "revision": 3,
+   "event_id": "00000000-0000-0000-0000-00000000000e",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "email_rate_limit_set",
+  "body_file": "email_rate_limit_set.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "email",
+     "code": "email",
+     "id": "00000000-0000-0000-0000-0000000000a2"
+    },
+    "rate_limit_per_min": 30,
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b2",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000f",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 3,
+   "schema": "cp.v1",
+   "seq": 15,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b2",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a2",
+     "code": "email",
+     "channel": "email"
+    },
+    "status": "active",
+    "rate_limit_per_min": 30
+   },
+   "seq": 15,
+   "revision": 3,
+   "event_id": "00000000-0000-0000-0000-00000000000f",
+   "created_at": "2030-01-01T12:00:00+00:00"
   }
  }
 ]

@@ -231,6 +231,7 @@ def _apply_entitlement(
             Entitlement(
                 enterprise_id=eid, assignment_id=aid, product_id=uuid.UUID(st.product_id),
                 product_code=st.product_code, channel=st.channel, status=st.status, revision=rev,
+                rate_limit_per_min=st.rate_limit_per_min,
             )
         )  # fmt: skip
         before = None
@@ -241,13 +242,16 @@ def _apply_entitlement(
         if not force:
             if rev < row.revision or (rev == row.revision and not withdrawn):
                 return STALE if rev < row.revision else NOOP
-        before = {"status": row.status, "revision": row.revision}
+        before = {"status": row.status, "revision": row.revision,
+                  "rate_limit_per_min": row.rate_limit_per_min}  # fmt: skip
         row.product_id, row.product_code = uuid.UUID(st.product_id), st.product_code
         row.channel, row.status, row.revision = st.channel, st.status, rev
+        row.rate_limit_per_min = st.rate_limit_per_min
         row.updated_at = utcnow()
     audit.system_event(
         db, SYSTEM_ACTOR, ACTION_ENTITLEMENT, "entitlement", aid,
-        {"from": before, "to": {"status": st.status, "revision": rev},
+        {"from": before,
+         "to": {"status": st.status, "revision": rev, "rate_limit_per_min": st.rate_limit_per_min},
          "enterprise_id": st.enterprise_id, "product_code": st.product_code, **ref},
     )  # fmt: skip
     return APPLIED

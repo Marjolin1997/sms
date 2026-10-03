@@ -27,7 +27,10 @@ from app.services import wallet as wallets
 from app.services.audit import audit, cross_tenant
 
 router = APIRouter(prefix="/v1")
-_STATUS = {"not_found": 404, "no_rate": 422, "no_route": 422, "account_disabled": 403}
+_STATUS = {
+    "not_found": 404, "no_rate": 422, "no_route": 422, "account_disabled": 403,
+    "product_not_entitled": 403, "enterprise_suspended": 403, "product_suspended": 403,
+}  # fmt: skip
 
 
 def _page(limit: int) -> int:

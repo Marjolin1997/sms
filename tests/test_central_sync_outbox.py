@@ -371,7 +371,7 @@ def test_payload_is_a_frozen_state_snapshot(db):
     first, second = outbox(db, ep.id)
     assert first.payload == {"assignment_id": str(ep.id), "enterprise_id": str(e.id),
                              "product": {"id": str(p.id), "code": "sms", "channel": "sms"},
-                             "status": "active"}  # fmt: skip
+                             "status": "active", "rate_limit_per_min": None}  # fmt: skip
     assert second.payload["status"] == "suspended" and first.payload["status"] == "active"
     assert outbox(db, e.id)[0].payload == {
         "enterprise_id": str(e.id),

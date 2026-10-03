@@ -19,6 +19,7 @@ def _state(row: SyncOutbox):
             return v1.EnterpriseProductStateV1(
                 p["assignment_id"], p["enterprise_id"], product["id"], product["code"],
                 product["channel"], p["status"],
+                p["rate_limit_per_min"] if "rate_limit_per_min" in p else None,  # i munguar = NULL
             )  # fmt: skip
     except (KeyError, TypeError) as e:
         raise v1.ContractError(f"outbox payload is malformed: {e!r}") from e

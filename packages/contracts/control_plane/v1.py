@@ -44,6 +44,9 @@ ASSIGNMENT_STATUSES = frozenset({"active", "suspended"})
 CHANNELS = frozenset({"sms", "email"})  # kanalet e sotme; një kanal i ri = ndryshim i rishikuar
 
 NAME_MAX = 200
+RATE_LIMIT_MAX = (
+    1_000_000  # rate_limit_per_min: NULL (trashëgon default-in lokal) ose 1..RATE_LIMIT_MAX
+)
 INT64_MAX = 2**63 - 1
 _CODE = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -151,8 +154,16 @@ class EnterpriseProductStateV1:
     product_code: str
     channel: str
     status: str
+    # M7-g (shtim additiv në cp.v1): kufi/min i assignment-it; None = default lokal
+    rate_limit_per_min: int | None = None
 
     def __post_init__(self) -> None:
+        if self.rate_limit_per_min is not None and (
+            isinstance(self.rate_limit_per_min, bool)
+            or not isinstance(self.rate_limit_per_min, int)
+            or not 1 <= self.rate_limit_per_min <= RATE_LIMIT_MAX
+        ):
+            raise ContractError(f"data.rate_limit_per_min must be null or 1..{RATE_LIMIT_MAX}")
         _uuid(self.assignment_id, "data.assignment_id")
         _uuid(self.enterprise_id, "data.enterprise_id")
         _uuid(self.product_id, "data.product.id")
@@ -167,6 +178,7 @@ class EnterpriseProductStateV1:
             "enterprise_id": self.enterprise_id,
             "product": {"id": self.product_id, "code": self.product_code, "channel": self.channel},
             "status": self.status,
+            "rate_limit_per_min": self.rate_limit_per_min,
         }
 
     @classmethod
@@ -181,7 +193,7 @@ class EnterpriseProductStateV1:
         if missing_p:
             raise ContractError(f"data.product is missing {sorted(missing_p)}")
         return cls(d["assignment_id"], d["enterprise_id"], product["id"], product["code"],
-                   product["channel"], d["status"])  # fmt: skip
+                   product["channel"], d["status"], d.get("rate_limit_per_min"))  # fmt: skip
 
 
 # --- zarfi ---

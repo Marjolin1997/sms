@@ -88,10 +88,14 @@ class Settings(BaseSettings):
     # Sa kohë presim DLR pas SENT para se ta konsiderojmë të humbur.
     dlr_timeout_hours: int = 72
 
-    # M7-e: sinkronizimi me Control Plane (Central). `off` = asgjë nuk nisë/vëzhgohet;
-    # `shadow` = poller + krahasim vetëm-vëzhgim (asnjë vendim trafiku nuk ndryshon). Pa `enforce`.
+    # M7-e/g: sinkronizimi me Control Plane (Central). `off` = asgjë nuk nisë/vëzhgohet;
+    # `shadow` = poller + krahasim vetëm-vëzhgim (asnjë vendim trafiku nuk ndryshon);
+    # `enforce` = entitlement-i CP merr pjesë në submit (deny wins me AccountPlan lokal).
     # Çelësi privat Ed25519 vjen VETËM nga skedari (mount sekret), kurrë nga DB ose log.
-    cp_sync_mode: Literal["off", "shadow"] = "off"
+    cp_sync_mode: Literal["off", "shadow", "enforce"] = "off"
+    # Në prodhim `enforce` kërkon konfirmim eksplicit të portave (M7-f dry-run real, mospërputhje të
+    # pashpjeguara = 0, review/conflict të zgjidhura, periudhë shadow): s'ka bypass nga default.
+    cp_enforce_readiness_ack: bool = False
     cp_base_url: str = ""
     cp_client_id: str = ""
     cp_key_id: str = ""
@@ -126,6 +130,11 @@ class Settings(BaseSettings):
             bad.append("SMS_PAYMENT_PROVIDER must not be 'fake' (use 'disabled' for now)")
         if self.cp_sync_mode != "off" and not self.cp_base_url.startswith("https://"):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_CP_SYNC_MODE is not off")
+        if self.cp_sync_mode == "enforce" and not self.cp_enforce_readiness_ack:
+            bad.append(
+                "SMS_CP_SYNC_MODE=enforce requires SMS_CP_ENFORCE_READINESS_ACK=true "
+                "(M7-f dry-run, unexplained mismatches = 0, shadow period reviewed)"
+            )
         return bad
 
     def validate_production(self) -> None:

@@ -62,7 +62,7 @@ def assignment_payload(ep: EnterpriseProduct, product: Product) -> dict:
     return {
         "assignment_id": str(ep.id), "enterprise_id": str(ep.enterprise_id),
         "product": {"id": str(product.id), "code": product.code, "channel": product.channel},
-        "status": ep.status,
+        "status": ep.status, "rate_limit_per_min": ep.rate_limit_per_min,
     }  # fmt: skip
 
 

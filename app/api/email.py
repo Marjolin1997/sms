@@ -17,7 +17,8 @@ router = APIRouter(prefix="/v1/email")
 _STATUS = {
     "not_found": 404, "conflict": 409, "sender_domain_not_verified": 403,
     "account_disabled": 403, "recipient_suppressed": 422, "sending_paused": 503,
-    "rate_limited": 429,
+    "rate_limited": 429, "product_not_entitled": 403, "enterprise_suspended": 403,
+    "product_suspended": 403,
 }  # fmt: skip
 
 

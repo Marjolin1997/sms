@@ -14,6 +14,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
     Uuid,
@@ -46,6 +47,8 @@ class EnterpriseProduct(Base):
     status: Mapped[str] = mapped_column(
         String(16), default=AssignmentStatus.ACTIVE.value, server_default="active"
     )
+    # M7-g: kufi/min i assignment-it (SMS: mesazhe, Email: emaile); NULL = default lokal
+    rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)
     revision: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -56,6 +59,11 @@ class EnterpriseProduct(Base):
         ),
         CheckConstraint("status in ('active', 'suspended')", name="status"),
         CheckConstraint("revision >= 1", name="revision_positive"),
+        CheckConstraint(
+            "rate_limit_per_min IS NULL OR "
+            "(rate_limit_per_min >= 1 AND rate_limit_per_min <= 1000000)",
+            name="rate_limit_range",
+        ),
     )
 
 
@@ -72,4 +80,4 @@ def _no_hard_delete(*_) -> None:
     raise ImmutableError("assignments are never deleted; set status=suspended")
 
 
-guard_revision(EnterpriseProduct, ("status",))
+guard_revision(EnterpriseProduct, ("status", "rate_limit_per_min"))

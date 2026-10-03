@@ -149,7 +149,13 @@ def snapshot(db: Session, client_pk, enterprise_id: uuid.UUID | None = None) -> 
         )
         for ep, p in db.execute(q):
             state = v1.EnterpriseProductStateV1(
-                str(ep.id), str(ep.enterprise_id), str(p.id), p.code, p.channel, ep.status
+                str(ep.id),
+                str(ep.enterprise_id),
+                str(p.id),
+                p.code,
+                p.channel,
+                ep.status,
+                ep.rate_limit_per_min,
             )
             assignments.append({"entity": {"type": v1.ENTITY_ENTERPRISE_PRODUCT, "id": str(ep.id)},
                                 "enterprise_id": str(ep.enterprise_id), "revision": int(ep.revision),

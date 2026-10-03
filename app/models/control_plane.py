@@ -40,6 +40,8 @@ class Entitlement(Base):
     channel: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16))
     revision: Mapped[int] = mapped_column(BigInteger)
+    # M7-g: kufi/min i assignment-it nga Central (SMS: mesazhe, Email: emaile); NULL = default lokal
+    rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

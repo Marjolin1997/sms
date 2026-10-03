@@ -163,3 +163,38 @@ def activate_assignment(db, enterprise_id, assignment_id, *, now: datetime | Non
 def set_status(db, enterprise_id, assignment_id, status, *, now: datetime | None = None):
     target = _status(status)
     return _set_status(db, enterprise_id, assignment_id, target, now)
+
+
+RATE_LIMIT_MAX = 1_000_000
+
+
+def _rate_limit(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= RATE_LIMIT_MAX:
+        raise Invalid(f"rate_limit_per_min must be null or an integer 1..{RATE_LIMIT_MAX}")
+    return value
+
+
+def set_rate_limit(
+    db, enterprise_id, assignment_id, value, *, now: datetime | None = None
+):  # fmt: skip
+    """Kufi/min i assignment-it (NULL = default lokal). Ndryshim real ⇒ revision +1 dhe outbox;
+    vlera e njëjtë ⇒ no-op (pa revision, pa outbox). → (assignment, product, changes)."""
+    value = _rate_limit(value)
+    row, product = get_assignment(db, enterprise_id, assignment_id)
+    if row.rate_limit_per_min == value:
+        return row, product, {}
+    sync.lock_entity(db, row)  # numëruesi global, pastaj assignment-i (rilexim nën kyç)
+    if row.rate_limit_per_min == value:
+        return row, product, {}
+    before, now = row.rate_limit_per_min, now or utcnow()
+    row.rate_limit_per_min, row.updated_at = value, now
+    row.revision += 1
+    db.flush()
+    _emit(db, row, product, now)
+    return (
+        row,
+        product,
+        {"before": {"rate_limit_per_min": before}, "after": {"rate_limit_per_min": value}},
+    )

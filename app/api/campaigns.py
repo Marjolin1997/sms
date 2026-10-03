@@ -16,7 +16,10 @@ from app.services import campaigns as svc
 from app.services.audit import audit
 
 router = APIRouter(prefix="/v1/campaigns")
-_STATUS = {"not_found": 404, "conflict": 409, "account_disabled": 403}
+_STATUS = {
+    "not_found": 404, "conflict": 409, "account_disabled": 403, "product_not_entitled": 403,
+    "enterprise_suspended": 403, "product_suspended": 403,
+}  # fmt: skip
 
 
 def _run(db: Session, fn):

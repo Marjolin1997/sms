@@ -19,6 +19,7 @@ _STATUS = {
     "no_route": 422, "sender_not_allowed": 403, "account_disabled": 403,
     "template_not_usable": 403, "sending_paused": 503, "recipient_suppressed": 422,
     "rate_limited": 429,
+    "product_not_entitled": 403, "enterprise_suspended": 403, "product_suspended": 403,
 }  # fmt: skip
 
 

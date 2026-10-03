@@ -435,9 +435,15 @@ def test_shadow_logs_are_rate_limited_not_per_request(db, world, shadow_on, capl
     assert caplog.text.count("shadow mismatch") == 1
 
 
-def test_shadow_hot_path_overhead_sql_and_latency(db, world, monkeypatch):  # noqa: F811
+def test_shadow_hot_path_overhead_sql_and_latency(db, world, monkeypatch):
+    """Raunde të ndërthurura me rrotullim (numëruesi i minutës rritet me çdo submit ⇒ mode i fundit
+    do dukej më i ngadaltë); minimumi për mode."""
     from app.core.config import settings
+    from app.models.wallet import Wallet
+    from app.services import wallet as wallets
 
+    w = db.scalar(select(Wallet))
+    wallets.confirm_topup(db, wallets.create_topup(db, w.id, "10000", wallets.TopupMethod.CASH).id)
     eid = eid_of(db)
     put_cp(db, eid, sms="active")
     counts = {"n": 0}
@@ -446,26 +452,28 @@ def test_shadow_hot_path_overhead_sql_and_latency(db, world, monkeypatch):  # no
         counts["n"] += 1
 
     event.listen(engine, "before_cursor_execute", count)
+    best, sql = {}, {}
     try:
-
-        def measure(mode, n=40):
-            monkeypatch.setattr(settings, "cp_sync_mode", mode)
-            shadow.clear_cache()
-            counts["n"] = 0
-            t = time.perf_counter()
-            for i in range(n):
-                send(db, f"{mode}-{i}")
-            return counts["n"] / n, (time.perf_counter() - t) / n * 1000
-
-        off_sql, off_ms = measure("off")
-        on_sql, on_ms = measure("shadow")  # cache ngrohtë pas thirrjes së parë
+        for r in range(6):
+            order = ("off", "shadow")
+            for mode in order[r % 2 :] + order[: r % 2]:
+                monkeypatch.setattr(settings, "cp_sync_mode", mode)
+                if r < 2:
+                    shadow.clear_cache()
+                counts["n"] = 0
+                t = time.perf_counter()
+                for i in range(25):
+                    send(db, f"{mode}-{r}-{i}")
+                ms = (time.perf_counter() - t) / 25 * 1000
+                best[mode] = min(best.get(mode, 1e9), ms)
+                sql[mode] = counts["n"] / 25
     finally:
         event.remove(engine, "before_cursor_execute", count)
     print(
-        f"\n[perf] submit off: {off_sql:.1f} sql/{off_ms:.2f} ms · shadow: {on_sql:.1f} sql/{on_ms:.2f} ms"
+        f"\n[perf] submit off: {sql['off']:.1f} sql/{best['off']:.2f} ms · shadow: {sql['shadow']:.1f} sql/{best['shadow']:.2f} ms"
     )
-    assert on_sql - off_sql <= 0.5  # cache: ≈0 SQL shtesë në gjendje të qëndrueshme (1 në nisje/40)
-    assert on_ms <= off_ms * 1.05 + 0.5  # ≤5% (me tolerancë zhurme)
+    assert sql["shadow"] - sql["off"] <= 0.5  # cache: ≈0 SQL shtesë në gjendje të qëndrueshme
+    assert best["shadow"] <= best["off"] * 1.05 + 0.5  # ≤5% (me tolerancë zhurme)
 
 
 # --- singleton (PostgreSQL) ----------------------------------------------------------------------

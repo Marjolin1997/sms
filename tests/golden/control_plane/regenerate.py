@@ -26,10 +26,12 @@ def enterprise_row(name, status, **kw):
                 event_type=sync.EVENT_ENTERPRISE, payload=sync.enterprise_payload(e), **kw)  # fmt: skip
 
 
-def assignment_row(code, channel, status, a_id, **kw):
+def assignment_row(code, channel, status, a_id, limit=None, **kw):
     pid = P_SMS if channel == "sms" else P_EMAIL
     product = Product(id=pid, code=code, name=code, channel=channel)
-    ep = EnterpriseProduct(id=a_id, enterprise_id=ENT, product_id=pid, status=status)
+    ep = EnterpriseProduct(
+        id=a_id, enterprise_id=ENT, product_id=pid, status=status, rate_limit_per_min=limit
+    )
     return dict(entity_type="enterprise_product", entity_id=a_id, enterprise_id=ENT,
                 event_type=sync.EVENT_ASSIGNMENT, payload=sync.assignment_payload(ep, product), **kw)  # fmt: skip
 
@@ -51,6 +53,8 @@ def cases():
         ("edge_microseconds_nonzero", enterprise_row("Acme", "active", seq=11, revision=1, event_id=U(11), created_at="2030-01-01T12:00:00.123456+00:00")),
         ("edge_naive_created_at", enterprise_row("Acme", "active", seq=12, revision=1, event_id=U(12), created_at="2030-01-01T12:00:00")),
         ("edge_offset_created_at", enterprise_row("Acme", "active", seq=13, revision=1, event_id=U(13), created_at="2030-01-01T14:00:00+02:00")),
+        ("sms_rate_limit_set", assignment_row("sms", "sms", "active", a1, 120, seq=14, revision=3, event_id=U(14), created_at=ts)),
+        ("email_rate_limit_set", assignment_row("email", "email", "active", a2, 30, seq=15, revision=3, event_id=U(15), created_at=ts)),
     ]  # fmt: skip
 
 

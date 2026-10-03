@@ -168,10 +168,11 @@ def test_missing_identity_or_url_and_production_https_are_rejected(tmp_path):
     assert not any("SMS_CP_" in b for b in Settings(_env_file=None).production_problems())
 
 
-def test_mode_has_only_off_and_shadow_and_no_key_is_generated():
+def test_mode_is_off_shadow_or_enforce_default_off_and_no_key_is_generated():
     with pytest.raises(ValueError):
-        Settings(cp_sync_mode="enforce", _env_file=None)
-    assert Settings(_env_file=None).cp_sync_mode == "off"
+        Settings(cp_sync_mode="bogus", _env_file=None)
+    assert Settings(_env_file=None).cp_sync_mode == "off"  # default: asnjë deployment s'ndryshon
+    assert Settings(cp_sync_mode="enforce", _env_file=None).cp_sync_mode == "enforce"
     src = (APP / "services/control_plane_client.py").read_text()
     assert "generate(" not in src  # asnjë çelës i gjeneruar në nisje
 
@@ -404,21 +405,18 @@ def test_no_cp_module_touches_accountplan_rate_limits_or_enforces():
         names = {n.id for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Name)}
         attrs = {n.attr for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Attribute)}
         assert not names & {"AccountPlan"}, name
-        assert not attrs & {
-            "rate_limit_per_min",
-            "email_rate_limit_per_min",
-            "rate_card_id",
-            "enabled",
-        }, name
+        # `rate_limit_per_min` mbetet fushë e entitlement-it/gjendjes CP (M7-g), jo e AccountPlan
+        assert not attrs & {"email_rate_limit_per_min", "rate_card_id", "enabled"}, name
         assert "sms_account_plans" not in src, name
     for name in (
         "messages",
         "emails",
-    ):  # shadow s'ndërhyn në rezultat: thirret, rezultati injorohet
+    ):  # M7-g: i vetmi lidhje me CP në submit është `entitlements.gate`
         tree = ast.parse((APP / "services" / f"{name}.py").read_text())
-        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
-                 and getattr(n.value.func, "attr", "") == "observe"]  # fmt: skip
-        assert len(calls) == 1, name  # thirrje si deklaratë: vlera e kthimit s'përdoret
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                 and getattr(n.func, "attr", "") == "gate"]  # fmt: skip
+        assert len(calls) == 1, name
+        assert "control_plane_shadow" not in _imports(APP / "services" / f"{name}.py"), name
 
 
 def test_private_key_is_never_persisted_in_the_enterprise_schema():

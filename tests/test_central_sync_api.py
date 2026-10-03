@@ -559,7 +559,7 @@ def test_snapshot_current_state_assignments_and_boundary(env):
     assert len(a) == 2 and all(x["enterprise_id"] in by_id for x in a.values())  # e3 s'është këtu
     sms = a[str(ep_id)]
     assert sms["data"] == {"assignment_id": str(ep_id), "enterprise_id": str(ids["e1"]),
-                           "product": {"id": str(ids["sms"]), "code": "sms", "channel": "sms"}, "status": "suspended"}  # fmt: skip
+                           "product": {"id": str(ids["sms"]), "code": "sms", "channel": "sms"}, "status": "suspended", "rate_limit_per_min": None}  # fmt: skip
     assert sms["revision"] == 2
     email = [x for x in a.values() if x["data"]["product"]["code"] == "email"][0]
     assert email["data"]["product"]["channel"] == "email" and email["data"]["status"] == "active"
