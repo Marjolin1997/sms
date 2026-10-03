@@ -4,6 +4,13 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.context import worker_owner
+from app.core.errors import (  # noqa: F401  (Conflict/NotFound: alias + përdorim)
+    Conflict,
+    DomainError,
+    NotFound,
+)
+from app.core.scope import Owner, owned, ref
 from app.models.wallet import (
     EntryType,
     Hold,
@@ -19,24 +26,17 @@ ZERO = Decimal("0")
 QUANT = Decimal("0.000001")
 
 
-class WalletError(Exception):
-    code = "wallet_error"
+# Gabimet bazë jetojnë te `app.core.errors` (burimi i vetëm). `WalletError`, `NotFound`, `Conflict`
+# mbeten këtu vetëm si ALIASE përputhshmërie (të njëjtët objekte); kodi i ri: core.errors.
+WalletError = DomainError
 
 
-class InsufficientFunds(WalletError):
+class InsufficientFunds(DomainError):
     code = "insufficient_funds"
 
 
-class InvalidAmount(WalletError):
+class InvalidAmount(DomainError):
     code = "invalid_amount"
-
-
-class NotFound(WalletError):
-    code = "not_found"
-
-
-class Conflict(WalletError):
-    code = "conflict"
 
 
 def money(value: Decimal | str | int) -> Decimal:
@@ -56,14 +56,12 @@ def positive(value) -> Decimal:
     return d
 
 
-def create_wallet(db: Session, owner_ref: str, currency: str) -> Wallet:
+def create_wallet(db: Session, owner: Owner, currency: str) -> Wallet:
     currency = currency.upper()
-    existing = db.scalar(
-        select(Wallet).where(Wallet.owner_ref == owner_ref, Wallet.currency == currency)
-    )
+    existing = db.scalar(select(Wallet).where(owned(Wallet, owner), Wallet.currency == currency))
     if existing:
         return existing
-    w = Wallet(owner_ref=owner_ref, currency=currency)
+    w = Wallet(owner_ref=ref(owner), currency=currency)
     db.add(w)
     db.flush()
     return w
@@ -132,7 +130,40 @@ def _post(
     )
     db.add(entry)
     db.flush()
+    _check_low_balance(db, wallet_id, entry.available_after)
     return entry
+
+
+def _check_low_balance(db: Session, wallet_id: int, available: Decimal) -> None:
+    """Event një herë kur balanca bie nën prag; flamuri rifutet kur ngrihet mbi prag.
+    Thirret brenda transaksionit të lëvizjes (wallet-i është i kyçur)."""
+    w = db.get(Wallet, wallet_id)
+    if w is None or w.low_balance_threshold is None:
+        return
+    if available < w.low_balance_threshold and not w.low_balance_notified:
+        w.low_balance_notified = True
+        from app.services import events  # vonuar: shmang varësinë rrethore
+
+        events.emit(
+            db, worker_owner(db, w), "wallet.low_balance", "wallet", w.id,
+            {"currency": w.currency, "available": str(available),
+             "threshold": str(w.low_balance_threshold)},
+        )  # fmt: skip
+    elif available >= w.low_balance_threshold and w.low_balance_notified:
+        w.low_balance_notified = False
+
+
+def set_low_balance_threshold(db: Session, wallet_id: int, threshold) -> Wallet:
+    """None/0 e çaktivizon. Vlerësohet menjëherë kundrejt balancës aktuale."""
+    w = lock_wallet(db, wallet_id)
+    value = None if threshold is None else money(threshold)
+    if value is not None and value < 0:
+        raise InvalidAmount("threshold must not be negative")
+    w.low_balance_threshold = value or None
+    w.low_balance_notified = False
+    db.flush()
+    _check_low_balance(db, wallet_id, balances(db, wallet_id)[0])
+    return w
 
 
 # --- Top-up -----------------------------------------------------------------
@@ -287,3 +318,20 @@ def verify_wallet(db: Session, wallet_id: int) -> bool:
         ).where(LedgerEntry.wallet_id == wallet_id)
     ).one()
     return balances(db, wallet_id) == (Decimal(sums[0]), Decimal(sums[1]))
+
+
+def charge(
+    db: Session,
+    wallet_id: int,
+    amount,
+    key: str,
+    ref_type: str,
+    ref_id: str,
+    note: str | None = None,
+) -> LedgerEntry:
+    """Debit i drejtpërdrejtë (pagesë fature). Idempotent sipas key; ngre InsufficientFunds."""
+    amount = positive(amount)
+    lock_wallet(db, wallet_id)
+    return _post(
+        db, wallet_id, EntryType.INVOICE, -amount, ZERO, f"charge:{key}", ref_type, ref_id, note
+    )
