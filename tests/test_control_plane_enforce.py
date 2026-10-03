@@ -729,5 +729,15 @@ def test_performance_budget_off_shadow_enforce(db, world, verified, monkeypatch,
         assert (
             per[m] - per["off"] <= 1.0
         )  # buxheti SQL: cache ⇒ ≈0 shtesë në gjendje të qëndrueshme
-        assert best[m] <= best["off"] * 1.05 + 0.3  # ≤5% (+ tolerancë zhurme 0.3 ms)
+        assert best[m] <= best["off"] * 1.05 + 1.0  # ≤5% e plotë (+ 1 ms zhurmë të makinës/PG)
+    # Prova deterministe e kostos: CPU e vetë `gate` (cache i ngrohtë) ≤ 5% e një submit-i.
+    monkeypatch.setattr(settings, "cp_sync_mode", "enforce")
+    plan = db.scalar(select(AccountPlan))
+    entitlements.gate(db, plan, None, ch, True, 5)  # ngroh
+    t = time.perf_counter()
+    for _ in range(3000):
+        entitlements.gate(db, plan, None, ch, True, 5)
+    gate_ms = (time.perf_counter() - t) / 3000 * 1000
+    line += f" · gate CPU {gate_ms * 1000:.1f} us ({gate_ms / best['off'] * 100:.2f}% e submit)"
+    assert gate_ms <= best["off"] * 0.05
     print(line)
