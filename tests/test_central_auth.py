@@ -494,6 +494,8 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "service_keys",
         "service_client_enterprises",
         "service_assertion_jti",
+        "registration_requests",
+        "registration_products",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 

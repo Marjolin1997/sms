@@ -757,6 +757,8 @@ def test_migrations_0008_to_0010_up_down_up_and_readiness(make_db):  # noqa: F81
         "service_keys",
         "service_client_enterprises",
         "service_assertion_jti",
+        "registration_requests",
+        "registration_products",
     } <= tables
     with eng.connect() as conn:
         row = conn.execute(text("select id, last_seq, floor_seq, epoch from sync_sequence")).one()

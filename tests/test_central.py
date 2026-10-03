@@ -157,8 +157,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0013_next.py").write_text(
-        'revision = "0013"\ndown_revision = "0012"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0014_next.py").write_text(
+        'revision = "0014"\ndown_revision = "0013"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -190,6 +190,8 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "service_keys",
         "service_client_enterprises",
         "service_assertion_jti",
+        "registration_requests",
+        "registration_products",
     }
     assert not any(t.startswith("sms_") for t in tables)
     central_alembic(url, "downgrade", "base")
@@ -213,6 +215,8 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "service_keys",
         "service_client_enterprises",
         "service_assertion_jti",
+        "registration_requests",
+        "registration_products",
     }
     assert "enterprises" not in EnterpriseBase.metadata.tables
     assert "sms_enterprises" not in Base.metadata.tables
@@ -244,6 +248,8 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "service_keys",
         "service_client_enterprises",
         "service_assertion_jti",
+        "registration_requests",
+        "registration_products",
     }
     assert "enterprises" not in ent_tables and not any(
         t.startswith("sms_") for t in inspect(cen).get_table_names()

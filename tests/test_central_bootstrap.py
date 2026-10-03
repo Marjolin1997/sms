@@ -281,6 +281,8 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "service_keys",
         "service_client_enterprises",
         "service_assertion_jti",
+        "registration_requests",
+        "registration_products",
     }  # bootstrap s'ndryshon skemë
     assert not any(t.startswith("sms_") for t in cen_tables)
     assert "enterprises" not in tables and "central_alembic_version" not in tables
@@ -345,4 +347,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0010_sync_epoch.py",
         "0011_audit_actor_kind.py",
         "0012_assignment_rate_limit.py",
+        "0013_registration.py",
     ]
