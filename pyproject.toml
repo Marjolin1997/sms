@@ -40,6 +40,7 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "apps/central/models/service_auth.py" = ["E501"]
 "apps/central/services/sync_feed.py" = ["E501"]
 "apps/central/api/internal_sync.py" = ["E501"]
+"apps/central/tools/bootstrap_enterprise_products.py" = ["E501"]
 "tests/test_central_sync_outbox.py" = ["F811"]  # fixtures të importuara
 "tests/test_control_plane_contract.py" = ["F811"]  # fixtures të importuara
 "app/services/invoice_render.py" = ["E501"]

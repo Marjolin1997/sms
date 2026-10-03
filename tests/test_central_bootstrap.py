@@ -343,4 +343,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0008_service_credentials.py",
         "0009_service_assertion_jti.py",
         "0010_sync_epoch.py",
+        "0011_audit_actor_kind.py",
     ]
