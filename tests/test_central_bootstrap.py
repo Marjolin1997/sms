@@ -350,4 +350,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0012_assignment_rate_limit.py",
         "0013_registration.py",
         "0014_product_registration_policy.py",
+        "0015_service_client_auto_grant.py",
     ]

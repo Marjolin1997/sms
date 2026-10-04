@@ -15,7 +15,10 @@ Rregullat (të miratuara në M7-a/M7-c):
   * Fushat e Central-it: `status`, `short_name` ← `name`, `cp_revision`. KURRË `legal_name`,
     `owner_ref`, identiteti tenant, profili i faturimit, AccountPlan.
   * Ngjarje/snapshot për enterprise që s'ekziston lokalisht: kalohet (`unknown_enterprise`);
-    nuk krijohet tenant pa `owner_ref`; snapshot-i i ardhshëm e rimerr.
+    snapshot-i i ardhshëm e rimerr. Përjashtim (M8-c): me `SMS_CP_TENANT_AUTOCREATE=true` VETËM një
+    gjendje Enterprise (cp.v1, e vlefshme) krijon "shell" lokal: id = UUID i Central, owner_ref =
+    "cp-<uuid>", short_name/status nga Central, cp_revision = revision-i i ardhur. Pa AccountPlan,
+    wallet, API key, përdorues, çmim. Entitlement pa Enterprise lokal KURRË nuk krijon tenant.
 """
 
 import uuid
@@ -24,10 +27,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.timeutil import as_utc, utcnow
 from app.models.control_plane import (
     ENTITLEMENT_WITHDRAWN,
@@ -185,10 +190,52 @@ def _lock_enterprise(db: Session, eid: str) -> Enterprise | None:
     )
 
 
+ACTION_AUTOCREATE = "control_plane.enterprise.autocreate"
+
+
+def autocreate_owner_ref(enterprise_id: str) -> str:
+    return "cp-" + str(uuid.UUID(enterprise_id))
+
+
+def _autocreate_enterprise(db, rev: int, st: EnterpriseStateV1, ref: dict) -> Enterprise:
+    """Shell tenant nga gjendja autoritative e Central. Përplasje owner_ref me id tjetër ⇒
+    ApplyError (kurrë mbishkrim/prapashtesë e rastësishme). Garë me krijim paralel ⇒ rilexim."""
+    eid, owner_ref = uuid.UUID(st.id), autocreate_owner_ref(st.id)
+    clash = db.scalar(
+        select(Enterprise.id).where(func.lower(Enterprise.owner_ref) == owner_ref.lower())
+    )
+    if clash is not None and clash != eid:
+        raise ApplyError(f"owner_ref {owner_ref!r} already belongs to a different enterprise")
+    now = utcnow()
+    try:
+        with db.begin_nested():
+            ent = Enterprise(id=eid, owner_ref=owner_ref, short_name=st.name, status=st.status,
+                             cp_revision=rev, created_at=now, updated_at=now)  # fmt: skip
+            db.add(ent)
+            db.flush()
+    except IntegrityError:
+        existing = _lock_enterprise(db, st.id)
+        if existing is None:  # u përplas me një rresht tjetër (owner_ref) — jo me të njëjtën id
+            raise ApplyError(
+                f"owner_ref {owner_ref!r} already belongs to a different enterprise"
+            ) from None
+        return existing
+    audit.system_event(
+        db, SYSTEM_ACTOR, ACTION_AUTOCREATE, "enterprise", eid,
+        {"owner_ref": owner_ref, "status": st.status, "cp_revision": rev, **ref},
+    )  # fmt: skip
+    return ent
+
+
 def _apply_enterprise(db, rev: int, st: EnterpriseStateV1, *, force: bool, ref: dict) -> str:
     ent = _lock_enterprise(db, st.id)
     if ent is None:
-        return UNKNOWN_ENTERPRISE
+        if not settings.cp_tenant_autocreate:
+            return UNKNOWN_ENTERPRISE
+        created = _autocreate_enterprise(db, rev, st, ref)
+        if created.cp_revision == rev and created.short_name == st.name:
+            return APPLIED
+        ent = created  # krijuar njëkohësisht nga tjetër: vazhdo me rregullat e revision-it
     if not force:
         if rev == ent.cp_revision:
             return NOOP

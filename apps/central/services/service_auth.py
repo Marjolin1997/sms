@@ -170,6 +170,42 @@ def revoke_enterprise(
     return True
 
 
+def set_auto_grant(
+    db: Session, client_id: str, enabled: bool, *, now: datetime | None = None
+) -> bool:
+    """Vendos flamurin `auto_grant_new_enterprises` (default false). → ndryshoi? Nuk grant-on asgjë
+    retroaktivisht dhe nuk rrit `auth_generation` (bashkësia e synuar nuk ndryshon)."""
+    if not isinstance(enabled, bool):
+        raise Invalid("enabled must be a boolean")
+    client = get_client(db, client_id)
+    if client.auto_grant_new_enterprises == enabled:
+        return False
+    client.auto_grant_new_enterprises, client.updated_at = enabled, now or utcnow()
+    db.flush()
+    return True
+
+
+def auto_grant_new_enterprise(
+    db: Session, enterprise_id, *, now: datetime | None = None
+) -> list[str]:
+    """Pas krijimit të një Enterprise TË RI: grant te klientët `active` me flamurin e ndezur.
+    Një enterprise ⇒ një grant (dhe një bump `auth_generation`) për klient, në transaksionin e
+    thirrësit; grant ekzistues = no-op pa bump. Klientët e çaktivizuar nuk grantohen. → client_id-t."""
+    now = now or utcnow()
+    granted = []
+    clients = db.scalars(
+        select(ServiceClient)
+        .where(ServiceClient.status == CredentialStatus.ACTIVE.value,
+               ServiceClient.auto_grant_new_enterprises.is_(True))
+        .order_by(ServiceClient.client_id)
+        .with_for_update()
+    ).all()  # fmt: skip
+    for client in clients:
+        if _grant(db, client, enterprise_id, now):
+            granted.append(client.client_id)
+    return granted
+
+
 def disable_key(db: Session, client_id: str, kid: str) -> bool:
     client = get_client(db, client_id)
     key = db.scalar(

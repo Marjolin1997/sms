@@ -539,7 +539,9 @@ def test_no_registration_routes_provisioning_service_or_m7_coupling(w):
     paths = create_app(db.get_bind()).openapi()["paths"]
     assert not [p for p in paths if "registr" in p.lower() or "polic" in p.lower()]
     services = {p.stem for p in (ROOT / "apps/central/services").glob("*.py")}
-    assert not [s for s in services if "provision" in s]
+    assert (
+        "provisioning" in services
+    )  # M8-c: service ekziston; HTTP provisioning vjen vetëm në M8-d
     src = (ROOT / "apps/central/services/registrations.py").read_text()
     assert (
         "enterprise_products" not in src

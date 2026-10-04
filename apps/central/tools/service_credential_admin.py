@@ -4,6 +4,11 @@
     python -m apps.central.tools.service_credential_admin revoke  --client-id C --enterprise <uuid>
     python -m apps.central.tools.service_credential_admin disable-key    --client-id C --kid K
     python -m apps.central.tools.service_credential_admin disable-client --client-id C
+    python -m apps.central.tools.service_credential_admin enable-auto-grant  --client-id C
+    python -m apps.central.tools.service_credential_admin disable-auto-grant --client-id C
+
+`enable-auto-grant`: enterprise-et e SAPOKRIJUARA nga provisioning-u i regjistrimit grantohen te ky
+klient (aktiv); pa grant retroaktiv, pa bump `auth_generation` për vetë flamurin.
 
 `grant`/`revoke` ndryshojnë bashkësinë e autorizuar dhe rrisin `auth_generation`: konsumatori duhet
 snapshot të plotë. Ndryshimet nuk shkruhen te `audit_log` (CLI pa aktor): borxh para go-live.
@@ -31,6 +36,8 @@ def run(action: str, client_id: str, enterprise_id=None, kid=None, engine=None) 
             changed = service_auth.revoke_enterprise(db, client_id, enterprise_id)
         elif action == "disable-key":
             changed = service_auth.disable_key(db, client_id, kid)
+        elif action in ("enable-auto-grant", "disable-auto-grant"):
+            changed = service_auth.set_auto_grant(db, client_id, action == "enable-auto-grant")
         else:
             changed = service_auth.disable_client(db, client_id)
         db.commit()
@@ -40,7 +47,17 @@ def run(action: str, client_id: str, enterprise_id=None, kid=None, engine=None) 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Manage service clients (manual).")
-    ap.add_argument("action", choices=["grant", "revoke", "disable-key", "disable-client"])
+    ap.add_argument(
+        "action",
+        choices=[
+            "grant",
+            "revoke",
+            "disable-key",
+            "disable-client",
+            "enable-auto-grant",
+            "disable-auto-grant",
+        ],
+    )
     ap.add_argument("--client-id", required=True)
     ap.add_argument("--enterprise")
     ap.add_argument("--kid")

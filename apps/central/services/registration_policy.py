@@ -72,17 +72,27 @@ def _uuid(value) -> uuid.UUID:
         raise Invalid("invalid product id") from None
 
 
-def views(db: Session, product_ids: list[uuid.UUID]) -> list[PolicyView]:
-    """Pamja live për produktet e dhëna (në rendin e dhënë). Produkt që mungon ⇒ i paplotësuar."""
-    prods = {p.id: p for p in db.scalars(select(Product).where(Product.id.in_(product_ids)))}
-    pols = {
-        x.product_id: x
-        for x in db.scalars(
-            select(ProductRegistrationPolicy)
-            .where(ProductRegistrationPolicy.product_id.in_(product_ids))
+def views(db: Session, product_ids: list[uuid.UUID], *, lock: bool = False) -> list[PolicyView]:
+    """Pamja live për produktet e dhëna (në rendin e dhënë). Produkt që mungon ⇒ i paplotësuar.
+    `lock=True` (provisioning): kyç produktet (FOR SHARE, sipas id) dhe rilexon gjendjen e
+    commit-uar — retire/politikë paralele pret ose ka ndodhur PARA; asnjë gjendje e vjetër."""
+    q = select(Product).where(Product.id.in_(product_ids))
+    if lock:
+        q = (
+            q.order_by(Product.id)
+            .with_for_update(read=True)
             .execution_options(populate_existing=True)
         )
-    }
+    prods = {p.id: p for p in db.scalars(q)}
+    pq = (
+        select(ProductRegistrationPolicy)
+        .where(ProductRegistrationPolicy.product_id.in_(product_ids))
+        .order_by(ProductRegistrationPolicy.product_id)
+        .execution_options(populate_existing=True)
+    )
+    if lock:
+        pq = pq.with_for_update(read=True)
+    pols = {x.product_id: x for x in db.scalars(pq)}
     out = []
     for pid in product_ids:
         p, pol = prods.get(pid), pols.get(pid)

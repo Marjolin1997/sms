@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     # Në prodhim `enforce` kërkon konfirmim eksplicit të portave (M7-f dry-run real, mospërputhje të
     # pashpjeguara = 0, review/conflict të zgjidhura, periudhë shadow): s'ka bypass nga default.
     cp_enforce_readiness_ack: bool = False
+    # M8-c: aplikuesi M7 mund të krijojë tenant "shell" lokal nga gjendja Enterprise e Central.
+    # Çelës i veçantë (NUK nënkuptohet nga mode=enforce); default false ⇒ kalohet si panjohur.
+    cp_tenant_autocreate: bool = False
     cp_base_url: str = ""
     cp_client_id: str = ""
     cp_key_id: str = ""

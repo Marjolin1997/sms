@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +46,10 @@ class ServiceClient(Base):
     status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
     scopes: Mapped[list] = mapped_column(JSON)
     auth_generation: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1")
+    # M8-c: enterprise-et e SAPOKRIJUARA nga provisioning grantohen automatikisht (pa grant retroaktiv)
+    auto_grant_new_enterprises: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

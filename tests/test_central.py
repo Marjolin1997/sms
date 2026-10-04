@@ -157,8 +157,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0015_next.py").write_text(
-        'revision = "0015"\ndown_revision = "0014"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0016_next.py").write_text(
+        'revision = "0016"\ndown_revision = "0015"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
