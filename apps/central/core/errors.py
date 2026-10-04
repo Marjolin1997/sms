@@ -14,6 +14,10 @@ class Invalid(CentralError):
     pass
 
 
+class TooManyRequests(CentralError):
+    """Kuota e abuzimit u tejkalua (p.sh. kërkesa regjistrimi për email në 24h)."""
+
+
 class AuthenticationFailed(CentralError):
     """Kredenciale të pavlefshme. `reason` është vetëm për log operacional, jo për klientin."""
 

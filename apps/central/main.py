@@ -11,6 +11,8 @@ from apps.central.api import (
     health,
     internal_sync,
     products,
+    registration_admin,
+    registration_public,
 )
 from apps.central.core import tokens
 from apps.central.core.config import settings
@@ -36,6 +38,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.include_router(products.router)
     app.include_router(enterprise_products.router)
     app.include_router(internal_sync.router)
+    app.include_router(registration_public.router)
+    app.include_router(registration_admin.router)
     errors.install(app)
     return app
 

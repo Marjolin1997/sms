@@ -28,13 +28,13 @@ import secrets
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from apps.central.core.errors import Conflict, Invalid, NotFound
+from apps.central.core.errors import Conflict, Invalid, NotFound, TooManyRequests
 from apps.central.core.timeutil import utcnow
 from apps.central.models.product import Product
 from apps.central.models.registration import (
@@ -178,6 +178,19 @@ def _existing(db: Session, email: str, key: str) -> RegistrationRequest | None:
     )
 
 
+def _enforce_email_quota(db: Session, email: str, key, fingerprint, limit: int, now: datetime):
+    if db.get_bind().dialect.name == "postgresql":  # kyç për email deri në fund të transaksionit
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+                   {"k": "registration_email:" + email})  # fmt: skip
+    if key is not None and _existing(db, email, key) is not None:
+        return  # replay: s'konsumon kuotë (vendoset nga thirrësi pas kyçjes)
+    used = db.scalar(select(func.count()).select_from(RegistrationRequest).where(
+        RegistrationRequest.contact_email == email,
+        RegistrationRequest.created_at > now - timedelta(hours=24)))  # fmt: skip
+    if used >= limit:
+        raise TooManyRequests("registration quota exceeded for this contact")
+
+
 def _replay(row: RegistrationRequest, fingerprint: str) -> SubmitResult:
     if row.request_hash != fingerprint:
         raise Conflict("submission key was already used with a different request")
@@ -192,8 +205,13 @@ def submit(
     product_ids: Sequence,
     contact_name: str | None = None,
     submission_key: str | None = None,
+    max_per_email_24h: int | None = None,
     now: datetime | None = None,
 ) -> SubmitResult:
+    """`max_per_email_24h` (None = pa kufi, p.sh. thirrje të brendshme): numri maksimal i kërkesave
+    REALE të krijuara për të njëjtin email në 24h të fundit (dritare rrëshqitëse, UTC; numërohen të
+    gjitha gjendjet, jo çelësat e idempotencës). Replay nuk e konsumon kuotën. Në PostgreSQL
+    serializohet me `pg_advisory_xact_lock` për email ⇒ asnjë garë s'e kalon kufirin."""
     name = normalize_name(enterprise_name)
     email = normalize_contact_email(contact_email)
     contact = _contact_name(contact_name)
@@ -203,9 +221,13 @@ def submit(
     if key is not None and (row := _existing(db, email, key)) is not None:
         return _replay(row, fingerprint)  # replay: pa token, pa dublikim
     vs = _eligible_views(db, ids)
+    now = now or utcnow()
+    if max_per_email_24h is not None:
+        _enforce_email_quota(db, email, key, fingerprint, max_per_email_24h, now)
+        if key is not None and (row := _existing(db, email, key)) is not None:
+            return _replay(row, fingerprint)  # fituesi i garës u commit-ua gjatë pritjes së kyçit
     automatic = policy.automatic_allowed() and all(v.approval_mode == AUTOMATIC for v in vs)
     token, token_hash = new_access_token()
-    now = now or utcnow()
     row = RegistrationRequest(
         contact_email=email, contact_name=contact, enterprise_name=name, submission_key=key,
         request_hash=fingerprint, access_token_hash=token_hash, status=SUBMITTED,
@@ -271,6 +293,56 @@ def requested_products(db: Session, request_id: uuid.UUID) -> list[Product]:
             .order_by(Product.code)
         )
     )
+
+
+def list_requests(
+    db: Session,
+    *,
+    status: str | None = None,
+    provisioning_status: str | None = None,
+    contact_email: str | None = None,
+    product_id: uuid.UUID | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[RegistrationRequest]:
+    """Vetëm-lexim për stafin. Renditje: më të rejat parë (created_at desc, id)."""
+    q = select(RegistrationRequest)
+    if status is not None:
+        q = q.where(RegistrationRequest.status == status)
+    if provisioning_status is not None:
+        q = q.where(RegistrationRequest.provisioning_status == provisioning_status)
+    if contact_email is not None:
+        q = q.where(RegistrationRequest.contact_email == normalize_contact_email(contact_email))
+    if product_id is not None:
+        q = q.where(RegistrationRequest.id.in_(
+            select(RegistrationProduct.request_id).where(RegistrationProduct.product_id == product_id)))  # fmt: skip
+    if created_from is not None:
+        q = q.where(RegistrationRequest.created_at >= created_from)
+    if created_to is not None:
+        q = q.where(RegistrationRequest.created_at < created_to)
+    q = q.order_by(RegistrationRequest.created_at.desc(), RegistrationRequest.id)
+    return list(db.scalars(q.limit(max(1, min(limit, 500))).offset(max(0, offset))))
+
+
+def product_links(db: Session, request_ids: Sequence[uuid.UUID]) -> dict:
+    """request_id → [(RegistrationProduct, Product, EnterpriseProduct | None)] sipas code."""
+    from apps.central.models.enterprise_product import EnterpriseProduct
+
+    out: dict = {rid: [] for rid in request_ids}
+    if not request_ids:
+        return out
+    rows = db.execute(
+        select(RegistrationProduct, Product, EnterpriseProduct)
+        .join(Product, Product.id == RegistrationProduct.product_id)
+        .outerjoin(EnterpriseProduct, EnterpriseProduct.id == RegistrationProduct.assignment_id)
+        .where(RegistrationProduct.request_id.in_(list(request_ids)))
+        .order_by(Product.code)
+    )
+    for rp, p, ep in rows:
+        out[rp.request_id].append((rp, p, ep))
+    return out
 
 
 # --- vendimi manual ---------------------------------------------------------------------------------------

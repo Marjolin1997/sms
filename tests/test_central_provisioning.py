@@ -684,8 +684,9 @@ def test_central_provisioning_has_no_http_enterprise_or_direct_db_coupling():
     )
 
 
-def test_no_http_route_exposes_provisioning(w):
+def test_only_the_admin_provision_route_exists_and_it_is_not_public(w):
     from apps.central.main import create_app
 
     paths = create_app(w.eng).openapi()["paths"]
-    assert not [p for p in paths if "provision" in p.lower() or "registr" in p.lower()]
+    prov_paths = [p for p in paths if "provision" in p.lower()]
+    assert prov_paths and all(p.startswith("/admin/") for p in prov_paths)  # M8-d: vetëm admin

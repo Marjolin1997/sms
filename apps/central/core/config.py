@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # publik s'ka verifikim kontakti): `automatic` nuk vendoset dhe submit-i s'auto-miraton.
     # Vetëm dev/test (ose rrjedhë e ardhshme e verifikuar); në prodhim nisja refuzohet nëse true.
     allow_unverified_auto_registration: bool = False
+    # M8-d: endpoint-et PUBLIKE të regjistrimit (/registration*) janë të mbyllura (503) si default.
+    # Koncept i ndarë nga gate-i i auto-miratimit; admin API vazhdon pavarësisht. Pa verifikim
+    # kontakti, nëse hapet në prodhim qëndron VETËM me miratim manual.
+    public_registration_enabled: bool = False
+    # Kuota për email (kërkesa reale të krijuara, dritare rrëshqitëse 24h UTC). IP limit = proxy.
+    public_registration_max_per_email_24h: int = Field(default=3, ge=1, le=100)
 
 
 settings = Settings()

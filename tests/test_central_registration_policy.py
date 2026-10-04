@@ -537,7 +537,8 @@ def test_no_registration_routes_provisioning_service_or_m7_coupling(w):
 
     db = w[0]
     paths = create_app(db.get_bind()).openapi()["paths"]
-    assert not [p for p in paths if "registr" in p.lower() or "polic" in p.lower()]
+    # M8-d: rrugët ekzistojnë (publike + admin), por asnjë DELETE dhe asnjë thirrje drejt Enterprise
+    assert not [p for p in paths if "registr" in p.lower() and "delete" in paths[p]]
     services = {p.stem for p in (ROOT / "apps/central/services").glob("*.py")}
     assert (
         "provisioning" in services

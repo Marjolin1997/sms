@@ -2,6 +2,8 @@
 """M8-c — E2E me dy DB reale: regjistrim → miratim → provisioning (Central) → auto-grant →
 auth_generation → M7 poll/snapshot → tenant autocreate (Enterprise) → entitlement. Pa thirrje direkte."""
 
+import uuid
+
 import httpx
 import pytest
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -17,6 +19,7 @@ from app.models.sending import AccountPlan
 from app.services import control_plane_client as cc
 from app.services import control_plane_poller as poller
 from app.services import control_plane_sync as cps
+from apps.central.core.config import settings as central_settings
 from apps.central.main import create_app
 from apps.central.models import EnterpriseProduct, ServiceClient
 from apps.central.services import products as prod
@@ -24,6 +27,7 @@ from apps.central.services import provisioning as prov
 from apps.central.services import registration_policy as pol
 from apps.central.services import registrations as reg
 from apps.central.services import service_auth, users
+from tests.test_central_auth import auth_secret, bearer, token_for  # noqa: F401
 from tests.test_central_bootstrap_products import cen, make_db  # noqa: F401
 from tests.test_central_sync_api import keypair
 
@@ -143,3 +147,59 @@ def test_central_never_talks_to_enterprise_during_provisioning(world, monkeypatc
     monkeypatch.setattr(httpx.Client, "send", forbidden)
     monkeypatch.setattr(httpx.AsyncClient, "send", forbidden)
     assert prov.run(factory, register(factory, ids)).status == "provisioned"
+
+
+def test_http_public_submit_admin_approve_provision_then_m7_creates_the_tenant(
+    db, world, auth_secret, monkeypatch
+):
+    """M8-d: HTTP → Central (dy hapa admin) → outbox → poll M7 → tenant + entitlement lokal."""
+    eng, factory, ids, client, central, key = world
+    monkeypatch.setattr(central_settings, "public_registration_enabled", True)
+    assert poll(client).ok
+    g0 = gen(factory)
+    admin = {**bearer(token_for(central, "adm@example.com", "pw-Long-Enough-123"))}
+    sub = central.post(
+        "/registration",
+        json={"contact_email": "ana@example.com", "enterprise_name": "Acme Ltd",
+              "product_ids": [str(ids[0]), str(ids[1])]},
+        headers={"Idempotency-Key": "e2e-key-0001"},
+    )  # fmt: skip
+    assert sub.status_code == 202
+    rid, tok = sub.json()["id"], sub.json()["access_token"]
+
+    def st():
+        r = central.get(f"/registration/{rid}/status", headers={"X-Registration-Token": tok})
+        return r.json()["status"]
+
+    assert st() == "in_review"
+    assert central.post(f"/admin/registrations/{rid}/approve", headers=admin).status_code == 200
+    assert st() == "activating"
+    out = poll(client)  # asnjë ndryshim i dukshëm për Enterprise ende
+    assert out.ok
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(Enterprise)) == 0
+    pr = central.post(f"/admin/registrations/{rid}/provision", headers=admin)
+    assert pr.status_code == 200 and pr.json()["result"] == "provisioned"
+    assert st() == "active"  # active = Central provisioned (propagimi M7 është asinkron)
+    eid = pr.json()["enterprise_id"]
+    assert gen(factory) == g0 + 1  # auto-grant
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(Enterprise)) == 0  # ende s'ka konsumuar
+    assert poll(client).ok
+    db.expire_all()
+    e = db.get(Enterprise, uuid.UUID(eid))
+    assert e is not None and e.owner_ref == f"cp-{eid}" and e.short_name == "Acme Ltd"
+    assert {x.channel for x in db.scalars(select(Entitlement))} == {"sms", "email"}
+    # HTTP nuk prodhon gjendje biznesi të dyfishtë
+    assert central.post(f"/admin/registrations/{rid}/provision", headers=admin).json()[
+        "already_provisioned"
+    ]
+    assert central.post("/registration", json={"contact_email": "ana@example.com",
+        "enterprise_name": "Acme Ltd", "product_ids": [str(ids[0]), str(ids[1])]},
+        headers={"Idempotency-Key": "e2e-key-0001"}).json()["token_issued"] is False  # fmt: skip
+    assert poll(client).ok
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(Enterprise)) == 1
+    assert db.scalar(select(func.count()).select_from(Entitlement)) == 2
+    with factory() as s:
+        assert s.scalar(select(func.count()).select_from(EnterpriseProduct)) == 2

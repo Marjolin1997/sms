@@ -104,6 +104,32 @@ def views(db: Session, product_ids: list[uuid.UUID], *, lock: bool = False) -> l
     return out
 
 
+def public_products(db: Session) -> list[tuple[Product, str]]:
+    """Produktet e hapura për vetë-regjistrim (active + politikë e aktivizuar) me modalitetin
+    EFEKTIV: `automatic` vetëm nëse politika është automatic DHE gate-i lejon; përndryshe `manual`
+    (kurrë nuk premtojmë auto-miratim që s'mund të ndodhë)."""
+    rows = db.execute(
+        select(Product, ProductRegistrationPolicy)
+        .join(ProductRegistrationPolicy, ProductRegistrationPolicy.product_id == Product.id)
+        .where(Product.status == ProductStatus.ACTIVE.value,
+               ProductRegistrationPolicy.self_registration_enabled.is_(True))
+        .order_by(Product.code)
+    )  # fmt: skip
+    allowed = automatic_allowed()
+    return [
+        (p, AUTOMATIC if allowed and pol.approval_mode == AUTOMATIC else MANUAL) for p, pol in rows
+    ]
+
+
+def list_policies(db: Session) -> list[tuple[Product, ProductRegistrationPolicy | None]]:
+    """Të gjitha produktet me politikën e tyre (None = pa rresht = i mbyllur)."""
+    return list(db.execute(
+        select(Product, ProductRegistrationPolicy)
+        .outerjoin(ProductRegistrationPolicy, ProductRegistrationPolicy.product_id == Product.id)
+        .order_by(Product.code)
+    ).all())  # fmt: skip
+
+
 def set_policy(
     db: Session,
     product_id: uuid.UUID | str,
