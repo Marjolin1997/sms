@@ -201,6 +201,7 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "service_client_enterprises",
         "service_assertion_jti",
         "registration_requests",
+        "notification_outbox",
         "registration_products",
         "product_registration_policy",
     }
@@ -227,6 +228,7 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "service_client_enterprises",
         "service_assertion_jti",
         "registration_requests",
+        "notification_outbox",
         "registration_products",
         "product_registration_policy",
     }
@@ -261,6 +263,7 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "service_client_enterprises",
         "service_assertion_jti",
         "registration_requests",
+        "notification_outbox",
         "registration_products",
         "product_registration_policy",
     }

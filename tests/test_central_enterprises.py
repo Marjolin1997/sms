@@ -142,6 +142,7 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "service_client_enterprises",
         "service_assertion_jti",
         "registration_requests",
+        "notification_outbox",
         "registration_products",
         "product_registration_policy",
     }

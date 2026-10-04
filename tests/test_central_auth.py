@@ -495,6 +495,7 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "service_client_enterprises",
         "service_assertion_jti",
         "registration_requests",
+        "notification_outbox",
         "registration_products",
         "product_registration_policy",
     }

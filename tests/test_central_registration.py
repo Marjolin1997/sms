@@ -341,6 +341,7 @@ def test_manual_approve_sets_decision_pending_provisioning_and_audits_a_human(wo
     )
     assert a.detail == {
         "decision_mode": "manual",
+        "contact_verified": False,
         "products": [  # politika LIVE në momentin e vendimit
             {"code": "email", "approval_mode": "manual", "self_registration_enabled": True},
             {"code": "sms", "approval_mode": "manual", "self_registration_enabled": True},
@@ -590,6 +591,7 @@ def test_m8a_adds_only_the_two_central_tables_and_nothing_to_the_enterprise_sche
     assert cols == {"id", "contact_email", "contact_name", "enterprise_name", "submission_key", "request_hash",
                     "access_token_hash", "status", "decision_mode", "decided_at", "decided_by_id",
                     "decided_by_label", "decision_reason", "provisioning_status", "provisioning_attempts",
+                    "verified_at", "verification_nonce", "verification_expires_at",
                     "provisioning_error_code", "enterprise_id", "created_at", "updated_at"}  # fmt: skip
     assert not {"password", "token", "access_token", "owner_ref"} & cols
 

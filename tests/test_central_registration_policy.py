@@ -479,7 +479,9 @@ def test_explicit_gate_enables_automatic_behavior_and_claims_no_contact_verifica
     db, sms, _, _ = auto
     assert submit(db, [sms]).request.status == "approved"  # gate eksplicit (fixture)
     cols = {c.name for c in RegistrationRequest.__table__.columns}
-    assert not [c for c in cols if "verif" in c or "confirm" in c]  # s'pretendohet verifikim
+    assert not [
+        c for c in cols if "token" in c and "verif" in c
+    ]  # M8-e: s'ruhet kurrë token verifikimi
     assert "unverified" in (ROOT / "apps/central/core/config.py").read_text()
 
 

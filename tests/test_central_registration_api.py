@@ -132,7 +132,7 @@ def test_valid_manual_submit_is_202_with_token_once_and_status_in_review(h):
     r = post(h)
     assert r.status_code == 202
     j = r.json()
-    assert set(j) == {"id", "status", "access_token", "token_issued"}
+    assert set(j) == {"id", "status", "contact_verification", "access_token", "token_issued"}
     assert (j["status"], j["token_issued"]) == ("in_review", True) and len(j["access_token"]) >= 40
     assert count(h, RegistrationRequest) == 1
 
@@ -240,7 +240,11 @@ def test_status_with_valid_token_and_public_mapping_for_every_state(h):
     j = post(h).json()
     rid, tok = j["id"], j["access_token"]
     r = status(h, rid, tok)
-    assert r.status_code == 200 and r.json() == {"id": rid, "status": "in_review"}  # 9, 12
+    assert r.status_code == 200 and r.json() == {
+        "id": rid,
+        "status": "in_review",
+        "contact_verification": "unavailable",
+    }  # 9, 12
     with h.factory() as s:
         reg.approve(s, rid, s.get(users.CentralUser, h.admin_u.id))
         s.commit()
@@ -257,8 +261,12 @@ def test_status_with_valid_token_and_public_mapping_for_every_state(h):
         s.commit()
     assert prov.run(h.factory, uuid.UUID(rid)).status == "provisioned"
     r = status(h, rid, tok)
-    assert r.json() == {"id": rid, "status": "active"}  # 14
-    assert set(r.json()) == {"id", "status"}  # pa enterprise_id/assignment ids
+    assert r.json() == {"id": rid, "status": "active", "contact_verification": "unavailable"}  # 14
+    assert set(r.json()) == {
+        "id",
+        "status",
+        "contact_verification",
+    }  # pa enterprise_id/assignment ids
 
 
 def test_status_rejected_mapping_and_no_internal_fields(h):
@@ -267,7 +275,7 @@ def test_status_rejected_mapping_and_no_internal_fields(h):
         reg.reject(s, j["id"], s.get(users.CentralUser, h.admin_u.id), "internal reason text")
         s.commit()
     r = status(h, j["id"], j["access_token"])
-    assert r.json() == {"id": j["id"], "status": "rejected"}
+    assert r.json() == {"id": j["id"], "status": "rejected", "contact_verification": "unavailable"}
     assert "internal reason" not in r.text
 
 
@@ -380,9 +388,11 @@ def test_concurrent_submissions_cannot_exceed_the_email_quota_on_pg(h):
 
 def test_ip_rate_limiting_is_not_claimed_in_app():
     src = (ROOT / "apps/central/api/registration_public.py").read_text()
-    assert "X-Forwarded-For" not in src and "client.host" not in src  # IP limit = proxy (M8-e)
+    # M8-e: IP-ja përdoret vetëm për LOG/sfidë (hop-e të besuara); asnjë kuotë/limit sipas IP
+    assert "ip_limit" not in src and "rate_by_ip" not in src
+    assert "count" not in src.split("def client_ip")[1].split("def check_challenge")[0]
     doc = (ROOT / "docs/M8_REGISTRATION.md").read_text()
-    assert "IP" in doc and "reverse-proxy" in doc
+    assert "IP" in doc and "reverse-proxy" in doc and "limit_req_zone" in doc
 
 
 # --- admin: RBAC + rrjedha ------------------------------------------------------------------------------------
