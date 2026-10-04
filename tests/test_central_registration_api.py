@@ -636,9 +636,9 @@ def test_api_layer_has_no_business_state_logic_or_enterprise_coupling():
                 mods.add(n.module.split(".")[0])
         assert not mods & forbidden, (f, mods & forbidden)
         src = (ROOT / "apps/central/api" / f).read_text()
-        assert (
-            ".status =" not in src and "provisioning_status =" not in src
-        )  # asnjë kalim gjendjeje në route
+        import re
+
+        assert not re.search(r"\.(provisioning_)?status\s*=[^=]", src)  # asnjë kalim gjendjeje
         assert not any(w in src.lower() for w in ("price", "pricing", "sender_id", "country"))
 
 
