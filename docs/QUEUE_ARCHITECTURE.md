@@ -7,7 +7,7 @@
 > **Vendime të miratuara në mbyllje:** (1) devijimi SKIP LOCKED pranohet: `messages.expire_stale`, `campaigns.run_due`,
 > `payments.expire_pending` mbeten jashtë queue; allowlist testi (`tests/test_queue_boundaries.py`) mbetet dhe çdo përdorim i ri
 > kërkon review; të tre nuk zhvendosen në abstraksion për të plotësuar një kriter formal. (2) **Gate i fortë i besueshmërisë:**
-> S1/E1 (SMS/email `SENDING` i ngecur) dhe recovery/reporting duhen trajtuar **para** M9 (sjellja e parave/kreditit në prodhim), para
+> **M9-a (zbatuar): S1/E1 u mbyll me UNKNOWN + sweeper sipas fazës — shih `docs/M9_MONEY_AUDIT.md`.** S1/E1 (SMS/email `SENDING` i ngecur) dhe recovery/reporting duhen trajtuar **para** M9 (sjellja e parave/kreditit në prodhim), para
 > përdorimit real të wallet/credit në prodhim dhe para sign-off-it të besueshmërisë së go-live: SMS (raportim, veprim admin i kontrolluar,
 > rikonsilim i wallet hold, audit trail, vendim i shprehur për lease/auto-recovery); email (raportim, veprim admin, politika për
 > provider-sukses + COMMIT#2 dështim, vendim i shprehur për lease/auto-recovery). Nuk bllokon M3. E2 (email stuck reporting) mbetet në
