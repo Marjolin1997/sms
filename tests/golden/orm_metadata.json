@@ -1613,6 +1613,15 @@
     "server_default": null,
     "type": "DATETIME"
    },
+   "dispatch_started_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
    "domain_id": {
     "default": null,
     "fks": [
@@ -2964,6 +2973,15 @@
     "pk": false,
     "server_default": null,
     "type": "VARCHAR(16)"
+   },
+   "dispatch_started_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
    },
    "encoding": {
     "default": null,

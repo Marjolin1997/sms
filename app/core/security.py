@@ -179,7 +179,7 @@ def current_principal(
 
 # Veprime që lëvizin para, ndryshojnë çmime/rrugë, çelësa ose ndalojnë platformën.
 SENSITIVE_PERMS = {
-    "wallet:adjust", "topup:confirm", "keys:manage", "switch:write",
+    "wallet:adjust", "topup:confirm", "keys:manage", "switch:write", "queue:resolve",
     "plans:write", "rates:write", "routes:write", "billing:admin",
 }  # fmt: skip
 

@@ -20,6 +20,7 @@ class EmailRequest:
 
 class EmailProvider(Protocol):
     name: str
+    idempotent_by_reference: bool  # default False (shih `app.providers.base.is_idempotent`)
 
     def send(self, req: EmailRequest) -> SendResult: ...
 
@@ -28,6 +29,7 @@ class FakeEmailProvider:
     """Sjellja sipas pjesës lokale të adresës: temp@ → i përkohshëm, reject@ → i përhershëm."""
 
     name = "fake"
+    idempotent_by_reference = True  # `accepted.setdefault(reference, ...)`: provuar nga kodi/testet
 
     def __init__(self) -> None:
         self.calls: list[EmailRequest] = []
@@ -44,7 +46,13 @@ class FakeEmailProvider:
 
 
 class SmtpEmailProvider:
-    """SMTP me STARTTLS (ose SMTP_SSL në 465). 4xx → retry; 5xx → i përhershëm."""
+    """SMTP me STARTTLS (ose SMTP_SSL në 465). 4xx → retry; 5xx → i përhershëm.
+
+    `idempotent_by_reference = False`: SMTP s'ka idempotencë (Message-ID-ja deterministike
+    s'garanton dedup te marrësi). Gabim pas lidhjes (disconnect/timeout gjatë DATA) ⇒
+    `ambiguous=True` ⇒ UNKNOWN."""
+
+    idempotent_by_reference = False
 
     def __init__(
         self,
@@ -67,10 +75,15 @@ class SmtpEmailProvider:
     def send(self, req: EmailRequest) -> SendResult:
         ctx = ssl.create_default_context()
         try:
-            if self._port == 465:
-                smtp = smtplib.SMTP_SSL(self._host, self._port, timeout=self._timeout, context=ctx)
-            else:
-                smtp = smtplib.SMTP(self._host, self._port, timeout=self._timeout)
+            try:
+                if self._port == 465:
+                    smtp = smtplib.SMTP_SSL(
+                        self._host, self._port, timeout=self._timeout, context=ctx
+                    )
+                else:
+                    smtp = smtplib.SMTP(self._host, self._port, timeout=self._timeout)
+            except OSError as e:  # lidhja s'u vendos: s'u dërgua asgjë
+                raise ProviderError(f"smtp_connect:{type(e).__name__}", temporary=True) from e
             with smtp:
                 if self._port != 465 and self._starttls:
                     smtp.starttls(context=ctx)
@@ -81,8 +94,12 @@ class SmtpEmailProvider:
             raise ProviderError("smtp_recipient_refused", temporary=_all_4xx(e.recipients)) from e
         except smtplib.SMTPResponseException as e:
             raise ProviderError(f"smtp_{e.smtp_code}", temporary=400 <= e.smtp_code < 500) from e
-        except (smtplib.SMTPException, OSError) as e:
-            raise ProviderError(f"smtp_error:{type(e).__name__}", temporary=True) from e
+        except ProviderError:
+            raise
+        except (smtplib.SMTPException, OSError) as e:  # pas lidhjes: mund të jetë pranuar
+            raise ProviderError(
+                f"smtp_error:{type(e).__name__}", temporary=True, ambiguous=True
+            ) from e
         return SendResult(req.message_id)
 
 

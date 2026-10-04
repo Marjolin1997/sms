@@ -7,6 +7,8 @@ class FakeProvider:
     Idempotent sipas `reference`, si një provider i mirë real."""
 
     name = "fake"
+    # Provuar nga kodi dhe testet: e njëjta `reference` ⇒ i njëjti SendResult (`self.accepted`).
+    idempotent_by_reference = True
 
     def __init__(self) -> None:
         self.accepted: dict[str, SendResult] = {}

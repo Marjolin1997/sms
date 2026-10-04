@@ -49,6 +49,10 @@ class DispatchHooks(Protocol):
 
     def failed(self, db, item, reason: str) -> None: ...  # → FAILED (+ efekte domain)
 
+    def unknown(
+        self, db, item, reason: str
+    ) -> None: ...  # SENDING → UNKNOWN (M9-a; pa efekt parash)
+
 
 class DispatchQueue(Protocol):
     def publish(self, db, item, *, not_before: datetime | None = None) -> Any:
@@ -61,5 +65,8 @@ class DispatchQueue(Protocol):
     def retry(self, db, item, *, error: str, temporary: bool, now: datetime) -> Outcome: ...
 
     def fail(self, db, item, reason: str) -> None: ...
+
+    def unknown(self, db, item, reason: str) -> None:
+        """M9-a: rezultat i panjohur ⇒ UNKNOWN. Asnjë ridërgim, release apo capture automatik."""
 
     def cancel_if_pending(self, db, item_id: int, *, reason: str) -> bool: ...

@@ -20,6 +20,8 @@ class DlrIn(BaseModel):
     provider_message_id: str = Field(min_length=1, max_length=128)
     status: str = Field(pattern="^(delivered|failed)$")
     code: str | None = Field(default=None, max_length=64)
+    # M9-a: opsionale (kur provider-i e kthen): `reference` = public_id; lidh DLR me mesazh UNKNOWN
+    reference: str | None = Field(default=None, max_length=36)
 
 
 def verify_signature(secret: str, body: bytes, header: str) -> bool:
@@ -33,7 +35,12 @@ def _handle(provider: str, raw: bytes, dlr: DlrIn) -> tuple[int, str]:
     with SessionLocal() as db:
         try:
             svc.apply_dlr(
-                db, provider, dlr.provider_message_id, dlr.status == "delivered", dlr.code
+                db,
+                provider,
+                dlr.provider_message_id,
+                dlr.status == "delivered",
+                dlr.code,
+                reference=dlr.reference,
             )
             outcome, code = "applied", 200
             db.commit()

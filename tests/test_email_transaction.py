@@ -214,7 +214,7 @@ def test_final_commit_failure_after_provider_success_leaves_sending_REMAINING_RI
     Nuk pretendohet exactly-once; rikuperimi është manual."""
     e = mk(db)
     with SessionLocal() as s:
-        _fail_nth_commit(s, 2)
+        _fail_nth_commit(s, 3)  # M9-a: COMMIT#1, #1b (marker), #2 (finalizim)
         with pytest.raises(OperationalError):
             emails.process_one(s, NOW())
         s.rollback()
@@ -227,6 +227,12 @@ def test_final_commit_failure_after_provider_success_leaves_sending_REMAINING_RI
     sent = [x.to_status for x in db.scalars(select(EmailEvent).where(EmailEvent.email_id == e.id))]
     assert "sent" not in sent
     assert emails.process_one(db, T0 + timedelta(days=365)) is None  # nuk rimerret kurrë vetvetiu
+    # M9-a: sweeper-i e kalon në UNKNOWN (thirrja kishte nisur; provider jo-idempotent), jo ridërgim
+    rep = emails.recover_stuck(db, timedelta(minutes=10), datetime.now(UTC) + timedelta(hours=1))
+    db.commit()
+    db.expire_all()
+    assert (rep.unknown, rep.requeued) == (1, 0)
+    assert db.get(Email, e.id).status == EmailStatus.UNKNOWN and len(probe.calls) == 1
 
 
 def test_crash_after_commit_1_before_the_provider_still_leaves_sending(db, world, probe):  # noqa: F811

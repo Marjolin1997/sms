@@ -16,7 +16,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.providers import register_configured
-from app.services import billing, emails, events, payments, webhooks
+from app.services import billing, emails, events, messages, payments, webhooks
 from app.services.campaigns import run_due
 from app.services.messages import expire_stale, process_one
 
@@ -39,6 +39,13 @@ def sweep() -> None:
             db.commit()
             if n:
                 log.warning("expired %d messages without DLR", n)
+            # M9-a: SENDING i ngecur (> lease) ⇒ UNKNOWN/rirradhitje sipas fazës; kurrë release.
+            for kind, svc in (("sms", messages), ("email", emails)):
+                rep = svc.recover_stuck(db)
+                db.commit()
+                if rep.requeued or rep.unknown or rep.failed:
+                    log.warning("recovered stuck %s: requeued=%d unknown=%d failed=%d",
+                                kind, rep.requeued, rep.unknown, rep.failed)  # fmt: skip
         except Exception:
             db.rollback()
             log.exception("sweep failed")

@@ -566,7 +566,7 @@ def test_enterprise_schema_and_migrations_are_untouched_by_m8b(w):
 
     assert not set(Base.metadata.tables) & set(EnterpriseBase.metadata.tables)
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("0*.py"))
-    assert versions[-1].startswith("0021")  # koka e Enterprise e pandryshuar nga M7-g
+    assert versions[-1].startswith("0022")  # koka e Enterprise: M9-a (dispatch_started_at)
 
 
 # --- migrimi -----------------------------------------------------------------------------------------------------------

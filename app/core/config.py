@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     dlr_secrets: dict[str, str] = {}
     # Sa kohë presim DLR pas SENT para se ta konsiderojmë të humbur.
     dlr_timeout_hours: int = 72
+    # M9-a: SENDING pa progres mbi këtë afat merret nga sweeper-i (UNKNOWN/riradhitje sipas fazës)
+    sending_lease_seconds: int = Field(default=600, ge=60, le=86400)
 
     # M7-e/g: sinkronizimi me Control Plane (Central). `off` = asgjë nuk nisë/vëzhgohet;
     # `shadow` = poller + krahasim vetëm-vëzhgim (asnjë vendim trafiku nuk ndryshon);

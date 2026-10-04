@@ -57,6 +57,9 @@ class PostgresDispatchQueue:
     def fail(self, db, item, reason: str) -> None:
         self.hooks.failed(db, item, reason)
 
+    def unknown(self, db, item, reason: str) -> None:
+        self.hooks.unknown(db, item, reason)
+
     def cancel_if_pending(self, db, item_id: int, *, reason: str) -> bool:
         """SKIP LOCKED: një item që worker-i e ka në dorë nuk preket (do të dërgohet)."""
         s = self.spec

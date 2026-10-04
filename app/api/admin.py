@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, AuditLog, Switch
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageStatus, Route
 from app.services import apikeys, switches, twofactor
+from app.services import emails as email_svc
 from app.services import messages as msg_svc
 from app.services.audit import audit
 
@@ -249,7 +251,9 @@ def audit_log(
 
 
 UNKNOWN_OUTCOME = "%outcome_unknown"
-IN_FLIGHT = (MessageStatus.QUEUED, MessageStatus.SENDING, MessageStatus.SENT)
+IN_FLIGHT = (
+    MessageStatus.QUEUED, MessageStatus.SENDING, MessageStatus.SENT, MessageStatus.UNKNOWN,
+)  # fmt: skip
 
 
 @router.get("/providers")
@@ -286,6 +290,8 @@ def provider_health(
             s["failed"] += n
         else:
             s["in_flight"] += n
+            if st == MessageStatus.UNKNOWN:  # M9-a: rezultat i panjohur (hold-i mbahet)
+                s["unknown_outcome"] += n
     for name, code, n in db.execute(
         select(Message.provider, Message.error_code, func.count())
         .where(
@@ -367,6 +373,112 @@ def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor
             max(0, int((now - as_utc(oldest)).total_seconds())) if oldest else None
         ),
         "stuck_sending": len(stuck),
+        "unknown_outcome": _unknown_summary(db, now),
         "dlr_problems_24h": {o: n for o, n in bad_dlr},
         "switches": [_switch_out(db, n) for n in sorted(switches.NAMES)],
     }
+
+
+# --- UNKNOWN: rezultat i panjohur i dërgimit (M9-a) -------------------------------------------
+
+
+def _unknown_summary(db: Session, now: datetime) -> dict:
+    sms = msg_svc.list_unknown(db, now, 500)
+    mail = email_svc.list_unknown(db, now, 500)
+    ages = [r["age_seconds"] for r in sms + mail]
+    held: dict[str, str] = {}
+    for r in sms:
+        held[r["currency"]] = str(Decimal(held.get(r["currency"], "0")) + Decimal(r["held_amount"]))
+    return {"sms": len(sms), "email": len(mail), "oldest_age_seconds": max(ages, default=None),
+            "held_amount_by_currency": held}  # fmt: skip
+
+
+class ResolveIn(BaseModel):
+    outcome: str = Field(max_length=32)
+    reason: str = Field(min_length=1, max_length=500)
+    provider_message_id: str | None = Field(default=None, min_length=1, max_length=190)
+
+
+class AttachIn(BaseModel):
+    provider_message_id: str = Field(min_length=1, max_length=190)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.get("/queue/unknown")
+def unknown_list(
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require("monitor:read")),
+):
+    """Vetëm lexim: mesazhe/email UNKNOWN (moshë, provider, shuma e mbajtur, përpjekja e fundit)."""
+    now = datetime.now(UTC)
+    return {
+        "summary": _unknown_summary(db, now),
+        "sms": msg_svc.list_unknown(db, now, limit),
+        "email": email_svc.list_unknown(db, now, limit),
+    }
+
+
+def _resolve(db: Session, svc, public_id: str, body: ResolveIn, p: Principal) -> dict:
+    def go():
+        item = svc.resolve_unknown(
+            db, public_id, body.outcome, actor=p.actor, role=p.role, reason=body.reason,
+            provider_message_id=body.provider_message_id,
+        )  # fmt: skip
+        return {"id": item.public_id, "status": item.status.value,
+                "provider_message_id": item.provider_message_id}  # fmt: skip
+
+    return _run(db, go)
+
+
+@router.post("/queue/sms/{public_id}/resolve")
+def resolve_sms(
+    public_id: str,
+    body: ResolveIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("queue:resolve")),
+):
+    """billable_delivered ⇒ capture i hold-it; non_billable_failed ⇒ release. Vetëm UNKNOWN."""
+    return _resolve(db, msg_svc, public_id, body, p)
+
+
+@router.post("/queue/email/{public_id}/resolve")
+def resolve_email(
+    public_id: str,
+    body: ResolveIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("queue:resolve")),
+):
+    """confirmed_sent ⇒ SENT; not_sent ⇒ FAILED. Pa para (email s'ka wallet)."""
+    return _resolve(db, email_svc, public_id, body, p)
+
+
+def _attach(db: Session, svc, public_id: str, body: AttachIn, p: Principal) -> dict:
+    def go():
+        item = svc.attach_provider_message_id(
+            db, public_id, body.provider_message_id, actor=p.actor, role=p.role, reason=body.reason
+        )
+        return {"id": item.public_id, "status": item.status.value,
+                "provider_message_id": item.provider_message_id}  # fmt: skip
+
+    return _run(db, go)
+
+
+@router.post("/queue/sms/{public_id}/provider-id")
+def attach_sms_provider_id(
+    public_id: str,
+    body: AttachIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("queue:resolve")),
+):
+    return _attach(db, msg_svc, public_id, body, p)
+
+
+@router.post("/queue/email/{public_id}/provider-id")
+def attach_email_provider_id(
+    public_id: str,
+    body: AttachIn,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("queue:resolve")),
+):
+    return _attach(db, email_svc, public_id, body, p)

@@ -297,10 +297,10 @@ def test_crash_before_claim_commit_leaves_item_queued_and_uncounted(q, db):
     assert row.status == q.QUEUED and row.attempts == 0
 
 
-def test_provider_exception_is_treated_as_temporary_and_requeued(q, db):
-    """RISK i njohur (at-least-once në praktikë për rezultat të panjohur): një përjashtim i papritur
-    nga provider-i mund të ketë dërguar mesazhin, por elementi ri-radhitet. Mbrohet vetëm nga
-    idempotency e provider-it (`reference` = public_id). Nuk ndryshohet në M2."""
+def test_provider_exception_after_invocation_is_unknown_not_a_blind_retry(q, db):
+    """M9-a (zëvendëson sjelljen e vjetër W6): një përjashtim i papritur PAS fillimit të thirrjes
+    mund të ketë dërguar mesazhin ⇒ provider JO-idempotent (default) ⇒ UNKNOWN, pa ri-radhitje
+    (një ridërgim do të dyfishonte SMS/email). Provider idempotent: shih tests/test_m9a_*."""
     item = publish(q, db)
     db.commit()
 
@@ -310,8 +310,8 @@ def test_provider_exception_is_treated_as_temporary_and_requeued(q, db):
     q.install(boom)
     q.process(db, T0)
     row = q.get(db, item)
-    assert row.status == q.QUEUED and row.error_code == "provider_exception" and row.attempts == 1
-    assert utc(row.next_attempt_at) == T0 + timedelta(seconds=q.BACKOFF)
+    assert row.status.value == "unknown" and row.error_code == "provider_exception"
+    assert row.attempts == 1
 
 
 def test_stuck_sending_is_only_reported_for_sms(q, db):

@@ -103,7 +103,7 @@ class EmailIn(BaseModel):
 
 def _email_out(e: Email) -> dict:
     return {
-        "id": e.public_id, "status": e.status.value, "to": e.to_email,
+        "id": e.public_id, "status": svc.public_status(e), "to": e.to_email,
         "from": e.from_email, "subject": e.subject, "category": e.category,
         "error_code": e.error_code,
     }  # fmt: skip
@@ -156,4 +156,10 @@ def email_events(
 ):
     e = _own(db, public_id, p)
     rows = db.scalars(select(EmailEvent).where(EmailEvent.email_id == e.id).order_by(EmailEvent.id))
-    return [{"from": x.from_status, "to": x.to_status, "detail": x.detail} for x in rows]
+    return [
+        {"from": "sending" if x.from_status == "unknown" else x.from_status,
+         "to": "sending" if x.to_status == "unknown" else x.to_status,
+         "detail": None if x.to_status == "unknown" else x.detail}
+        for x in rows
+        if not (x.from_status == "unknown" and x.to_status == "unknown")
+    ]  # fmt: skip

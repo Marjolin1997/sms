@@ -9,10 +9,11 @@ NUK u testua ende kundër Twilio të vërtetë (mjedisi i zhvillimit s'ka qasje 
 algoritmi i nënshkrimit u verifikua me shembullin zyrtar të dokumentacionit; dërgimi provohet me
 transport të simuluar. Testi i parë real: docs/TWILIO.md.
 
-Siguria e parave: Twilio nuk ka çelës idempotence për Messages. Pas një gabimi rrjeti ku kërkesa
-mund të ketë mbërritur (read timeout etj.) NUK riprovojmë, që marrësi të mos marrë dy SMS; mesazhi
-dështon (paratë kthehen) me kod `twilio_outcome_unknown` që stafi ta rakordojë. Vetëm gabimet
-para lidhjes (connect) konsiderohen të përkohshme.
+Siguria e parave: Twilio nuk ka çelës idempotence për Messages ⇒ `idempotent_by_reference = False`.
+Pas një gabimi ku kërkesa mund të ketë mbërritur (read timeout, 500, 2xx pa sid) NUK riprovojmë dhe
+NUK dështojmë: `ProviderError("twilio_outcome_unknown", ambiguous=True)` ⇒ mesazhi bëhet UNKNOWN,
+hold-i mbahet (M9-a), stafi e zgjidh ose një DLR autoritativ e mbyll. Vetëm gabimet para lidhjes
+(connect) dhe 429/502/503/504 (s'u pranua) janë të përkohshme.
 """
 
 import base64
@@ -51,6 +52,7 @@ def _from(sender: str) -> str:
 
 class TwilioProvider:
     name = "twilio"
+    idempotent_by_reference = False  # Twilio s'ka çelës idempotence për Messages (shih docstring)
 
     def __init__(
         self,
@@ -87,7 +89,7 @@ class TwilioProvider:
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as e:
             raise ProviderError(f"network:{type(e).__name__}", temporary=True) from e  # s'u dërgua
         except httpx.HTTPError as e:
-            raise ProviderError("twilio_outcome_unknown", temporary=False) from e
+            raise ProviderError("twilio_outcome_unknown", temporary=False, ambiguous=True) from e
         if r.status_code in (401, 403):
             raise ProviderError(
                 "twilio_auth", temporary=True
@@ -95,7 +97,7 @@ class TwilioProvider:
         if r.status_code == 429 or r.status_code in (502, 503, 504):
             raise ProviderError(f"http_{r.status_code}", temporary=True)  # s'u pranua
         if r.status_code >= 500:  # 500: e papritur, mund të jetë krijuar mesazhi → pa riprovë
-            raise ProviderError("twilio_outcome_unknown", temporary=False)
+            raise ProviderError("twilio_outcome_unknown", temporary=False, ambiguous=True)
         try:
             data = r.json()
         except ValueError:
@@ -109,7 +111,7 @@ class TwilioProvider:
         sid = data.get("sid") if isinstance(data, dict) else None
         if not isinstance(sid, str) or not sid:
             raise ProviderError(
-                "twilio_outcome_unknown", temporary=False
+                "twilio_outcome_unknown", temporary=False, ambiguous=True
             )  # 2xx pa sid: mund të jetë pranuar
         if data.get("status") in FINAL_BAD:
             raise ProviderError(

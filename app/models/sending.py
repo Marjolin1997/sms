@@ -57,6 +57,10 @@ class MessageStatus(enum.StrEnum):
     QUEUED = "queued"
     SENDING = "sending"
     SENT = "sent"  # pranuar nga provider-i, pret DLR
+    # M9-a: rezultati i dërgimit është i PANJOHUR dhe i pasigurt për retry (jo sukses i provider-it,
+    # jo dështim). Terminal për automatizim: asnjë ridërgim, release apo capture automatik; hold-i
+    # mbetet i pandryshuar. Dalja: DLR autoritativ (delivered/failed) ose zgjidhje e stafit.
+    UNKNOWN = "unknown"
     DELIVERED = "delivered"
     FAILED = "failed"
 
@@ -64,8 +68,14 @@ class MessageStatus(enum.StrEnum):
 TERMINAL = {MessageStatus.DELIVERED, MessageStatus.FAILED}
 TRANSITIONS = {
     MessageStatus.QUEUED: {MessageStatus.SENDING, MessageStatus.FAILED},
-    MessageStatus.SENDING: {MessageStatus.SENT, MessageStatus.QUEUED, MessageStatus.FAILED},
+    MessageStatus.SENDING: {
+        MessageStatus.SENT,
+        MessageStatus.QUEUED,
+        MessageStatus.FAILED,
+        MessageStatus.UNKNOWN,
+    },
     MessageStatus.SENT: {MessageStatus.DELIVERED, MessageStatus.FAILED},
+    MessageStatus.UNKNOWN: {MessageStatus.DELIVERED, MessageStatus.FAILED},
     MessageStatus.DELIVERED: set(),
     MessageStatus.FAILED: set(),
 }
@@ -104,6 +114,9 @@ class Message(TenantOwned, Base):
     )
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # M9-a: vendoset (COMMIT i veçantë) PARA thirrjes së provider-it; NULL pas një SENDING të
+    # ngecur = provider-i definitivisht NUK u thirr (i sigurt për riradhitje). Pastrohet te QUEUED.
+    dispatch_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_code: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

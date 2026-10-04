@@ -12,7 +12,8 @@ APP = Path(__file__).resolve().parents[1] / "app"
 # SKIP LOCKED jashtë app/queue është i lejuar VETËM te këto vende, jashtë abstraksionit qëllimisht
 # (M2: campaigns, sweeps, DLR/maintenance nuk janë queue artikujsh). Çdo vend i ri duhet vendim i shprehur.
 SKIP_LOCKED_ALLOWLIST = {
-    "services/messages.py": 1,  # expire_stale (sweep SENT pa DLR)
+    "services/messages.py": 2,  # expire_stale (sweep SENT pa DLR) + recover_stuck (M9-a, SENDING)
+    "services/emails.py": 1,  # recover_stuck (M9-a, SENDING i ngecur)
     "services/campaigns.py": 1,  # run_due (lock pune për një campaign)
     "services/payments.py": 1,  # expire_pending (sweep)
 }

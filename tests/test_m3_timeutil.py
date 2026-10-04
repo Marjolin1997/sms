@@ -142,11 +142,11 @@ def _snapshot():
 
 
 def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
-    """Snapshot i marrë mbi kodin PARA M3-b(i) (42 tabela, 417 kolona; M7-d: +2 tabela, +17 kolona; M7-g: +1 kolonë). Çdo ndryshim i skemës ORM duhet
+    """Snapshot i marrë mbi kodin PARA M3-b(i) (42 tabela, 417 kolona; M7-d: +2 tabela, +17 kolona; M7-g: +1 kolonë; M9-a: +2 kolona `dispatch_started_at`). Çdo ndryshim i skemës ORM duhet
     ta përditësojë këtë skedar me qëllim (dhe me migrim); zhvendosjet strukturore s'duhet ta prekin."""
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
-    assert len(golden) == 44 and sum(len(v["columns"]) for v in golden.values()) == 435
+    assert len(golden) == 44 and sum(len(v["columns"]) for v in golden.values()) == 437
 
 
 @pytest.mark.skipif(

@@ -502,7 +502,8 @@ def stats(db: Session, c: Campaign) -> dict:
             .group_by(Email.status)
         )
         for st, n in db.execute(q):
-            by_msg[st.value] = n
+            key = "sending" if st.value == "unknown" else st.value  # M9-a: UNKNOWN s'del jashtë
+            by_msg[key] = by_msg.get(key, 0) + n
         good = by_msg.get("delivered", 0) + by_msg.get("complained", 0)  # complaint = u dorëzua
         bad = by_msg.get("bounced", 0) + by_msg.get("failed", 0)
         cost = {k: "0" for k in cost}
@@ -514,7 +515,8 @@ def stats(db: Session, c: Campaign) -> dict:
             .group_by(Message.status)
         )
         for st, n, total in db.execute(q):
-            by_msg[st.value] = n
+            mkey = "sending" if st.value == "unknown" else st.value  # M9-a
+            by_msg[mkey] = by_msg.get(mkey, 0) + n
             key = {"delivered": "delivered", "failed": "refunded"}.get(st.value, "in_flight")
             cost[key] += Decimal(total)
         good, bad = by_msg.get("delivered", 0), by_msg.get("failed", 0)

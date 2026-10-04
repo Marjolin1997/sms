@@ -83,9 +83,12 @@ def list_messages(
     rows = rows[:lim]
     return {
         "items": [
-            {"id": m.public_id, "to": m.destination, "sender": m.sender, "status": m.status.value,
-             "category": m.category, "segments": m.segments, "total_price": str(m.total_price),
-             "currency": m.currency, "error_code": m.error_code, "created_at": m.created_at}
+            {
+                "id": m.public_id, "to": m.destination, "sender": m.sender,
+                "status": msg_svc.public_status(m), "category": m.category,
+                "segments": m.segments, "total_price": str(m.total_price),
+                "currency": m.currency, "error_code": m.error_code, "created_at": m.created_at,
+            }
             for m in rows
         ],
         "next_before_id": rows[-1].id if more else None,

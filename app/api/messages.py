@@ -55,7 +55,7 @@ def _own_message(db: Session, public_id: str, p: Principal) -> Message:
 
 def _out(m: Message) -> MessageOut:
     return MessageOut(
-        id=m.public_id, status=m.status.value, to=m.destination, sender=m.sender,
+        id=m.public_id, status=svc.public_status(m), to=m.destination, sender=m.sender,
         segments=m.segments, currency=m.currency, unit_price=m.unit_price,
         total_price=m.total_price, provider_message_id=m.provider_message_id,
         error_code=m.error_code,
@@ -98,4 +98,16 @@ def events(
     rows = db.scalars(
         select(MessageEvent).where(MessageEvent.message_id == m.id).order_by(MessageEvent.id)
     )
-    return [{"from": e.from_status, "to": e.to_status, "detail": e.detail} for e in rows]
+    return [_public_event(e.from_status, e.to_status, e.detail) for e in rows if not _internal(e)]
+
+
+def _internal(e) -> bool:
+    """M9-a: shënimet e brendshme UNKNOWN→UNKNOWN (p.sh. id e regjistruar) s'shfaqen te klienti."""
+    return e.from_status == "unknown" and e.to_status == "unknown"
+
+
+def _public_event(frm: str | None, to: str, detail: str | None) -> dict:
+    """UNKNOWN është detaj i brendshëm: klienti sheh `sending` pa kodin e brendshëm."""
+    hide = to == "unknown"
+    return {"from": "sending" if frm == "unknown" else frm, "to": "sending" if hide else to,
+            "detail": None if hide else detail}  # fmt: skip

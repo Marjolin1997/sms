@@ -56,6 +56,9 @@ class EmailStatus(enum.StrEnum):
     QUEUED = "queued"
     SENDING = "sending"
     SENT = "sent"  # pranuar nga provider-i
+    UNKNOWN = (
+        "unknown"  # M9-a: rezultat i panjohur/jo i sigurt për retry (shih MessageStatus.UNKNOWN)
+    )
     DELIVERED = "delivered"
     BOUNCED = "bounced"
     COMPLAINED = "complained"
@@ -64,7 +67,20 @@ class EmailStatus(enum.StrEnum):
 
 EMAIL_TRANSITIONS = {
     EmailStatus.QUEUED: {EmailStatus.SENDING, EmailStatus.FAILED},
-    EmailStatus.SENDING: {EmailStatus.SENT, EmailStatus.QUEUED, EmailStatus.FAILED},
+    EmailStatus.SENDING: {
+        EmailStatus.SENT,
+        EmailStatus.QUEUED,
+        EmailStatus.FAILED,
+        EmailStatus.UNKNOWN,
+    },
+    # dalje: zgjidhje stafi (SENT|FAILED) ose ngjarje autoritative e provider-it
+    EmailStatus.UNKNOWN: {
+        EmailStatus.SENT,
+        EmailStatus.FAILED,
+        EmailStatus.DELIVERED,
+        EmailStatus.BOUNCED,
+        EmailStatus.COMPLAINED,
+    },
     EmailStatus.SENT: {
         EmailStatus.DELIVERED,
         EmailStatus.BOUNCED,
@@ -101,6 +117,7 @@ class Email(TenantOwned, Base):
     )
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    dispatch_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # M9-a
     error_code: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
