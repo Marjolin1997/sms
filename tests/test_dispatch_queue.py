@@ -191,7 +191,8 @@ def test_sql_statement_count_of_the_hot_path_is_unchanged(db, world):  # noqa: F
     finally:
         event.remove(engine, "before_cursor_execute", count)
     if db.get_bind().dialect.name == "postgresql":
-        assert (submit_n, process_n) == (21, 8)
+        # M9-a: process_one 8 → 10 SQL (UPDATE marker `dispatch_started_at` + SELECT FOR UPDATE i claim-it)
+        assert (submit_n, process_n) == (21, 10)
     else:  # SQLite: numra të tjerë (pa SELECT FOR UPDATE / savepoint si PG), por të ngurtë
         assert submit_n > 0 and process_n > 0
 
@@ -263,6 +264,11 @@ def test_email_sql_statement_counts_of_the_hot_path_are_unchanged(db, world, ver
     cancel_n, ok = measure(lambda s: emails.cancel_if_queued(s, eid))
     assert ok is True
     if db.get_bind().dialect.name == "postgresql":
-        assert (submit_n, process_n, retry_n, cancel_n) == (10, 9, 9, 6)
+        assert (submit_n, process_n, retry_n, cancel_n) == (
+            10,
+            11,
+            11,
+            6,
+        )  # M9-a: +2 SQL në process_one
     else:
         assert min(submit_n, process_n, retry_n, cancel_n) > 0

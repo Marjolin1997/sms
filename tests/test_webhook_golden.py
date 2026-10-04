@@ -452,8 +452,9 @@ def test_only_known_modules_emit_public_events():
 
 # status emetuar = enum minus të përjashtuarit (kushtet te transition(); matricë eksplicite)
 DYNAMIC = {
-    "message": (MessageStatus, {"queued", "sending"}),
-    "email": (EmailStatus, {"queued", "sending"}),
+    # M9-a: `unknown` është i brendshëm (s'emeton event webhook; klienti sheh `sending`)
+    "message": (MessageStatus, {"queued", "sending", "unknown"}),
+    "email": (EmailStatus, {"queued", "sending", "unknown"}),
     "campaign": (CampaignStatus, {"draft", "scheduled", "preparing"}),
 }
 
