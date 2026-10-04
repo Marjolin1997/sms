@@ -555,6 +555,8 @@ def test_suspended_explicit_enterprise_fails_with_enterprise_suspended(w):
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_two_simultaneous_provisions_produce_one_of_everything(w):
+    if w.url.startswith("sqlite"):
+        pytest.skip("needs PostgreSQL row locks")
     new_client(w)
     rid = approved(w, "sms", "email")
     g0 = gen(w)
@@ -574,6 +576,8 @@ def test_two_simultaneous_provisions_produce_one_of_everything(w):
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_product_retired_after_a_stale_read_is_seen_as_product_retired(w):
+    if w.url.startswith("sqlite"):
+        pytest.skip("needs PostgreSQL row locks")
     rid = approved(w, "sms")
     stale = w.factory()
     stale.get(users.CentralUser, w.ids.admin)
@@ -592,6 +596,8 @@ def test_product_retired_after_a_stale_read_is_seen_as_product_retired(w):
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_policy_disable_waits_for_inflight_provisioning_then_applies(w):
+    if w.url.startswith("sqlite"):
+        pytest.skip("needs PostgreSQL row locks")
     rid = approved(w, "sms")
     inside, release, done = threading.Event(), threading.Event(), threading.Event()
     orig = asg.assign_product
