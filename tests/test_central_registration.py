@@ -610,7 +610,9 @@ def test_nothing_is_provisioned_and_no_http_routes_exist_yet(world):
     assert all(rp.assignment_id is None for rp in db.scalars(select(RegistrationProduct)))
     assert db.get(RegistrationRequest, row.id).enterprise_id is None
     paths = create_app(db.get_bind()).openapi()["paths"]
-    assert not [p for p in paths if "registr" in p.lower()]  # pa API HTTP ende
+    assert (
+        "/registration" in paths
+    )  # M8-d: API HTTP ekziston; ky test provon vetëm që miratimi s'ka efekte
 
 
 def test_registration_modules_are_central_only(world):

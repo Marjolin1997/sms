@@ -354,7 +354,10 @@ def test_api_patch_semantics_and_immutability(api):
 def test_api_exposes_no_delete_and_no_assignment_routes(api):
     paths = api.app.openapi()["paths"]
     methods = {m for p in paths.values() for m in p}
-    assert "delete" not in methods and "put" not in methods
+    assert "delete" not in methods
+    assert [p for p, v in paths.items() if "put" in v] == [
+        "/admin/products/{product_id}/registration-policy"
+    ]  # M8-d: i vetmi PUT
     assert api.delete("/admin/products/" + str(uuid.uuid4()), headers=api.admin).status_code == 405
     assert all(p.endswith("/products") or "/products/" in p for p in paths if "enterprises" in p)
 

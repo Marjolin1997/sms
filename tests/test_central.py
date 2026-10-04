@@ -128,6 +128,13 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/enterprises/{enterprise_id}/products",
         "/admin/enterprises/{enterprise_id}/products/{assignment_id}",
         "/internal/sync/changes", "/internal/sync/snapshot",
+        # M8-d: regjistrimi (publik + admin)
+        "/registration", "/registration/products", "/registration/{registration_id}/status",
+        "/admin/registrations", "/admin/registrations/{registration_id}",
+        "/admin/registrations/{registration_id}/approve",
+        "/admin/registrations/{registration_id}/reject",
+        "/admin/registrations/{registration_id}/provision",
+        "/admin/registration-policies", "/admin/products/{product_id}/registration-policy",
     }  # fmt: skip
 
 
@@ -324,5 +331,7 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "auth_secret",
         "auth_ttl_seconds",
         "allow_unverified_auto_registration",
+        "public_registration_enabled",
+        "public_registration_max_per_email_24h",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"
