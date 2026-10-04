@@ -580,7 +580,7 @@ def test_migration_0014_up_down_up_readiness_and_metadata(make_db):
     assert readiness.check(eng) is not None  # prapa kokës
     central_alembic(url, "upgrade", "0014")
     assert "product_registration_policy" in set(inspect(eng).get_table_names())
-    assert readiness.check(eng) is None  # në kokë
+    assert readiness.check(eng) is not None  # 0015 (M8-c) është tani koka
     central_alembic(url, "downgrade", "0013")
     assert "product_registration_policy" not in set(inspect(eng).get_table_names())
     central_alembic(url, "upgrade", "head")
@@ -589,7 +589,39 @@ def test_migration_0014_up_down_up_readiness_and_metadata(make_db):
             c, opts={"compare_type": True, "version_table": "central_alembic_version"}
         )
         assert compare_metadata(ctx, Base.metadata) == []
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0014"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0015"
+    assert readiness.check(eng) is None
+    eng.dispose()
+
+
+def test_migration_0015_adds_auto_grant_flag_default_false_and_is_reversible(make_db):
+    url = make_db("central")
+    central_alembic(url, "upgrade", "0014")
+    eng = create_engine(url)
+    assert "auto_grant_new_enterprises" not in {
+        c["name"] for c in inspect(eng).get_columns("service_clients")
+    }
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "insert into service_clients (id, client_id, status, scopes, auth_generation, created_at, updated_at) "
+                "values ('00000000-0000-0000-0000-000000000001', 'old', 'active', '[]', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+    central_alembic(url, "upgrade", "0015")
+    col = {c["name"]: c for c in inspect(eng).get_columns("service_clients")}[
+        "auto_grant_new_enterprises"
+    ]
+    assert col["nullable"] is False
+    with eng.connect() as c:
+        assert not c.execute(
+            text("select auto_grant_new_enterprises from service_clients")
+        ).scalar()  # ekzistuesit: false
+    central_alembic(url, "downgrade", "0014")
+    assert "auto_grant_new_enterprises" not in {
+        c["name"] for c in inspect(eng).get_columns("service_clients")
+    }
+    central_alembic(url, "upgrade", "head")
     assert readiness.check(eng) is None
     eng.dispose()
 
