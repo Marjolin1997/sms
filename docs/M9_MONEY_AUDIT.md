@@ -1,0 +1,129 @@
+# M9 — Para / kredi / autoritet tregtar / rakordim: AUDIT + DESIGN GATE
+Gjendja: dega `claude/sms-platform-architecture-lugdyz` pas M8. **Asnjë kod nuk u ndryshua.** Çdo pohim më poshtë është gjurmuar te shkruesit realë (jo nga emrat). Asgjë nuk zbatohet pa miratimin e dizajnit.
+
+## 1. Audit — tabela e koncepteve
+| Koncept | Pronari sot | Tabela / modele | Shkruesit | Lexuesit | Kufiri i transaksionit | Probleme të njohura | Vendim M9 |
+|---|---|---|---|---|---|---|---|
+| Wallet | Enterprise (`app/`) | `sms_wallets` (`owner_ref`,`currency`, UNIQUE; `enterprise_id` nullable nga `TenantOwned`) — pa balancë | `wallet.create_wallet`, API `POST /wallets` (audit) | portal, `balances()` | rresht i kyçur `FOR UPDATE` për çdo lëvizje | çelësi i biznesit është `owner_ref`, jo `enterprise_id` | **KEEP**; harto Central account→wallet me `(enterprise_id, currency)` |
+| Ledger | Enterprise | `sms_ledger_entries` (available/held delta + after, `idempotency_key` UNIQUE(wallet,key), CHECK `*_after >= 0`, ORM guard + PG triggers `UPDATE/DELETE/TRUNCATE`) | vetëm `wallet._post` (nën kyç wallet-i) | `balances()` = rreshti i fundit, `verify_wallet` = SUM(delta) | brenda transaksionit të thirrësit | triggers vetëm PG (SQLite dev jo); `verify_wallet` s'kontrollon që Σ(holds aktive) = `held_after` | **KEEP** (bazë e ledger-it operacional); shto lloje `grant`/`grant_reversal` |
+| Balanca | Enterprise | s'ka kolonë; = `available_after`/`held_after` i rreshtit të fundit | — | API, portal, campaigns | — | O(1) por vetëm nga rreshti i fundit | **KEEP** (ledger first) |
+| Hold (rezervim) | Enterprise | `sms_holds` (amount>0, `captured_amount`, status ACTIVE→CAPTURED\|RELEASED, UNIQUE(wallet,reference)) | `wallet.reserve/capture/release` | `messages`, `campaigns` | rezervimi bëhet në savepoint me INSERT të mesazhit | tabela s'është e pandryshueshme; s'ka invariant DB `held_after = Σ aktive` | **KEEP**; shto invariant verifikimi në reconcile |
+| Topup | Enterprise | `sms_topups` (pending/confirmed/failed, `external_ref` UNIQUE) | `wallet.create_topup/confirm_topup`; API `topup:write` + `topup:confirm` (krijuesi ≠ konfirmuesi, përveç superadmin; audit); `payments._apply` | admin | `_post(TOPUP)` + status në të njëjtin tx | **minton para lokalisht** (kjo ndalet nën autoritet Central) | **REPLACE** në modalitet Central (autoriteti: Central payment→grant); mbetet si `local` në tranzicion |
+| Payment online | Enterprise | `sms_payments` (shuma/monedha nga serveri; webhook verifikon; `amount_mismatch`→FAILED+rakordim) | `payments.start_payment/complete`; gateway adapter (`fake` vetëm) | admin/portal | webhook → `_apply` → top-up në të njëjtin tx | pa gateway real; `complete` s'ka `audit()` (ka event+ledger ref); fatura e paguar → paraja bëhet kredit wallet | **MIGRATE** te Central (autoritet pagese); Enterprise s'pranon pagesa në modalitet central |
+| AccountPlan | Enterprise | `sms_account_plans` (`rate_card_id`, `enabled`, limite) — **0 fusha monetare** | admin API | `messages.submit` | — | — | **KEEP** (lidhja me rate card = snapshot lokal) |
+| Çmimet (RateCard) | Enterprise | `sms_rate_cards` (monedhë), `sms_rate_card_versions` (draft→published, `effective_from`, e pandryshueshme), `sms_rates` (`price_per_segment` NUMERIC(20,6), prefix+operator; ORM guard pas publikimit) | API `rates.py` (pricing role) | `rates.quote` | — | autoriteti është Enterprise (M5-d e shtyu); s'ka lidhje me EnterpriseProduct | **MIGRATE** autoritetin te Central; Enterprise mban snapshot të pandryshueshëm sinkronizuar |
+| Kosto SMS (klient) | Enterprise | `sms_messages`: `currency, unit_price, total_price, rate_version_id, rate_id, segments, encoding` ngrihen në submit | `messages.submit` | campaigns, reports, DLR | në savepoint me hold | `Message` s'ka kosto vendori | **KEEP** (snapshot i çmimit tashmë ekziston) |
+| Kosto email | Enterprise | **s'ka çmim/hold për email**; `sms_plans` (`monthly_fee`, `included_emails`, `email_overage_price`) | `billing.create_plan` | `generate_invoice` | — | emaili s'kalon nga wallet; faturohet pas faktit sipas numrit të email-eve `SENT/DELIVERED/BOUNCED/COMPLAINED` në periudhë | **DEFER** (mbetet abonim+overage; jo wallet në M9) |
+| Monedha | Enterprise | `String(3)` në wallet/ratecard/plan/invoice/payment/message; pa CHECK ISO | — | — | — | s'ka FX; wallet UNIQUE(owner,currency) lejon shumë wallet; `submit` zgjedh wallet sipas monedhës së rate card (NotFound nëse s'ka) | **KEEP** (pa FX); shto CHECK format në Central |
+| Precision | Enterprise | `MONEY = Numeric(20,6)`; `wallet.money()` refuzon float/ >6 decimale; faturat `cents()` ROUND_HALF_UP 0.01; `Numeric(6,4)` TVSH | — | — | — | s'ka të dhëna reale çmimesh në repo (vetëm teste) | **KEEP NUMERIC(20,6)** në të dy planet (zgjedhja ekzistuese; çmim/segment 6 dec. × int mbetet saktësisht 6 dec.) |
+| Debit SMS | Enterprise | hold në submit → capture në DLR `delivered` → release në fail/cancel/`dlr_timeout` | `messages.submit/apply_dlr/expire_stale/_fail` | — | submit: savepoint; DLR: `FOR UPDATE` mesazh → `_post` (kyç wallet) | **faturim në DORËZIM** (DLR); SENT pa DLR 72h ⇒ FAILED+release (klienti s'paguan) | **KEEP** semantikën; shih §4 për SENDING |
+| Debit email | — | s'ka | — | — | — | — | **DEFER** |
+| Fushata | Enterprise | `campaigns` → `msg.submit` për çdo marrës (`camp:{id}:{contact}`), `max_cost` kundrejt Σ `total_price` të jo-FAILED | `campaigns._submit_sms` | stats | savepoint për marrës | `InsufficientFunds` pauzon fushatën; s'ka hold në nivel fushate (nuk duhet) | **KEEP** |
+| Retry/failed SMS | Enterprise | `queue.retry`: i përkohshëm → QUEUED+backoff `30·2^(n-1)`, max 5; i përhershëm/EXHAUSTED → FAILED + `wallets.release` | `PostgresDispatchQueue.retry`, `_SmsHooks` | — | COMMIT#2 | një hold për të gjitha riprovat (reference=`public_id`); retry nuk prek paratë | **KEEP** |
+| DLR / rregullime | Enterprise | `apply_dlr`: delivered→capture; failed→release; idempotent; kontradiktor→`conflict` (në `sms_dlr_receipts`); mesazh i panjohur→503 (provider riprovon) | `api/webhooks.py`, `api/twilio.py` | admin queue | tx me `FOR UPDATE` mesazh | DLR i vonuar `delivered` pas `dlr_timeout` refuzohet ⇒ mesazh i dorëzuar, klienti s'paguan (rrjedhje të ardhurash, jo e klientit); kosto provider-i s'lexohet | **KEEP**; përmirëso në M9-a |
+| Refund/reversal | Enterprise | `wallet.refund(wallet, amount, key)` (CREDIT `available`) — **0 thirrës** | — | — | — | **shumë arbitrare**, jo e lidhur me hold ⇒ mund të mintojë para nëse lidhet gabim | **REPLACE**: refund vetëm i lidhur me capture ≤ shumës; reversal Central si hyrje ledger |
+| Rregullim manual | Enterprise | `wallet.adjustment` (delta ±, çelës, shënim ≥3, `wallet:adjust`, audit në API); s'bie nën 0 (`_post`+CHECK) | `api/wallets.py /adjustments` | — | tx API | delta pozitive mint lokal | **KEEP** (negativ); **pozitiv ⇒ vetëm via Central grant** në modalitet central |
+| Admin API balancash | Enterprise | `/wallets`, `/ledger`, `/topups`, `/adjustments`, `/alert`, `/verify` | RBAC `finance`/`superadmin` | konsola | `_run` commit/rollback | `topup:confirm`≠krijues ✔ | **KEEP**; mbyll mint lokal në modalitet central |
+| Faturim | Enterprise | `sms_plans/subscriptions/invoices/invoice_lines/billing_profiles`; faturat/linjat të pandryshueshme (ORM guard); `pay_from_wallet` → `charge` (INVOICE debit) | `billing.generate_invoice/run_billing` | portal | një abonim për tx | TVSH vendoset nga staf; një monedhë/plan | **KEEP** (jashtë M9 core) |
+| Kod tregtar në Central | — | **asnjë** (`apps/central` s'ka pagesë/wallet/çmim/ledger) | — | — | — | — | **NEW** |
+| Triggers parash | PG | `sms_forbid_mutation()` mbi `sms_ledger_entries`/audit | migrim 0001/0006 | — | — | vetëm PG; `sms_holds`, `sms_topups`, `sms_payments` pa trigger | **KEEP**; trigger të njëjtë për ledger-in Central |
+| Audit | Enterprise | `sms_audit_log` (API wallet/topup/adjust/alert aktor+rol); ledger = prova për lëvizjet nga sistemi | `services.audit.audit` | admin | i njëjti tx | `payments.complete` pa audit rresht (event+ledger ref) | **KEEP**; Central ledger/pagesa me aktor njeri\|sistem (`record_system`) |
+
+## 2. Burimet e së vërtetës (sot)
+Një: **Enterprise** (`sms_ledger_entries` + `sms_holds`). Central s'ka asgjë tregtare. Çmimi: Enterprise (`sms_rate_cards*`). Pagesa: Enterprise (`sms_payments/topups`).
+
+## 3. Sekuenca e faturimit SMS (gjurmuar në kod)
+1. `messages.submit` (idempotent `(owner_ref,key)` + `request_hash`): kontrolle (switch, plan, M7 gate, rate limit, numër, route, sender, consent, tekst/segmente) → `rates.quote` (version efektiv, prefiks më i gjatë, `total = price × segments`, refuzon ≤0) → wallet i monedhës.
+2. Savepoint: `reserve` (`hold:{public_id}`: `available -= total`, `held += total`; `InsufficientFunds` nëse s'ka) + INSERT `Message` QUEUED (me `unit_price/total_price/rate_version_id/rate_id/hold_id`) + `MessageEvent`. Gara me të njëjtin key ⇒ IntegrityError ⇒ rollback i savepoint (edhe hold) ⇒ kthen fituesin.
+3. Worker `process_one`: `queue.reserve` (SKIP LOCKED, `_move(SENDING)`, `attempts+=1`) → **COMMIT#1** → `provider.send` (pa tx) → `acknowledge` (SENT + `provider_message_id`) | `retry` | `_fail` (+release) → **COMMIT#2**.
+4. DLR: `delivered` ⇒ `_move(DELIVERED)` + `capture(hold)` (debit: `held -= total`, pa lëvizje `available`); `failed` ⇒ `_fail` + release. Idempotent; kontradiktor ⇒ Conflict+receipt.
+5. `sweep` (çdo 60s): `expire_stale` SENT>72h ⇒ FAILED `dlr_timeout` + release. **Asgjë s'trajton SENDING.**
+Pra: **faturim në dorëzim të konfirmuar**; para e rezervuar nga pranimi deri te DLR/afati.
+
+## 4. Sekuenca email dhe dritaret e crash-it (S1/E1)
+**Email:** pa para në rrugë (s'ka hold/çmim); `submit` publikon QUEUED; `process_one`: claim → leximet DKIM/domen → COMMIT#1 → MIME/DKIM/SMTP pa tx → SENT/retry/FAILED → COMMIT#2. Faturohet pas faktit nga numri i email-eve billable në periudhë (overage). `Message-ID` është deterministik (`<public_id@domain>`).
+**SMS/email — dritaret** (kodi: `messages.process_one`, `emails.process_one`, `PostgresDispatchQueue`):
+| # | Dritarja | Gjendja pas crash | Para | Rezultat |
+|---|---|---|---|---|
+| W1 | para COMMIT#1 | QUEUED (rollback) | hold ACTIVE | i sigurt; rinis |
+| W2 | pas COMMIT#1, para thirrjes provider | SENDING pa dërgim | hold ACTIVE **përgjithmonë** | mesazh i humbur; para e bllokuar; s'ka lease/sweeper |
+| W3 | gjatë thirrjes provider (kërkesa në fluturim) | SENDING; provider mund ta ketë pranuar | hold ACTIVE | rezultat i panjohur |
+| W4 | provider pranoi, crash para COMMIT#2 (ose COMMIT#2 dështon) | SENDING **pa `provider_message_id`** | hold ACTIVE | DLR s'përputhet (503→riprovë nga provider-i, por rreshti s'ka id kurrë) ⇒ hold bllokuar; mesazhi mund të jetë dorëzuar |
+| W5 | timeout/gabim rrjeti **me kërkesë të mundshme të mbërritur** | `HttpProvider`: rrjeti→**i përkohshëm→QUEUED→ridërgim** (mbështetet vetëm te dedup i provider-it me `reference`, e paverifikuar); `TwilioProvider`: `twilio_outcome_unknown`→**FAILED+release** (s'ridërgon; klienti s'paguan; mesazhi mund të ketë shkuar) | — | rrezik dublim dërgimi (HTTP) ose dërgim falas (Twilio) |
+| W6 | `except Exception` jo-ProviderError (të dy rrugët) | trajtohet si i përkohshëm ⇒ **ri-radhitet** | hold i njëjtë | rrezik dublim te provider-ë pa idempotence (Twilio s'ka) |
+| W7 | DLR para COMMIT#2 | 503 (provider riprovon) ose pas 72h SENT→FAILED | — | nëse provider-i s'riprovon: dorëzuar, klienti s'paguan |
+Para-pasoja: asnjëherë **debit i dyfishtë** (hold unik, `capture:{hold_id}` unik, kyç wallet-i), por **para të bllokuara** (W2–W4) dhe **dërgime të dyfishta/falas** (W5–W7) pa rakordim. Emaili: W2–W4 ⇒ SENDING i ngecur pa raportim (`stuck_sending` ekziston vetëm për SMS) dhe pa pasojë parash (jo billable).
+Provat ekzistuese: `tests/test_queue_semantics.py` (SIGKILL/`pg_terminate_backend` ⇒ SENDING përgjithmonë, i dokumentuar si i pranuar deri te M9).
+
+## 5. Rekomandimi S1/E1 (HARD GATE para parash reale)
+Vetëm **raportim** s'mjafton. Parimi: **rezultat i panjohur ≠ retry ≠ fail**. Kurrë ridërgim automatik pa provë idempotence të provider-it.
+1. **Gjendje e re `UNKNOWN`** (SMS dhe email): SENDING pa progres > `SENDING_LEASE` (default 10 min, >> timeout provider-i 10s) kalon (sweeper, SKIP LOCKED, event+MessageEvent) në `UNKNOWN`. Hold mbetet ACTIVE (para të mbajtura, jo të kapura, jo të liruara). Alarm + numërues + dukshmëri në `admin/queue`.
+2. **Aftësia e provider-it** `idempotent_by_reference: bool` (Fake=true; Http=konfigurim, default false; Twilio=false). Rrugët që sot ri-radhisin ose dështojnë me rezultat të panjohur (W5/W6) bëhen: provider idempotent ⇒ retry (si sot); përndryshe ⇒ **`UNKNOWN`** (jo ridërgim, jo release automatik). `twilio_outcome_unknown` ⇒ `UNKNOWN`.
+3. **Zgjidhja e UNKNOWN** (vetëm veprim eksplicit, i audituar, idempotent, RBAC i ri `queue:resolve`): (a) *provider-i e konfirmon* me kërkim sipas `reference` (kur provider-i e ofron; ndryshe manual) ⇒ `SENT` me `provider_message_id` ⇒ rrjedha normale DLR; (b) *provuar jo i dërguar* ⇒ `QUEUED` (ridërgim i kontrolluar, `attempts` i ruajtur) ose `FAILED`+release; (c) *dërguar, pa id* ⇒ `SENT` pa id + afati DLR ⇒ release/capture manual me shënim. Çdo veprim përdor çelës idempotence `resolve:{id}:{action}`; paratë lëvizin vetëm me `capture/release` ekzistues.
+4. **Pa lease automatik ridërgimi** (S3/E4 mbeten të mbyllura) derisa një provider real të provojë idempotencë me `reference`.
+5. Fallback DLR sipas `reference` kur payload-i e mban (HTTP gjenerik); Twilio s'e ofron ⇒ vetëm veprim manual/ID.
+6. Testet: crash injection W2/W3/W4/W5/W6 për SMS+email (përfshirë PG `pg_terminate_backend`), invariant parash (hold ACTIVE pa capture/release automatik; zgjidhje idempotente; asnjë ridërgim për provider jo-idempotent).
+
+## 6. Përgjigjet A–T
+A. **Njësia e faturueshme:** SMS = *segmenti* (`segments × price_per_segment`), `segments` ngrihet në submit nga teksti përfundimtar (GSM-7 160/153 · UCS-2 70/67; GSM ext=2 karaktere) dhe ruhet i pandryshueshëm; `Message.text` s'ka rrugë ndryshimi pas rezervimit. Segmentimi i provider-it mund të ndryshojë — s'prek faturimin (kuantiteti është i yni, i regjistruar; ndryshimi provider-i = vetëm raport kosto, additiv).
+B. **Rezervimi:** në submit, shuma e plotë e kuotës, atomikisht me INSERT-in e mesazhit (sot). Mbahet.
+C. **Capture:** sot në `delivered` (DLR). **Vendim biznesi #1:** mbahet (klienti s'paguan pa konfirmim) ose kalon në SENT (pranim)? Rekomandim: mbahet; DLR i pabesueshëm ⇒ i dokumentuar si rrjedhje të ardhurash.
+D. **Release:** DLR failed, FAILED terminal, cancel, `dlr_timeout`, UNKNOWN i zgjidhur "jo i dërguar". Kurrë i dyfishtë (`release:{id}` unik).
+E. **Timeout provider:** provider idempotent ⇒ retry; përndryshe `UNKNOWN` (hold mbahet), jo ridërgim/jo release automatik (§5).
+F. **Sukses + crash lokal:** `UNKNOWN` ⇒ zgjidhje sipas §5.3; hold i mbajtur.
+G. **Retry:** një hold për gjithë riprovat; retry s'prek paratë; capture/release një herë.
+H. **Submit i dyfishtë:** UNIQUE `(owner_ref,key)` + hash; hold key `hold:{public_id}` brenda savepoint ⇒ s'ka hold të dytë.
+I. **Callback i dyfishtë:** `apply_dlr` idempotent; kontradiktor ⇒ Conflict + receipt; capture/release me çelësa unikë.
+J. **SMS:** faturim në dorëzim (sot) — vendimi #1.
+K. **Email:** jo në wallet; abonim/overage pas faktit; i shtyrë.
+L. **Fushata:** një hold për mesazh (`msg.submit`), `max_cost` si buxhet, `InsufficientFunds` pauzon; pa hold fushate.
+M. **Rregullime manuale:** hyrje ledger `adjustment` (delta ±, çelës, shënim i detyrueshëm, audit, RBAC); në modalitet central: **pozitive vetëm nga Central** (si grant/ledger adjustment_credit), negative lokale lejohet (zvogëlon, raportohet).
+N. **Refund/reversal:** Central: hyrje `reversal`/`refund` që referon pagesën/grantin origjinal (kurrë fshirje). Enterprise: reversal grant-i aplikohet si debit ≤ available (mungesa ⇒ zbatim i pjesshëm + gjetje rakordimi, kurrë negativ). Refund mesazhi (kthim pas capture) lidhet me hold-in dhe ≤ shumës së kapur.
+O. **Monedha:** ISO-4217 3 shkronja; një monedhë për wallet; pa FX (kurrë konvertim implicit).
+P. **Shumë monedha për Enterprise:** teknikisht po (wallet për monedhë, sot); praktikisht një plan ⇒ një rate card ⇒ një monedhë. Rekomandim: një monedhë operacionale për EnterpriseProduct në V1.
+Q. **Kosto provider ≠ çmim klienti:** sot s'ka kosto provider fare; shtohet më vonë si fusha opsionale/additive në usage report (jo në rrugën kritike).
+R. **Rakordimi:** raporte kumulative nga Enterprise (§11) kundrejt ledger-it Central.
+S. **Central i padisponueshëm:** grant-et e sinkronizuara shpenzohen; s'krijohen para; poller-i dështon pa efekt në ledger; alarm për "sync i vjetër".
+T. **Parandalimi i debit të dyfishtë:** UNIQUE `(wallet,idempotency_key)`; UNIQUE `(wallet,reference)` te holds; state machine me kyç rreshti; `capture:{hold_id}`; CHECK `*_after >= 0`; rollback i savepoint; (M9) UNIQUE grant_id.
+
+## 7. Modeli kanonik Central (propozim)
+Tabela (migrim Central 0017+, NUMERIC(20,6), pa float):
+- `credit_accounts(id, enterprise_id FK, currency CHAR(3), status active|frozen, created_at)` UNIQUE(enterprise_id,currency).
+- `payments(id, enterprise_id, account_id, amount>0, currency, method cash|bank|gateway, status pending|approved|rejected|reversed, external_ref UNIQUE(provider,ref), created_by, approved_by (≠created_by, përveç rolit të lartë), approved_at, rejected_reason)`.
+- `commercial_ledger(id UUID, seq BIGINT i vetëm (si `sync_sequence`), account_id, entry_type grant|grant_reversal|adjustment_credit|adjustment_debit, amount (>0), currency, source_type, source_id, idempotency_key UNIQUE(account_id,key), actor_user_id | actor_label, reason NOT NULL për rregullime, created_at)` — **e pandryshueshme** (ORM guard + trigger PG); UNIQUE(source_type,source_id) ⇒ **një pagesë ⇒ maksimumi një grant**. Total i autorizuar = Σ(grant + adjustment_credit − grant_reversal − adjustment_debit).
+- `reconciliation_reports` (raporte të pranuara nga Enterprise, të pandryshueshme) dhe `reconciliation_findings` (të llogaritura).
+Pagesa e miratuar ⇒ në të njëjtin tx një hyrje `grant` (id = `grant_id` i qëndrueshëm). Refuzim pas grant ⇒ `grant_reversal` eksplicit (kurrë fshirje). Pa API publik për para (regjistrimi s'prek paranë).
+
+## 8. Modeli operacional Enterprise (ndryshime minimale mbi atë që ekziston)
+Mbahen wallet/ledger/hold. Shtohen: `EntryType.GRANT`, `GRANT_REVERSAL` (ref `central_grant`/`grant_id`, çelës `grant:{grant_id}` ⇒ replay pa para të dyfishta); kursor `sms_money_cursor` (singleton, epoch/seq si `sms_cp_cursor`); `SMS_MONEY_AUTHORITY=local|central` (default `local`): në `central` mbyllen rrugët që minton lokalisht (`confirm_topup`, `payments._apply`→top-up, `adjustment` pozitive, `refund` pa hold); wallet krijohet/zgjidhet me `(enterprise_id,currency)`; raportues përdorimi (§11). Floor: balanca nuk bie nën 0 (sot e detyruar; mbetet; **pa overdraft/postpaid** — model eksplicit më vonë).
+
+## 9. Modeli i grant-it
+`Central pagesë e miratuar → commercial_ledger (grant, grant_id, seq) → feed i pandryshueshëm → Enterprise e aplikon idempotent (GRANT, available += amount) → shpenzim lokal`. Enterprise **nuk merr kurrë "balancë përfundimtare"**; vetëm grant/reversal. Replay: i njëjti `grant_id` ⇒ no-op (UNIQUE). Reversal > available ⇒ aplikim i pjesshëm + finding. **Pa mint gjatë outage:** pa poll s'ka grant; para ekzistuese shpenzohen; pagesë pending s'është e përdorshme; do të provohet me teste (kursor i bllokuar, Central i fikur, poller-i i dështuar).
+
+## 10. Autoriteti i çmimeve + snapshot
+Central: `pricebooks` (version i pandryshueshëm, `effective_from`, rates sipas prefiksi/operatori, monedhë) të lidhur me EnterpriseProduct (jo `Plan`/`AccountPlan`). Enterprise merr **kopje të pandryshueshme versioni** (kontratë `cp.pricing` e ndarë) në `sms_rate_cards/versions/rates` ekzistuese (lexim lokal, pa thirrje sinkrone në çdo dërgim); `Message` ruan tashmë `unit_price, total_price, currency, rate_version_id, rate_id` ⇒ historia s'rillogaritet me çmim të sotëm. Pa version efektiv ⇒ `NoRate` (fail-safe). Migrim: bootstrap i rate card-eve ekzistuese në Central (si M7-f), pa ndryshuar çmimet.
+
+## 11. Rakordimi (report-first, pa korrigjim automatik)
+Enterprise → Central (push, kredenciale shërbimi, scope `money:report`, idempotent sipas `(account, watermark)`): për çdo wallet kumulative `{grants_applied(Σ,count,max_seq), reserved_open, captured, released, refunded, adjustments±, available, held, last_ledger_id, report_at}`. Central krahason me `commercial_ledger` dhe raporton: **grant që mungon** (seq>kursor+SLO), **grant i dyfishtë/ i tepërt** (aplikuar > autorizuar), **kredi e pashpjeguar** (TOPUP/adjustment pozitiv/refund jo-grant në modalitet central), **invariant negativ** (`available/held<0`, Σholds≠held), **mospërputhje totalesh**, **raport i vjetër**. Ekuacioni kontrollues: `grants_applied + adj_credit + refunds − captured − adj_debit = available + held`. CLI/admin vetëm-lexim; korrigjimi vetëm me hyrje eksplicite (grant_reversal/adjustment).
+
+## 12. Transporti / kontrata
+**Jo cp.v1 state.** cp.v1 është gjendje "revision më e fundit fiton"; paratë janë ngjarje additive ⇒ kontratë e re **`cp.money.v1`** (paketë `packages/contracts/`, stdlib-only, golden) me: pull `GET /internal/money/v1/ledger?after_seq&limit` (ngjarje të pandryshueshme, `next_seq`, epoch, filtrim sipas `service_client_enterprises` + `auth_generation` si M7) dhe push `POST /internal/money/v1/usage-reports`. Autentikim = stack-u ekzistues (Ed25519, jti, scopes të reja `money:read`/`money:report`), idempotencë, audit, validim strikt. Pa `balance=` te `EnterpriseProductState`. Pricing: kontratë e ndarë `cp.pricing.v1` (version snapshots).
+
+## 13. Invariantet (DB / shërbim)
+1. një operacion i faturueshëm s'debiton dy herë — UNIQUE `(wallet,idempotency_key)`, UNIQUE holds `(wallet,reference)` ✔ ekziston; 2. i njëjti grant s'aplikohet dy herë — UNIQUE `grant:{id}` (M9); 3. `captured ≤ held` — `capture` refuzon `final > hold.amount` ✔; 4. release ≤ rezervim i hapur — `_post` + status hold ✔; 5. balanca nën floor — CHECK `*_after >= 0` + `InsufficientFunds` ✔; 6. monedha s'ndryshon — hold/ledger në wallet të një monedhe; Central CHECK `currency = account.currency` (M9); 7. ledger i pandryshueshëm — ORM + trigger PG ✔ (+Central); 8. `amount > 0` — CHECK holds/topups/payments ✔ (+Central ledger); 9. rollback ruan paratë — savepoint/tx ✔ (testuar); 10. retry provider s'dyfishon — një hold, capture një herë ✔; (M9) **verifikim `held_after = Σ holds ACTIVE`** në reconcile dhe `verify_wallet`.
+
+## 14. Faza (rendi i rishikuar nga auditi)
+Ledger-i operacional Enterprise **ekziston dhe është i fortë**, kështu M9-c e kërkuar zvogëlohet; rendi kritik është **S1/E1 para çdo paraje reale**.
+- **M9-a — S1/E1** (gate): `UNKNOWN`, sweeper, `idempotent_by_reference`, veprime `queue:resolve`, alarm, teste crash. *(Enterprise)*
+- **M9-b — Central commercial ledger + pagesa + grant-e** (pa Enterprise). *(Central)*
+- **M9-c — `cp.money.v1` + grant applier + `SMS_MONEY_AUTHORITY` + mbyllja e minting lokal** (provat outage/no-mint/replay). *(të dy)*
+- **M9-d — Usage reports + rakordim (Central, report-first).**
+- **M9-e — Pricing authority + snapshots (`cp.pricing.v1`) + bootstrap.**
+- **M9-f — Admin APIs/readiness/hardening** (readiness parash si M7-f; gate prodhimi).
+(Ndryshim nga propozimi: sync+Enterprise ledger bashkohen në M9-c; S1/E1 bëhet M9-a.)
+
+## 15. Slice-i i parë: M9-a (S1/E1)
+Skedarë: `app/models/sending.py` (`UNKNOWN`, tranzicionet), `app/models/email.py` (po ashtu), `app/providers/{base,fake,http,twilio}.py` (`idempotent_by_reference`), `app/services/messages.py`+`emails.py` (`recover_stuck`→UNKNOWN, rrugët W5/W6, `resolve`), `app/worker.py` (sweep), `app/api/admin.py` (lista + `POST /admin/queue/{kind}/{id}/resolve`, `queue:resolve`, audit), konfig `SMS_SENDING_LEASE_SECONDS` (default 600), migrim vetëm nëse nevojitet (statuset janë string pa CHECK), docs, teste: crash W2–W6 SMS+email, PG `pg_terminate_backend`, invariant parash, idempotencë e veprimeve, RBAC. **Pa ndryshim semantike capture/release ekzistuese.**
+
+## 16. Vendime që kërkoj nga ti
+1. Capture në **dorëzim (DLR)** (rekomandim, sot) vs në **pranim provider (SENT)**. 2. `UNKNOWN`: para të mbajtura deri në veprim njeriu (rekomandim) vs auto-release pas N ditësh. 3. Një monedhë për Enterprise/produkt në V1. 4. Pozitive lokale e ndaluar nën autoritet Central (rekomandim). 5. Email jashtë wallet në M9. 6. Dëshmi idempotence reale e provider-it (Twilio s'ka) — pa të, pa ridërgim automatik.
