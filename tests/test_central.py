@@ -323,5 +323,6 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "db_statement_timeout_ms",
         "auth_secret",
         "auth_ttl_seconds",
+        "allow_unverified_auto_registration",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"
