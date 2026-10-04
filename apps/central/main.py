@@ -29,6 +29,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "CENTRAL_ALLOW_UNVERIFIED_AUTO_REGISTRATION must be false in production "
             "(no contact verification exists yet)"
         )
+    if settings.env == "production" and settings.mailer == "fake":
+        raise RuntimeError("CENTRAL_MAILER must not be 'fake' in production")
+    if settings.env == "production" and settings.bot_challenge == "fake":
+        raise RuntimeError("CENTRAL_BOT_CHALLENGE must not be 'fake' in production")
     app = FastAPI(title="SMS Central", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.engine = engine or default_engine
     app.state.sessionmaker = sessionmaker(bind=app.state.engine, expire_on_commit=False)

@@ -60,6 +60,19 @@ def automatic_allowed() -> bool:
     return bool(settings.allow_unverified_auto_registration)
 
 
+def verification_available() -> bool:
+    """Verifikimi i kontaktit është i konfiguruar (çelës + mailer). Import i vonuar: pa cikël."""
+    from apps.central.services import contact_verification
+
+    return contact_verification.configured()
+
+
+def automatic_storable() -> bool:
+    """`approval_mode=automatic` ka kuptim: ose gate-i i vjetër (vetëm dev/test, auto-miratim pa
+    verifikim në submit) ose verifikimi i kontaktit është i konfiguruar (auto-miratim pas verifikimit)."""
+    return automatic_allowed() or verification_available()
+
+
 def get_policy(db: Session, product_id: uuid.UUID | str) -> ProductRegistrationPolicy | None:
     pid = product_id if isinstance(product_id, uuid.UUID) else _uuid(product_id)
     return db.get(ProductRegistrationPolicy, pid, populate_existing=True)
@@ -115,7 +128,7 @@ def public_products(db: Session) -> list[tuple[Product, str]]:
                ProductRegistrationPolicy.self_registration_enabled.is_(True))
         .order_by(Product.code)
     )  # fmt: skip
-    allowed = automatic_allowed()
+    allowed = automatic_storable()
     return [
         (p, AUTOMATIC if allowed and pol.approval_mode == AUTOMATIC else MANUAL) for p, pol in rows
     ]
@@ -165,7 +178,7 @@ def set_policy(
     new_mode = cur_mode if approval_mode is _UNSET else approval_mode
     if new_enabled and not cur_enabled and product.status != ProductStatus.ACTIVE.value:
         raise Conflict("a retired product cannot be opened for self-registration")
-    if new_mode == AUTOMATIC and cur_mode != AUTOMATIC and not automatic_allowed():
+    if new_mode == AUTOMATIC and cur_mode != AUTOMATIC and not automatic_storable():
         raise Conflict(
             "automatic approval is disabled: public registration has no contact verification"
         )

@@ -135,6 +135,9 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/registrations/{registration_id}/reject",
         "/admin/registrations/{registration_id}/provision",
         "/admin/registration-policies", "/admin/products/{product_id}/registration-policy",
+        # M8-e
+        "/registration/{registration_id}/verify",
+        "/registration/{registration_id}/verification/resend", "/admin/registration-ops",
     }  # fmt: skip
 
 
@@ -164,8 +167,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0016_next.py").write_text(
-        'revision = "0016"\ndown_revision = "0015"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0017_next.py").write_text(
+        'revision = "0017"\ndown_revision = "0016"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -333,5 +336,19 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "allow_unverified_auto_registration",
         "public_registration_enabled",
         "public_registration_max_per_email_24h",
+        "registration_verify_key",
+        "registration_verify_ttl_minutes",
+        "registration_verify_url_base",
+        "mailer",
+        "smtp_host",
+        "smtp_port",
+        "smtp_user",
+        "smtp_password",
+        "smtp_starttls",
+        "smtp_from",
+        "public_registration_proxy_ack",
+        "bot_challenge",
+        "public_registration_require_challenge",
+        "trusted_proxy_hops",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"

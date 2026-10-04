@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -63,10 +64,20 @@ class RegistrationRequest(Base):
     enterprise_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("enterprises.id", ondelete="RESTRICT")
     )
+    # M8-e: verifikimi i kontaktit. Tokeni s'ruhet kurrë (derivohet me HMAC nga çelësi i serverit
+    # + id + nonce); këtu është vetëm nonce-i aktual (jo-sekret pa çelësin) dhe afati.
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verification_nonce: Mapped[str | None] = mapped_column(String(32))
+    verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
+        CheckConstraint(
+            "verified_at IS NULL OR "
+            "(verification_nonce IS NULL AND verification_expires_at IS NULL)",
+            name="verified_clears_nonce",
+        ),
         # Idempotenca e skopuar: (kontakt, çelës) unik; NULL-et nuk përplasen
         UniqueConstraint("contact_email", "submission_key"),
         Index("ix_registration_requests_status_created", "status", "created_at"),
@@ -144,3 +155,40 @@ def _immutable_selection(_mapper, _conn, target: RegistrationProduct) -> None:
     for attr in ("request_id", "product_id"):
         if state.attrs[attr].history.has_changes():
             raise ImmutableError(f"registration_product.{attr} is immutable")
+
+
+class NotificationOutbox(Base):
+    """Outbox i ngushtë për email-e të Central (M8-e: vetëm `registration_verification`). Pa token:
+    `payload` mban vetëm nonce-in (tokeni derivohet në momentin e dërgimit). Dërgimi bëhet JASHTË
+    transaksionit; gjendjet pending → sending → sent|failed|superseded. Retry i kufizuar."""
+
+    __tablename__ = "notification_outbox"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(String(48))
+    registration_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("registration_requests.id", ondelete="RESTRICT")
+    )
+    recipient: Mapped[str] = mapped_column(String(254))
+    payload: Mapped[dict] = mapped_column(JSON)
+    state: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error_code: Mapped[str | None] = mapped_column(String(48))
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "state in ('pending', 'sending', 'sent', 'failed', 'superseded')", name="state"
+        ),
+        CheckConstraint("attempts >= 0", name="attempts_non_negative"),
+        Index("ix_notification_outbox_state_available", "state", "available_at"),
+        Index("ix_notification_outbox_registration", "registration_id", "created_at"),
+    )
+
+
+@event.listens_for(NotificationOutbox, "before_delete")
+def _no_outbox_delete(*_) -> None:
+    raise ImmutableError("notification rows are never deleted; use state transitions")

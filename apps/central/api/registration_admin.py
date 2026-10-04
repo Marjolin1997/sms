@@ -19,7 +19,8 @@ from apps.central.api.deps import get_db, require_role
 from apps.central.models.registration import RegistrationRequest
 from apps.central.models.registration_policy import ProductRegistrationPolicy
 from apps.central.models.user import CentralUser, Role
-from apps.central.services import provisioning
+from apps.central.services import provisioning, registration_ops
+from apps.central.services import registration_metrics as metrics
 from apps.central.services import registration_policy as policy
 from apps.central.services import registrations as reg
 
@@ -57,6 +58,8 @@ class RegistrationOut(BaseModel):
     contact_name: str | None
     enterprise_name: str
     status: str
+    contact_verified: bool
+    verified_at: datetime | None
     decision: DecisionOut
     provisioning: ProvisioningOut
     enterprise_id: uuid.UUID | None
@@ -127,6 +130,7 @@ def _out(db: Session, rows: list[RegistrationRequest]) -> list[RegistrationOut]:
         RegistrationOut(
             id=r.id, contact_email=r.contact_email, contact_name=r.contact_name,
             enterprise_name=r.enterprise_name, status=r.status,
+            contact_verified=r.verified_at is not None, verified_at=r.verified_at,
             decision=DecisionOut(mode=r.decision_mode, decided_at=r.decided_at,
                                  decided_by_user_id=r.decided_by_id,
                                  decided_by_label=r.decided_by_label, reason=r.decision_reason),
@@ -186,8 +190,13 @@ def get_registration(
 def approve(
     registration_id: uuid.UUID, db: Session = Depends(get_db), actor: CentralUser = Depends(WRITE)
 ):
+    before = reg.get(db, registration_id).status
     row = reg.approve(db, registration_id, actor)
     db.commit()
+    if before != "approved":
+        metrics.inc("registration_approved_total")
+        metrics.event("approve", registration_id=row.id, result="ok", decision_mode="manual",
+                      status="verified" if row.verified_at else "unverified")  # fmt: skip
     return _out(db, [row])[0]
 
 
@@ -215,6 +224,11 @@ def provision(
         request.app.state.sessionmaker, registration_id,
         enterprise_id=body.enterprise_id if body else None, actor=actor,
     )  # fmt: skip
+    if not res.already_provisioned:
+        metrics.inc("registration_provisioned_total" if res.status == "provisioned"
+                    else "registration_provision_failed_total")  # fmt: skip
+        metrics.event("provision", registration_id=res.request_id, result=res.status,
+                      error_code=res.error_code, attempt=res.attempts)  # fmt: skip
     return ProvisionOut(
         request_id=res.request_id, result=res.status, already_provisioned=res.already_provisioned,
         enterprise_id=res.enterprise_id, new_enterprise=res.new_enterprise, attempts=res.attempts,
@@ -241,3 +255,9 @@ def put_policy(
     db.commit()
     p = next(p for p, _pol in policy.list_policies(db) if p.id == product_id)
     return _policy_out(p, row)
+
+
+@router.get("/admin/registration-ops")
+def ops_report(db: Session = Depends(get_db), _: CentralUser = Depends(READ)):
+    """Vetëm-lexim: backlog-e operacionale (provisioning, aktivizim, verifikim, outbox) nga DB."""
+    return registration_ops.report(db)

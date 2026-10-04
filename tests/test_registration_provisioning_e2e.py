@@ -203,3 +203,36 @@ def test_http_public_submit_admin_approve_provision_then_m7_creates_the_tenant(
     assert db.scalar(select(func.count()).select_from(Entitlement)) == 2
     with factory() as s:
         assert s.scalar(select(func.count()).select_from(EnterpriseProduct)) == 2
+
+
+def test_verified_automatic_registration_flows_to_the_enterprise_via_m7(
+    db, world, auth_secret, monkeypatch
+):
+    """M8-e: submit → email me token → verify → auto-miratim (sistemi) → provision → M7 → tenant."""
+    from apps.central.core.config import settings as cs
+    from apps.central.services import mailer, notifications
+
+    eng, factory, ids, client, central, key = world
+    for k, val in (("public_registration_enabled", True), ("registration_verify_key", "k" * 40),
+                   ("mailer", "fake"), ("registration_verify_url_base", "https://portal.example/verify")):  # fmt: skip
+        monkeypatch.setattr(cs, k, val)
+    mailer._FAKE.sent.clear()
+    with factory() as s:
+        admin = s.get(users.CentralUser, ids[2])
+        pol.set_policy(s, ids[0], admin, approval_mode="automatic")
+        s.commit()
+    assert poll(client).ok
+    sub = central.post("/registration", json={"contact_email": "ana@example.com",
+        "enterprise_name": "Acme Ltd", "product_ids": [str(ids[0])]}).json()  # fmt: skip
+    assert sub["status"] == "in_review" and sub["contact_verification"] == "pending"
+    assert notifications.dispatch_due(factory, mailer.get_mailer()).sent == 1
+    token = mailer._FAKE.sent[-1]["token"]
+    r = central.post(f"/registration/{sub['id']}/verify", json={"token": token})
+    assert r.status_code == 200 and r.json()["status"] == "activating"
+    res = prov.run(factory, uuid.UUID(sub["id"]))
+    assert res.status == "provisioned"
+    assert poll(client).ok
+    db.expire_all()
+    e = db.get(Enterprise, res.enterprise_id)
+    assert e is not None and e.short_name == "Acme Ltd"
+    assert {x.channel for x in db.scalars(select(Entitlement))} == {"sms"}

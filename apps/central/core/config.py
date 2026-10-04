@@ -30,6 +30,29 @@ class Settings(BaseSettings):
     public_registration_enabled: bool = False
     # Kuota për email (kërkesa reale të krijuara, dritare rrëshqitëse 24h UTC). IP limit = proxy.
     public_registration_max_per_email_24h: int = Field(default=3, ge=1, le=100)
+    # --- M8-e: verifikimi i kontaktit, dërgimi i email-it, kufijtë në proxy, sfida anti-bot ---
+    # Çelësi HMAC nga i cili DERIVOHET tokeni i verifikimit (s'ruhet asnjë token/hash në DB).
+    # Bosh ose <32 karaktere = verifikimi i padisponueshëm (regjistrimi mbetet vetëm manual).
+    registration_verify_key: str = ""
+    registration_verify_ttl_minutes: int = Field(default=60, ge=10, le=1440)
+    # Baza e lidhjes në email (frontend-i i portalit), p.sh. https://portal.example/verify
+    registration_verify_url_base: str = ""
+    # Dërgimi i email-it (Central ka mailer të vetin, i pavarur nga Enterprise).
+    mailer: Literal["disabled", "fake", "smtp"] = "disabled"
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    smtp_from: str = ""
+    # Operatori vërteton që proxy-ja ka `client_max_body_size 4k` + limit_req për /registration*
+    # (nginx i Central s'menaxhohet në repo): pa këtë, readiness dështon në prodhim.
+    public_registration_proxy_ack: bool = False
+    # Sfida anti-bot (kufi i pavarur nga vendori): `disabled` | `fake` (vetëm test/dev).
+    bot_challenge: Literal["disabled", "fake"] = "disabled"
+    public_registration_require_challenge: bool = False
+    # Proxy të besuar për IP-në e klientit (vetëm për LOG; kufijtë IP jetojnë te proxy).
+    trusted_proxy_hops: int = Field(default=0, ge=0, le=5)
 
 
 settings = Settings()

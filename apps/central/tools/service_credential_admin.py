@@ -11,7 +11,8 @@
 klient (aktiv); pa grant retroaktiv, pa bump `auth_generation` për vetë flamurin.
 
 `grant`/`revoke` ndryshojnë bashkësinë e autorizuar dhe rrisin `auth_generation`: konsumatori duhet
-snapshot të plotë. Ndryshimet nuk shkruhen te `audit_log` (CLI pa aktor): borxh para go-live.
+snapshot të plotë. Çdo ndryshim real auditohet (M8-e), aktor sistemi
+`system:service_client_configuration`.
 Kodet: 0 ok/no-op · 2 gabim.
 """
 
@@ -24,24 +25,40 @@ from sqlalchemy.orm import Session
 from apps.central.core.config import settings
 from apps.central.core.db import make_engine
 from apps.central.core.errors import CentralError
-from apps.central.services import service_auth
+from apps.central.services import audit, service_auth
+
+LABEL = "system:service_client_configuration"
 
 
 def run(action: str, client_id: str, enterprise_id=None, kid=None, engine=None) -> str:
+    """Çdo ndryshim real shkruhet te `audit_log` me aktor sistemi (CLI s'ka identitet njeriu) në të
+    njëjtin transaksion; no-op ⇒ pa audit. Detail: vlera e vjetër/e re, kurrë sekrete."""
     engine = engine or make_engine(settings.database_url)
     with Session(engine, expire_on_commit=False) as db:
+        detail = {"client_id": client_id}
         if action == "grant":
             changed = service_auth.grant_enterprise(db, client_id, enterprise_id)
+            detail["enterprise_id"] = str(enterprise_id)
         elif action == "revoke":
             changed = service_auth.revoke_enterprise(db, client_id, enterprise_id)
+            detail["enterprise_id"] = str(enterprise_id)
         elif action == "disable-key":
             changed = service_auth.disable_key(db, client_id, kid)
+            detail["kid"] = kid
         elif action in ("enable-auto-grant", "disable-auto-grant"):
-            changed = service_auth.set_auto_grant(db, client_id, action == "enable-auto-grant")
+            enabled = action == "enable-auto-grant"
+            changed = service_auth.set_auto_grant(db, client_id, enabled)
+            detail["auto_grant_new_enterprises"] = {"before": not enabled, "after": enabled}
         else:
             changed = service_auth.disable_client(db, client_id)
+        client = service_auth.get_client(db, client_id)
+        if changed:
+            audit.record_system(
+                db, label=LABEL, action=f"service_client.{action.replace('-', '_')}",
+                resource_type="service_client", resource_id=client.id, detail=detail,
+            )  # fmt: skip
         db.commit()
-        gen = service_auth.get_client(db, client_id).auth_generation
+        gen = client.auth_generation
     return f"{action}: {'changed' if changed else 'no change'} (auth_generation={gen})"
 
 

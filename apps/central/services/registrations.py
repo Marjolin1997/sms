@@ -265,6 +265,30 @@ def submit(
     return SubmitResult(row, created=True, access_token=token)
 
 
+def auto_approve_verified(db: Session, row: RegistrationRequest, *, now: datetime) -> bool:
+    """Auto-miratim pas verifikimit të kontaktit (M8-e): vetëm nëse `verified_at` ekziston, kërkesa
+    është ende `submitted`, TË GJITHA produktet janë LIVE eligible + `automatic` dhe auto-miratimi
+    lejohet (verifikim i konfiguruar). Aktor sistemi `system:registration_auto_approval`."""
+    if row.verified_at is None or row.status != SUBMITTED or not policy.automatic_storable():
+        return False
+    ids = list(db.scalars(select(RegistrationProduct.product_id).where(
+        RegistrationProduct.request_id == row.id)))  # fmt: skip
+    vs = policy.views(db, ids)
+    if not vs or not all(v.eligible and v.approval_mode == AUTOMATIC for v in vs):
+        return False
+    row.status, row.decision_mode = APPROVED, AUTOMATIC
+    row.decided_at, row.decided_by_id, row.decided_by_label = now, None, AUTO_LABEL
+    row.provisioning_status, row.updated_at = PENDING, now
+    db.flush()
+    audit.record_system(
+        db, label=AUTO_LABEL, action=ACTION_APPROVE, resource_type=RESOURCE, resource_id=row.id,
+        now=now,
+        detail={"decision_mode": AUTOMATIC, "contact_verified": True,
+                "products": [v.snapshot() for v in sorted(vs, key=lambda v: v.code)]},
+    )  # fmt: skip
+    return True
+
+
 # --- leximi ---------------------------------------------------------------------------------------------
 
 
@@ -383,7 +407,8 @@ def approve(
     db.flush()
     audit.record(
         db, actor, ACTION_APPROVE, RESOURCE, row.id,
-        {"decision_mode": MANUAL, "products": [v.snapshot() for v in sorted(vs, key=lambda v: v.code)]},
+        {"decision_mode": MANUAL, "contact_verified": row.verified_at is not None,
+         "products": [v.snapshot() for v in sorted(vs, key=lambda v: v.code)]},
         now=now,
     )  # fmt: skip
     return row

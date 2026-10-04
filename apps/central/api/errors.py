@@ -15,6 +15,14 @@ def install(app: FastAPI) -> None:
 
     async def public_handler(_request: Request, e: PublicError):
         detail = {"code": e.code, "message": e.message}
+        if e.code != "registration_unavailable":  # çaktivizimi i qëllimshëm s'është gabim
+            from apps.central.services import registration_metrics as m
+
+            m.inc(
+                "registration_public_5xx_total"
+                if e.status >= 500
+                else "registration_public_4xx_total"
+            )
         return JSONResponse({"detail": detail}, status_code=e.status)
 
     app.add_exception_handler(SyncApiError, sync_handler)
