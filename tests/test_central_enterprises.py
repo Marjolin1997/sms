@@ -143,6 +143,7 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "service_assertion_jti",
         "registration_requests",
         "registration_products",
+        "product_registration_policy",
     }
     assert not any(t.startswith("sms_") for t in cen_tables)
 

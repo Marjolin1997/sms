@@ -16,6 +16,7 @@ from apps.central.core import errors
 from apps.central.core.db import Base
 from apps.central.models import (
     AuditLog,
+    CentralUser,
     Enterprise,
     RegistrationProduct,
     RegistrationRequest,
@@ -24,6 +25,7 @@ from apps.central.models.product import ImmutableError
 from apps.central.models.registration import FAILED, PROVISIONED
 from apps.central.services import audit as audit_svc
 from apps.central.services import products as prod_svc
+from apps.central.services import registration_policy as pol
 from apps.central.services import registrations as reg
 from apps.central.services import users
 from tests.test_central import IS_PG, ROOT, central_alembic, make_db  # noqa: F401
@@ -39,6 +41,8 @@ def world(db):
     sms = prod_svc.create(db, "sms", "SMS", "sms")
     email = prod_svc.create(db, "email", "Email", "email")
     admin = users.create_user(db, "adm@example.com", "pw-Long-Enough-123", "admin")
+    for p in (sms, email):  # M8-b: pa politikë të aktivizuar produkti s'kërkohet (fail-closed)
+        pol.set_policy(db, p.id, admin, self_registration_enabled=True)
     db.commit()
     return db, sms, email, admin
 
@@ -80,7 +84,7 @@ def test_active_product_accepted_retired_and_unknown_rejected_with_one_generic_e
     db.commit()
     assert submit(db, [sms]).created
     for ids in ([email.id], [sms.id, email.id], [uuid.uuid4()]):
-        with pytest.raises(errors.Invalid, match="not available") as ex:
+        with pytest.raises(errors.Invalid, match="products_unavailable") as ex:
             reg.submit(db, enterprise_name="X", contact_email="a@b.co", product_ids=ids)
         assert "email" not in str(ex.value).lower() or "not available" in str(
             ex.value
@@ -102,6 +106,9 @@ def test_product_count_must_be_between_one_and_five(world, n):
 def test_five_products_are_accepted_and_duplicates_or_garbage_ids_are_rejected(world):
     db, sms, *_ = world
     extra = [prod_svc.create(db, f"p{i}", f"P{i}", "sms") for i in range(4)]
+    admin = db.scalar(select(CentralUser))
+    for p in extra:
+        pol.set_policy(db, p.id, admin, self_registration_enabled=True)
     db.commit()
     assert submit(db, [sms, *extra]).created  # 5 = kufiri
     with pytest.raises(errors.Invalid, match="duplicate"):
@@ -239,6 +246,8 @@ def pg(make_db):  # noqa: F811
 def test_pg_concurrent_same_submission_key_creates_exactly_one_request(pg):
     with Session(pg, expire_on_commit=False) as s:
         sms = prod_svc.create(s, "sms", "SMS", "sms")
+        admin = users.create_user(s, "adm@example.com", "pw-Long-Enough-123", "admin")
+        pol.set_policy(s, sms.id, admin, self_registration_enabled=True)
         s.commit()
     barrier = threading.Barrier(6, timeout=20)
     results = []
@@ -266,6 +275,7 @@ def test_pg_concurrent_approve_and_reject_end_in_one_consistent_state(pg):
     with Session(pg, expire_on_commit=False) as s:
         sms = prod_svc.create(s, "sms", "SMS", "sms")
         admin = users.create_user(s, "adm@example.com", "pw-Long-Enough-123", "admin")
+        pol.set_policy(s, sms.id, admin, self_registration_enabled=True)
         rid = reg.submit(
             s, enterprise_name="Acme", contact_email="a@b.co", product_ids=[sms.id]
         ).request.id
@@ -292,7 +302,9 @@ def test_pg_concurrent_approve_and_reject_end_in_one_consistent_state(pg):
     )
     with Session(pg) as s:
         row = s.get(RegistrationRequest, rid)
-        n = s.scalar(select(func.count()).select_from(AuditLog))
+        n = s.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.action.like("registration.%"))
+        )
         assert row.status in ("approved", "rejected") and n == 1  # një vendim, një audit
         if row.status == "approved":
             assert outcomes.count("conflict") == 1  # reject i approved-pending ⇒ Conflict
@@ -320,14 +332,20 @@ def test_manual_approve_sets_decision_pending_provisioning_and_audits_a_human(wo
         T0,
     )
     assert out.decision_reason is None and out.enterprise_id is None
-    a = db.scalar(select(AuditLog))
+    a = db.scalar(select(AuditLog).where(AuditLog.action.like("registration.%")))
     assert (a.actor_kind, a.actor_id, a.actor_label) == ("user", admin.id, None)
     assert (a.action, a.resource_type, a.resource_id) == (
         "registration.approve",
         "registration_request",
         str(row.id),
     )
-    assert a.detail == {"decision_mode": "manual", "products": ["email", "sms"]}
+    assert a.detail == {
+        "decision_mode": "manual",
+        "products": [  # politika LIVE në momentin e vendimit
+            {"code": "email", "approval_mode": "manual", "self_registration_enabled": True},
+            {"code": "sms", "approval_mode": "manual", "self_registration_enabled": True},
+        ],
+    }
 
 
 def test_approve_is_idempotent_and_does_not_touch_an_approved_request(world):
@@ -344,7 +362,11 @@ def test_approve_is_idempotent_and_does_not_touch_an_approved_request(world):
         return (
             as_utc(r.decided_at),
             as_utc(r.updated_at),
-            db.scalar(select(func.count()).select_from(AuditLog)),
+            db.scalar(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(AuditLog.action.like("registration.%"))
+            ),
         )
 
     before = snap()
@@ -376,7 +398,12 @@ def test_product_retired_after_submit_blocks_approval(world):
     db.rollback()
     row = db.get(RegistrationRequest, row.id)
     assert row.status == "submitted" and row.provisioning_status is None
-    assert db.scalar(select(func.count()).select_from(AuditLog)) == 0
+    assert (
+        db.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.action.like("registration.%"))
+        )
+        == 0
+    )
 
 
 def test_approve_requires_a_human_central_user_and_an_existing_request(world):
@@ -407,7 +434,7 @@ def test_manual_reject_requires_a_reason_and_audits_a_human(world):
     db.commit()
     assert (out.status, out.decision_mode, out.decision_reason, out.provisioning_status) == (
         "rejected", "manual", "duplicate customer", None)  # fmt: skip
-    a = db.scalar(select(AuditLog))
+    a = db.scalar(select(AuditLog).where(AuditLog.action.like("registration.%")))
     assert (a.actor_kind, a.actor_id, a.action) == ("user", admin.id, "registration.reject")
     assert a.detail == {
         "reason": "duplicate customer",
@@ -424,7 +451,10 @@ def test_reject_rejected_is_a_noop(world):
     db.commit()
     assert (
         again.decision_reason == "first"
-        and db.scalar(select(func.count()).select_from(AuditLog)) == 1
+        and db.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.action.like("registration.%"))
+        )
+        == 1
     )
 
 
@@ -456,7 +486,13 @@ def test_reject_rules_for_approved_requests_pending_failed_provisioned(world):
     assert (
         out.status == "rejected" and out.provisioning_status == "failed"
     )  # dështimi s'u kthye në rejected vetë
-    a = list(db.scalars(select(AuditLog).order_by(AuditLog.created_at)))
+    a = list(
+        db.scalars(
+            select(AuditLog)
+            .where(AuditLog.action.like("registration.%"))
+            .order_by(AuditLog.created_at)
+        )
+    )
     assert a[-1].detail["from"] == {"status": "approved", "provisioning_status": "failed"}
 
 
@@ -470,7 +506,12 @@ def test_state_change_and_audit_roll_back_together(world, monkeypatch):
     reg.approve(db, row.id, admin)
     db.rollback()  # kalimi dhe audit-i zhduken bashkë
     assert db.get(RegistrationRequest, row.id).status == "submitted"
-    assert db.scalar(select(func.count()).select_from(AuditLog)) == 0
+    assert (
+        db.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.action.like("registration.%"))
+        )
+        == 0
+    )
 
     def boom(*a, **k):
         raise RuntimeError("audit down")
@@ -617,7 +658,7 @@ def test_migration_0013_up_down_up_and_schema_matches_metadata(make_db):
         )
         assert compare_metadata(ctx, Base.metadata) == []
         ver = c.execute(text("select version_num from central_alembic_version")).scalar()
-    assert ver == "0013"
+    assert ver == "0014"
     fks = {
         fk["referred_table"]: fk for fk in inspect(eng).get_foreign_keys("registration_requests")
     }

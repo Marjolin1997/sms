@@ -13,8 +13,12 @@ gjeneruar nga serveri për leximin e statusit më vonë). Idempotenca është e 
 Pa çelës: çdo submit krijon kërkesë të re (s'ka dedupe sipas emailit: i njëjti kontakt mund të ketë
 kërkesa të ligjshme më vonë; kufijtë e abuzimit = M8-e).
 
-Produktet: 1..MAX_PRODUCTS ID unike të Product-eve ekzistues `active` (retired/mungon = i njëjti
-gabim i përgjithshëm). Policy-ja `self_registration_enabled` vjen në M8-b.
+Produktet: 1..MAX_PRODUCTS ID unike; secili duhet `active`, me politikë dhe `self_registration_enabled`
+(M8-b; mungesa e politikës = i mbyllur). Çdo mospërputhje ⇒ i njëjti gabim i përgjithshëm
+`products_unavailable`. Auto-miratim (M8-b): nëse TË GJITHA politikat janë `automatic` DHE gate-i
+`CENTRAL_ALLOW_UNVERIFIED_AUTO_REGISTRATION` është true, kërkesa krijohet drejtpërdrejt si
+approved/pending/automatic me audit `system:registration_auto_approval` në të njëjtin transaksion
+(pa provisioning). Replay nuk auto-miraton dhe nuk audit-on për herë të dytë.
 """
 
 import hashlib
@@ -32,9 +36,10 @@ from sqlalchemy.orm import Session
 
 from apps.central.core.errors import Conflict, Invalid, NotFound
 from apps.central.core.timeutil import utcnow
-from apps.central.models.product import Product, ProductStatus
+from apps.central.models.product import Product
 from apps.central.models.registration import (
     APPROVED,
+    AUTOMATIC,
     FAILED,
     MANUAL,
     PENDING,
@@ -46,6 +51,7 @@ from apps.central.models.registration import (
 )
 from apps.central.models.user import CentralUser
 from apps.central.services import audit
+from apps.central.services import registration_policy as policy
 from apps.central.services.enterprises import normalize_name
 
 MAX_PRODUCTS = 5
@@ -58,7 +64,8 @@ _KEY = re.compile(r"^[A-Za-z0-9._:-]{8,64}$")
 ACTION_APPROVE = "registration.approve"
 ACTION_REJECT = "registration.reject"
 RESOURCE = "registration_request"
-UNAVAILABLE = "one or more products are not available"
+UNAVAILABLE = "products_unavailable"
+AUTO_LABEL = "system:registration_auto_approval"
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,11 +161,13 @@ def _fingerprint(name: str, contact: str | None, product_ids: list[uuid.UUID]) -
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
-def _active_products(db: Session, ids: list[uuid.UUID]) -> list[Product]:
-    rows = {p.id: p for p in db.scalars(select(Product).where(Product.id.in_(ids)))}
-    if len(rows) != len(ids) or any(p.status != ProductStatus.ACTIVE.value for p in rows.values()):
-        raise Invalid(UNAVAILABLE)  # mungon ≡ retired: asnjë dallim te klienti
-    return [rows[i] for i in ids]
+def _eligible_views(db: Session, ids: list[uuid.UUID]) -> list[policy.PolicyView]:
+    vs = policy.views(db, ids)
+    if not all(v.eligible for v in vs):
+        raise Invalid(
+            UNAVAILABLE
+        )  # mungon/retired/pa politikë/çaktivizuar: asnjë dallim te klienti
+    return vs
 
 
 def _existing(db: Session, email: str, key: str) -> RegistrationRequest | None:
@@ -193,7 +202,8 @@ def submit(
     fingerprint = _fingerprint(name, contact, ids)
     if key is not None and (row := _existing(db, email, key)) is not None:
         return _replay(row, fingerprint)  # replay: pa token, pa dublikim
-    _active_products(db, ids)
+    vs = _eligible_views(db, ids)
+    automatic = policy.automatic_allowed() and all(v.approval_mode == AUTOMATIC for v in vs)
     token, token_hash = new_access_token()
     now = now or utcnow()
     row = RegistrationRequest(
@@ -201,6 +211,10 @@ def submit(
         request_hash=fingerprint, access_token_hash=token_hash, status=SUBMITTED,
         created_at=now, updated_at=now,
     )  # fmt: skip
+    if automatic:  # vendimi automatik: gjendja e kërkesës llindet e miratuar (pa provisioning)
+        row.status, row.decision_mode = APPROVED, AUTOMATIC
+        row.decided_at, row.decided_by_id, row.decided_by_label = now, None, AUTO_LABEL
+        row.provisioning_status = PENDING
 
     def insert() -> None:
         db.add(row)
@@ -208,6 +222,13 @@ def submit(
         for pid in ids:
             db.add(RegistrationProduct(request_id=row.id, product_id=pid, created_at=now))
         db.flush()
+        if automatic:  # audit sistemi në të njëjtin transaksion: dështim ⇒ rollback i gjithçkaje
+            audit.record_system(
+                db, label=AUTO_LABEL, action=ACTION_APPROVE, resource_type=RESOURCE,
+                resource_id=row.id, now=now,
+                detail={"decision_mode": AUTOMATIC, "products": [v.snapshot() for v in vs],
+                        "unverified_auto_registration_gate": True},
+            )  # fmt: skip
 
     if key is None:  # pa çelës s'ka garë idempotence: pa savepoint
         insert()
@@ -276,10 +297,12 @@ def approve(
         return row
     if row.status == REJECTED:
         raise Conflict("registration request was rejected")
-    products = requested_products(db, row.id)
-    retired = [p.code for p in products if p.status != ProductStatus.ACTIVE.value]
-    if retired:
-        raise Conflict(f"requested product no longer available: {', '.join(retired)}")
+    ids = list(db.scalars(select(RegistrationProduct.product_id).where(
+        RegistrationProduct.request_id == row.id)))  # fmt: skip
+    vs = policy.views(db, ids)  # politika LIVE në momentin e vendimit (jo e ngrirë në submit)
+    gone = sorted(v.code for v in vs if not v.eligible)
+    if gone:
+        raise Conflict(f"requested product no longer available: {', '.join(gone)}")
     now = now or utcnow()
     row.status, row.decision_mode = APPROVED, MANUAL
     row.decided_at, row.decided_by_id, row.decided_by_label = now, actor_id, None
@@ -288,7 +311,8 @@ def approve(
     db.flush()
     audit.record(
         db, actor, ACTION_APPROVE, RESOURCE, row.id,
-        {"decision_mode": MANUAL, "products": [p.code for p in products]}, now=now,
+        {"decision_mode": MANUAL, "products": [v.snapshot() for v in sorted(vs, key=lambda v: v.code)]},
+        now=now,
     )  # fmt: skip
     return row
 

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # Bosh ose <32 karaktere = autentikimi çaktivizohet (503); në prodhim nisja refuzohet.
     auth_secret: str = ""
     auth_ttl_seconds: int = Field(default=900, ge=60, le=86400)
+    # M8-b: politikat `automatic` janë të papërdorshme sa kohë ky gate është false (regjistrimi
+    # publik s'ka verifikim kontakti): `automatic` nuk vendoset dhe submit-i s'auto-miraton.
+    # Vetëm dev/test (ose rrjedhë e ardhshme e verifikuar); në prodhim nisja refuzohet nëse true.
+    allow_unverified_auto_registration: bool = False
 
 
 settings = Settings()

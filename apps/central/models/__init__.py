@@ -5,6 +5,7 @@ from apps.central.models.enterprise import Enterprise, EnterpriseStatus
 from apps.central.models.enterprise_product import AssignmentStatus, EnterpriseProduct
 from apps.central.models.product import Channel, Product, ProductStatus
 from apps.central.models.registration import RegistrationProduct, RegistrationRequest
+from apps.central.models.registration_policy import ProductRegistrationPolicy
 from apps.central.models.service_auth import (
     ServiceAssertionJti,
     ServiceClient,
@@ -23,6 +24,7 @@ __all__ = [
     "EnterpriseProduct",
     "EnterpriseStatus",
     "Product",
+    "ProductRegistrationPolicy",
     "ProductStatus",
     "RegistrationProduct",
     "RegistrationRequest",
