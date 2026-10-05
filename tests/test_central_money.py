@@ -33,12 +33,19 @@ from tests.test_central_auth import PW
 from tests.test_central_products import cdb  # noqa: F401  (fixtures)
 
 T0 = datetime(2030, 1, 1, 12, tzinfo=UTC)
-PGONLY = pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
+_PG = pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
+
+
+def PGONLY(fn):  # noqa: N802  (marker + flamur që fixture-i `m` e përdor për parametrin sqlite)
+    fn._pgonly = True
+    return _PG(fn)
 
 
 @pytest.fixture
-def m(cdb):
+def m(cdb, request):
     url, eng = cdb
+    if getattr(request.function, "_pgonly", False) and url.startswith("sqlite"):
+        pytest.skip("needs PostgreSQL locks/triggers")
     F = sessionmaker(bind=eng, expire_on_commit=False)
     with F() as s:
         ent = enterprises.create(s, "Acme").id
