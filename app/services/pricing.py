@@ -109,7 +109,8 @@ def _legacy(
     if plan is None:
         raise rates.NoRate("account has no rate card")
     q = rates.quote(db, plan.rate_card_id, number, text, at, operator)
-    r = db.get(Rate, q.rate_id)
+    # prefiksi/operatori i rregullës vetëm për krahasimin shadow; në `local` s'kemi SELECT shtesë (hot path)
+    r = db.get(Rate, q.rate_id) if authority() != LOCAL else None
     return Decision(
         "legacy", q.currency, q.encoding, q.segments, q.unit_price, q.total, r.prefix if r else "",
         r.operator if r else "", card_id=q.card_id, version_id=q.version_id, rate_id=q.rate_id,
