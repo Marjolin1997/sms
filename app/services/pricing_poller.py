@@ -106,7 +106,7 @@ def poll_once(
         log.warning(
             "central unreachable (pricing; last complete snapshot stays in use, fail-static): %s", e
         )
-    except (pv.ContractError, ps.ApplyError) as e:
+    except (pv.ContractError, ps.PricingApplyError) as e:
         out.kind, out.detail = "apply_error", f"{type(e).__name__}: {e}"
         log.error("ALERT pricing snapshot rejected (not activated): %s", out.detail)
         _note(factory, out.detail, now)

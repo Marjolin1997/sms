@@ -24,9 +24,9 @@ from apps.central.models.pricing import (
     V_RETIRED,
     PriceAssignment,
     PriceBook,
-    PricingSequence,
     PriceRule,
     PriceVersion,
+    PricingSequence,
 )
 from apps.central.models.product import Product
 from apps.central.services import audit, money_common

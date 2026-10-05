@@ -117,14 +117,16 @@ class Settings(BaseSettings):
     # Mosha e raportit të dërguar: ≤ fresh = OK · ≤ stale = WARN · më shumë = FAIL (readiness).
     money_report_fresh_seconds: int = Field(600, ge=60, le=86400)
     money_report_stale_seconds: int = Field(1800, ge=60, le=604800)
-    # M9-e: autoriteti i ÇMIMEVE të klientit (i pavarur nga money authority): local = tarifat lokale (sjellja e sotme) ·
-    # shadow = kalkulon edhe snapshot-in Central, krahason, por CHARGE me lokalin · central = snapshot-i Central është autoritar.
+    # M9-e: autoriteti i ÇMIMEVE të klientit (i pavarur nga money authority):
+    # local = tarifat lokale (sjellja e sotme) · shadow = kalkulon edhe snapshot-in Central,
+    # krahason, por CHARGE me lokalin · central = snapshot-i Central është autoritar.
     pricing_authority: Literal["local", "shadow", "central"] = "local"
     pricing_authority_ack: bool = (
         False  # prodhim + central: readiness kaloi (`scripts.pricing_authority_readiness`)
     )
     pricing_poll_interval_seconds: int = Field(60, ge=5, le=3600)
-    # Mosha e sinkronizimit të suksesshëm: ≤ warn = OK · ≤ fail = WARN (alarm; përdoret snapshot-i i fundit) · më shumë = FAIL (readiness).
+    # Mosha e sinkronizimit të suksesshëm: ≤ warn = OK · ≤ fail = WARN (alarm; përdoret
+    # snapshot-i i fundit) · më shumë = FAIL (readiness).
     pricing_stale_warn_seconds: int = Field(900, ge=30, le=86400)
     pricing_stale_fail_seconds: int = Field(3600, ge=60, le=604800)
     pricing_shadow_sample: float = Field(

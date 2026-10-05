@@ -110,7 +110,8 @@ class Message(TenantOwned, Base):
     # Referencat ligjëruese (NULL kur çmimi vjen nga snapshot-i Central: price_source='central').
     rate_version_id: Mapped[int | None] = mapped_column(ForeignKey("sms_rate_card_versions.id"))
     rate_id: Mapped[int | None] = mapped_column(ForeignKey("sms_rates.id"))
-    # M9-e: burimi i çmimit dhe identitetet e snapshot-it Central (të ngrira me mesazhin; nuk kërkohet kërkim i ri për ta shpjeguar).
+    # M9-e: burimi i çmimit dhe identitetet e snapshot-it Central (të ngrira me mesazhin;
+    # nuk kërkohet kërkim i ri për ta shpjeguar).
     price_source: Mapped[str | None] = mapped_column(
         String(8)
     )  # legacy | central (NULL = para M9-e = legacy)
@@ -178,8 +179,10 @@ class DlrReceipt(Base):
     __table_args__ = (Index("ix_sms_dlr_receipts_pmid", "provider", "provider_message_id"),)
 
 
-MESSAGE_PRICE_FROZEN = ("currency", "unit_price", "total_price", "segments", "encoding", "rate_version_id", "rate_id",
-                        "price_source", "pricing_book_ref", "pricing_version_ref", "pricing_rule_ref")  # fmt: skip
+MESSAGE_PRICE_FROZEN = (
+    "currency", "unit_price", "total_price", "segments", "encoding", "rate_version_id", "rate_id",
+    "price_source", "pricing_book_ref", "pricing_version_ref", "pricing_rule_ref",
+)  # fmt: skip
 
 
 class MessagePriceFrozenError(RuntimeError):
@@ -188,7 +191,7 @@ class MessagePriceFrozenError(RuntimeError):
 
 @event.listens_for(Message, "before_update")
 def _message_price_frozen(_m, _c, target) -> None:
-    """M9-e: snapshot-i i çmimit të mesazhit s'ndryshon kurrë (rezervimi/capture/DLR përdorin vlerën e ngrirë)."""
+    """M9-e: foto e çmimit të mesazhit s'ndryshon kurrë (reserve/capture/DLR e përdorin)."""
     from sqlalchemy import inspect
 
     attrs = inspect(target).attrs

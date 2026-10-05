@@ -150,6 +150,11 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "credit_grants",
         "money_events",
         "usage_reports",
+        "price_books",
+        "price_versions",
+        "price_rules",
+        "price_assignments",
+        "pricing_sequence",
         "registration_products",
         "product_registration_policy",
     }
@@ -286,6 +291,8 @@ def test_no_hard_delete_exists_anywhere_in_central():
     for f in mod.rglob("*.py"):
         if "migrations" in f.parts:
             continue
+        if f.relative_to(mod).as_posix() == "services/pricing.py":
+            continue  # M9-e: vetëm fshirja e rregullës në DRAFT (versioni aktiv është i pandryshueshëm, trigger PG)
         if f.relative_to(mod).as_posix() == "services/service_auth.py":
             continue  # përjashtim i vetëm: rreshti i objektivit të klientit (revoke) — jo entitet biznesi
         for n in ast.walk(ast.parse(f.read_text())):

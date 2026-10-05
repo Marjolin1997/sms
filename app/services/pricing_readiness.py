@@ -204,21 +204,23 @@ def evaluate(
     )
 
     src_bad = []
-    from app.api import console as console_api
+    from pathlib import Path
+
     from app.services import campaigns, messages
 
-    for mod, needle in (
-        (messages, "pricing.quote("),
-        (campaigns, "pricing.quote("),
-        (console_api, "pricing_svc.quote("),
+    console_src = (Path(messages.__file__).resolve().parents[1] / "api" / "console.py").read_text()
+
+    for name, src, needle in (
+        (messages.__name__, inspect.getsource(messages), "pricing.quote("),
+        (campaigns.__name__, inspect.getsource(campaigns), "pricing.quote("),
+        ("app.api.console", console_src, "pricing_svc.quote("),
     ):
-        src = inspect.getsource(mod)
         if (
             needle not in src
             or "rates.quote(" in src.replace("pricing.quote(", "")
             or "rates_svc.quote(" in src
         ):
-            src_bad.append(f"{mod.__name__} does not use the authority-aware pricing engine")
+            src_bad.append(f"{name} does not use the authority-aware pricing engine")
     out.append(
         _c(
             "estimator_and_submit_use_pricing_engine",

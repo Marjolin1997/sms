@@ -45,7 +45,9 @@ def upgrade() -> None:
         "sms_money_baselines",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("baseline_ref", sa.String(length=64), nullable=False),
-        sa.Column("wallet_id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
+        sa.Column(
+            "wallet_id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False
+        ),
         sa.Column("enterprise_id", sa.Uuid(), nullable=False),
         sa.Column("currency", sa.String(length=3), nullable=False),
         sa.Column("product_id", sa.Uuid(), nullable=False),
@@ -58,7 +60,9 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("superseded_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(
-            ["wallet_id"], ["sms_wallets.id"], name=op.f("fk_sms_money_baselines_wallet_id_sms_wallets")
+            ["wallet_id"],
+            ["sms_wallets.id"],
+            name=op.f("fk_sms_money_baselines_wallet_id_sms_wallets"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_sms_money_baselines")),
         sa.UniqueConstraint("baseline_ref", name=op.f("uq_sms_money_baselines_baseline_ref")),
@@ -112,19 +116,25 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
-            ["wallet_id"], ["sms_wallets.id"], name=op.f("fk_sms_money_grants_wallet_id_sms_wallets")
+            ["wallet_id"],
+            ["sms_wallets.id"],
+            name=op.f("fk_sms_money_grants_wallet_id_sms_wallets"),
         ),
         sa.ForeignKeyConstraint(
-            ["ledger_entry_id"], ["sms_ledger_entries.id"],
+            ["ledger_entry_id"],
+            ["sms_ledger_entries.id"],
             name=op.f("fk_sms_money_grants_ledger_entry_id_sms_ledger_entries"),
         ),
         sa.ForeignKeyConstraint(
-            ["reversal_entry_id"], ["sms_ledger_entries.id"],
+            ["reversal_entry_id"],
+            ["sms_ledger_entries.id"],
             name=op.f("fk_sms_money_grants_reversal_entry_id_sms_ledger_entries"),
         ),
         sa.PrimaryKeyConstraint("grant_id", name=op.f("pk_sms_money_grants")),
         sa.UniqueConstraint("issued_event_id", name=op.f("uq_sms_money_grants_issued_event_id")),
-        sa.UniqueConstraint("reversed_event_id", name=op.f("uq_sms_money_grants_reversed_event_id")),
+        sa.UniqueConstraint(
+            "reversed_event_id", name=op.f("uq_sms_money_grants_reversed_event_id")
+        ),
         sa.UniqueConstraint("issued_seq", name="uq_sms_money_grants_issued_seq"),
         sa.CheckConstraint("amount > 0", name=op.f("ck_sms_money_grants_amount_positive")),
         sa.CheckConstraint(
@@ -170,7 +180,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute("DROP TRIGGER IF EXISTS trg_sms_money_grants_no_delete ON sms_money_grants")
-        op.execute("DROP TRIGGER IF EXISTS trg_sms_money_baselines_no_delete ON sms_money_baselines")
+        op.execute(
+            "DROP TRIGGER IF EXISTS trg_sms_money_baselines_no_delete ON sms_money_baselines"
+        )
         op.execute("DROP TRIGGER IF EXISTS trg_sms_money_baselines_guard ON sms_money_baselines")
         op.execute("DROP FUNCTION IF EXISTS sms_money_forbid_delete()")
         op.execute("DROP FUNCTION IF EXISTS sms_money_baseline_guard()")

@@ -14,9 +14,9 @@ from apps.central.models.money import (
 from apps.central.models.pricing import (
     PriceAssignment,
     PriceBook,
-    PricingSequence,
     PriceRule,
     PriceVersion,
+    PricingSequence,
 )
 from apps.central.models.product import Channel, Product, ProductStatus
 from apps.central.models.registration import (

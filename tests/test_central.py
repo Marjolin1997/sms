@@ -140,6 +140,7 @@ def test_central_has_only_health_routes_and_no_docs():
         # M8-e
         "/registration/{registration_id}/verify",
         "/registration/{registration_id}/verification/resend", "/admin/registration-ops",
+            "/internal/pricing/state", "/internal/pricing/snapshot",
     }  # fmt: skip
 
 
@@ -169,8 +170,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0020_next.py").write_text(
-        'revision = "0020"\ndown_revision = "0019"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0021_next.py").write_text(
+        'revision = "0021"\ndown_revision = "0020"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -211,6 +212,11 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "credit_grants",
         "money_events",
         "usage_reports",
+        "price_books",
+        "price_versions",
+        "price_rules",
+        "price_assignments",
+        "pricing_sequence",
         "registration_products",
         "product_registration_policy",
     }
@@ -245,6 +251,11 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "credit_grants",
         "money_events",
         "usage_reports",
+        "price_books",
+        "price_versions",
+        "price_rules",
+        "price_assignments",
+        "pricing_sequence",
         "registration_products",
         "product_registration_policy",
     }
@@ -287,6 +298,11 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "credit_grants",
         "money_events",
         "usage_reports",
+        "price_books",
+        "price_versions",
+        "price_rules",
+        "price_assignments",
+        "pricing_sequence",
         "registration_products",
         "product_registration_policy",
     }

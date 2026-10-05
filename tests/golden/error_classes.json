@@ -153,6 +153,23 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.models.pricing.PricingImmutableError": {
+   "app_mro": [
+    "PricingImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.models.pricing",
+   "name": "PricingImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
   "app.models.rates.RateFrozenError": {
    "app_mro": [
     "RateFrozenError"
@@ -184,6 +201,23 @@
    "code": null,
    "module": "app.models.sending",
    "name": "EventImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.sending.MessagePriceFrozenError": {
+   "app_mro": [
+    "MessagePriceFrozenError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.sending",
+   "name": "MessagePriceFrozenError",
    "own_init": false,
    "str": "boom"
   },
@@ -983,6 +1017,40 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.services.pricing.CentralPriceError": {
+   "app_mro": [
+    "CentralPriceError",
+    "NoRate",
+    "DomainError"
+   ],
+   "args": null,
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "no_rate",
+   "module": "app.services.pricing",
+   "name": "CentralPriceError",
+   "own_init": true,
+   "str": null
+  },
+  "app.services.pricing_sync.PricingApplyError": {
+   "app_mro": [
+    "PricingApplyError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.pricing_sync",
+   "name": "PricingApplyError",
+   "own_init": false,
+   "str": "boom"
+  },
   "app.services.rates.InvalidNumber": {
    "app_mro": [
     "InvalidNumber",
@@ -1016,6 +1084,24 @@
    "code": "no_rate",
    "module": "app.services.rates",
    "name": "NoRate",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.rates.PricingFrozen": {
+   "app_mro": [
+    "PricingFrozen",
+    "DomainError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": "pricing_authority_frozen",
+   "module": "app.services.rates",
+   "name": "PricingFrozen",
    "own_init": false,
    "str": "boom"
   },

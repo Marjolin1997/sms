@@ -4,7 +4,7 @@ NJË snapshot = NJË transaksion atomik: valido (kontrata e verifikon `snapshot_
 paplotë/i prishur s'aktivizohet) → kyç `sms_pricing_state` → shto rreshtat e rinj të pandryshueshëm (libra, versione + rregulla që s'ekzistojnë,
 caktimet e këtij snapshot-i) → `active→retired` për versionet e tërhequra → pointer-i. Lexuesit (motori i çmimit) shohin ose snapshot-in e
 mëparshëm të plotë ose të riun të plotë. Replay i të njëjtit (epoch, revision, generation, hash) = no-op; revision më e vogël brenda të njëjtës
-epokë = i vjetruar (injorohet). Çdo mospërputhje e përmbajtjes së një versioni ekzistues (Central s'duhet ta bëjë kurrë) ⇒ ApplyError, asgjë s'aktivizohet.
+epokë = i vjetruar (injorohet). Çdo mospërputhje e përmbajtjes së një versioni ekzistues (Central s'duhet ta bëjë kurrë) ⇒ PricingApplyError, asgjë s'aktivizohet.
 Dështim ⇒ cache-i i fundit i plotë mbetet në përdorim (fail-static); `last_error` regjistrohet."""
 
 import uuid
@@ -30,7 +30,7 @@ from packages.contracts.control_plane.pricing import v1 as pv
 APPLIED, NOOP, STALE = "applied", "noop", "stale"
 
 
-class ApplyError(Exception):
+class PricingApplyError(Exception):
     """Snapshot që s'mund të aplikohet në mënyrë të sigurt (përmbajtje e kundërt me atë të ruajtur)."""
 
 
@@ -67,7 +67,7 @@ def _dt(s: str) -> datetime:
 def apply_snapshot(
     db: Session, snap: pv.PricingSnapshotV1, *, now: datetime | None = None
 ) -> ApplyResult:
-    """Atomik në transaksionin e thirrësit (që bën commit). Hedh `ApplyError` pa ndryshuar asgjë."""
+    """Atomik në transaksionin e thirrësit (që bën commit). Hedh `PricingApplyError` pa ndryshuar asgjë."""
     now = as_utc(now or utcnow())
     d = snap.doc
     state = get_state(db, lock=True)
@@ -95,7 +95,7 @@ def apply_snapshot(
             db.add(PricingBook(id=bid, code=b["code"], currency=b["currency"], created_at=now))
             db.flush()
         elif (book.code, book.currency) != (b["code"], b["currency"]):
-            raise ApplyError(
+            raise PricingApplyError(
                 f"book {bid} changed code/currency in Central (immutable): refusing the snapshot"
             )
         for v in b["versions"]:
@@ -117,11 +117,13 @@ def apply_snapshot(
                     or ver.book_id != bid
                     or ver.version != v["version"]
                 ):
-                    raise ApplyError(
+                    raise PricingApplyError(
                         f"version {vid} changed content in Central (immutable): refusing the snapshot"
                     )
                 if ver.status == "retired" and v["status"] == "active":
-                    raise ApplyError(f"version {vid} was retired and cannot become active again")
+                    raise PricingApplyError(
+                        f"version {vid} was retired and cannot become active again"
+                    )
                 if ver.status == "active" and v["status"] == "retired":
                     ver.status = "retired"
                     res.retired += 1

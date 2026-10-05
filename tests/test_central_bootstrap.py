@@ -290,6 +290,11 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "credit_grants",
         "money_events",
         "usage_reports",
+        "price_books",
+        "price_versions",
+        "price_rules",
+        "price_assignments",
+        "pricing_sequence",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -363,4 +368,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0017_money_ledger.py",
         "0018_grant_purpose.py",
         "0019_usage_reports.py",
+        "0020_pricing_authority.py",
     ]

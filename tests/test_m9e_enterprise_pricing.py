@@ -15,8 +15,8 @@ import pytest
 from sqlalchemy import func, select, text
 
 from app.core.config import settings
-from app.core.db import SessionLocal, engine
-from app.models.billing import Invoice, InvoiceLine, Plan
+from app.core.db import SessionLocal
+from app.models.billing import Invoice, InvoiceLine
 from app.models.control_plane import Entitlement
 from app.models.enterprise import Enterprise
 from app.models.pricing import (
@@ -24,17 +24,16 @@ from app.models.pricing import (
     PricingComparison,
     PricingImmutableError,
     PricingRule,
-    PricingState,
     PricingVersion,
 )
-from app.models.sending import Message, MessageStatus, MessagePriceFrozenError
+from app.models.sending import Message, MessagePriceFrozenError, MessageStatus
 from app.services import control_plane_client as cc
 from app.services import messages as svc
 from app.services import pricing, pricing_poller, pricing_readiness, pricing_sync, rates
 from app.services import wallet as wallets
 from app.services.wallet import TopupMethod
 from packages.contracts.control_plane.pricing import v1 as pv
-from tests.test_billing import AFTER, OWNER, add_emails, profile, subscribe
+from tests.test_billing import AFTER, add_emails, subscribe
 from tests.test_central import make_db  # noqa: F401
 from tests.test_m9a_unknown_outcome import stub, to_unknown  # noqa: F401
 from tests.test_pipeline import OK, PAST, fake, world  # noqa: F401
@@ -204,12 +203,12 @@ def test_central_content_changes_to_an_existing_version_are_refused(db):
             {**b["versions"][0], "rules": bad_rules, "content_hash": pv.rules_hash(bad_rules)}
         ],
     }
-    with pytest.raises(pricing_sync.ApplyError, match="immutable"):
+    with pytest.raises(pricing_sync.PricingApplyError, match="immutable"):
         pricing_sync.apply_snapshot(db, snap([evil], [asg(evil)], rev=2), now=NOW)
     db.rollback()
     assert pricing_sync.get_state(db).revision == 1
     renamed = {**b, "code": "other"}
-    with pytest.raises(pricing_sync.ApplyError):
+    with pytest.raises(pricing_sync.PricingApplyError):
         pricing_sync.apply_snapshot(db, snap([renamed], [asg(renamed)], rev=2), now=NOW)
     db.rollback()
 
@@ -224,7 +223,7 @@ def test_retirement_propagates_and_a_retired_version_cannot_be_reactivated(db, m
     with pytest.raises(pricing.CentralPriceError, match="retired"):
         pricing.quote(db, "c1", "355691230003", "hi", NOW)  # tërhequr ⇒ fail-closed, pa rënie
     back = {**b, "versions": [{**b["versions"][0], "status": "active"}]}
-    with pytest.raises(pricing_sync.ApplyError):
+    with pytest.raises(pricing_sync.PricingApplyError):
         pricing_sync.apply_snapshot(db, snap([back], [asg(back)], rev=3), now=NOW)
     db.rollback()
 

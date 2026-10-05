@@ -566,7 +566,7 @@ def test_enterprise_schema_and_migrations_are_untouched_by_m8b(w):
 
     assert not set(Base.metadata.tables) & set(EnterpriseBase.metadata.tables)
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("0*.py"))
-    assert versions[-1].startswith("0024")  # koka e Enterprise: M9-d (usage reports)
+    assert versions[-1].startswith("0025")  # koka e Enterprise: M9-e (pricing authority)
 
 
 # --- migrimi -----------------------------------------------------------------------------------------------------------
@@ -592,7 +592,7 @@ def test_migration_0014_up_down_up_readiness_and_metadata(make_db):
             c, opts={"compare_type": True, "version_table": "central_alembic_version"}
         )
         assert compare_metadata(ctx, Base.metadata) == []
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0019"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0020"
     assert readiness.check(eng) is None
     eng.dispose()
 

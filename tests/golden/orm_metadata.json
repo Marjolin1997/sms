@@ -2403,6 +2403,24 @@
     "server_default": null,
     "type": "BIGINT"
    },
+   "pricing_source": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(12)"
+   },
+   "pricing_version_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
    "quantity": {
     "default": null,
     "fks": [],
@@ -3057,6 +3075,42 @@
     "server_default": null,
     "type": "VARCHAR(64)"
    },
+   "price_source": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "pricing_book_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "pricing_rule_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "pricing_version_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
    "provider": {
     "default": null,
     "fks": [],
@@ -3089,7 +3143,7 @@
     "fks": [
      "sms_rates.id"
     ],
-    "nullable": false,
+    "nullable": true,
     "onupdate": null,
     "pk": false,
     "server_default": null,
@@ -3100,7 +3154,7 @@
     "fks": [
      "sms_rate_card_versions.id"
     ],
-    "nullable": false,
+    "nullable": true,
     "onupdate": null,
     "pk": false,
     "server_default": null,
@@ -3889,6 +3943,613 @@
    "UniqueConstraint:uq_sms_plans_code"
   ],
   "indexes": []
+ },
+ "sms_pricing_assignments": {
+  "columns": {
+   "assignment_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "book_id": {
+    "default": null,
+    "fks": [
+     "sms_pricing_books.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "effective_from": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "id": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "product_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "snapshot_id": {
+    "default": null,
+    "fks": [
+     "sms_pricing_snapshots.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   }
+  },
+  "constraints": [
+   "ForeignKeyConstraint:fk_sms_pricing_assignments_book_id_sms_pricing_books",
+   "ForeignKeyConstraint:fk_sms_pricing_assignments_snapshot_id_sms_pricing_snapshots",
+   "PrimaryKeyConstraint:pk_sms_pricing_assignments",
+   "UniqueConstraint:uq_sms_pricing_assignments_snapshot"
+  ],
+  "indexes": [
+   "ix_sms_pricing_assignments_lookup:['snapshot_id', 'enterprise_id', 'product_id', 'effective_from']:False"
+  ]
+ },
+ "sms_pricing_books": {
+  "columns": {
+   "code": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "currency": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(3)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   }
+  },
+  "constraints": [
+   "PrimaryKeyConstraint:pk_sms_pricing_books"
+  ],
+  "indexes": []
+ },
+ "sms_pricing_comparisons": {
+  "columns": {
+   "central_currency": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(3)"
+   },
+   "central_segments": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "central_total": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "central_unit_price": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "central_version_id": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "classification": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(24)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "detail": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(200)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "kind": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "legacy_currency": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(3)"
+   },
+   "legacy_segments": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "legacy_total": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "legacy_unit_price": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "ok": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BOOLEAN"
+   },
+   "ref": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_pricing_comparisons_kind",
+   "PrimaryKeyConstraint:pk_sms_pricing_comparisons"
+  ],
+  "indexes": [
+   "ix_sms_pricing_comparisons_created:['created_at']:False"
+  ]
+ },
+ "sms_pricing_rules": {
+  "columns": {
+   "channel": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "operator": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "prefix": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "unit_price": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "version_id": {
+    "default": null,
+    "fks": [
+     "sms_pricing_versions.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_pricing_rules_channel",
+   "CheckConstraint:ck_sms_pricing_rules_price_non_negative",
+   "ForeignKeyConstraint:fk_sms_pricing_rules_version_id_sms_pricing_versions",
+   "PrimaryKeyConstraint:pk_sms_pricing_rules",
+   "UniqueConstraint:uq_sms_pricing_rules_scope"
+  ],
+  "indexes": [
+   "ix_sms_pricing_rules_lookup:['version_id', 'channel', 'prefix']:False"
+  ]
+ },
+ "sms_pricing_snapshots": {
+  "columns": {
+   "authorization_generation": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "epoch": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "id": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "received_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "revision": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "snapshot_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   }
+  },
+  "constraints": [
+   "PrimaryKeyConstraint:pk_sms_pricing_snapshots",
+   "UniqueConstraint:uq_sms_pricing_snapshots_identity"
+  ],
+  "indexes": []
+ },
+ "sms_pricing_state": {
+  "columns": {
+   "activated_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "active_snapshot_id": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "authorization_generation": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "epoch": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "first_active_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "id": {
+    "default": "scalar:1",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "last_error": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "TEXT"
+   },
+   "last_error_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "last_success_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "snapshot_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_pricing_state_singleton",
+   "PrimaryKeyConstraint:pk_sms_pricing_state"
+  ],
+  "indexes": []
+ },
+ "sms_pricing_versions": {
+  "columns": {
+   "book_id": {
+    "default": null,
+    "fks": [
+     "sms_pricing_books.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "content_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "effective_from": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "rule_count": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "status": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "version": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_pricing_versions_status",
+   "ForeignKeyConstraint:fk_sms_pricing_versions_book_id_sms_pricing_books",
+   "PrimaryKeyConstraint:pk_sms_pricing_versions",
+   "UniqueConstraint:uq_sms_pricing_versions_book_version"
+  ],
+  "indexes": [
+   "ix_sms_pricing_versions_book_effective:['book_id', 'effective_from']:False"
+  ]
  },
  "sms_rate_card_versions": {
   "columns": {

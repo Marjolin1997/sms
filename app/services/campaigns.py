@@ -38,7 +38,6 @@ from app.services import (
     emails,
     events,
     pricing,
-    rates,
     switches,
     templates,
 )

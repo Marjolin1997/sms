@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.errors import Conflict, DomainError, NotFound
 from app.core.timeutil import as_utc  # noqa: F401  (ri-eksportuar)
 from app.models.rates import Rate, RateCard, RateCardVersion, VersionStatus
@@ -23,11 +24,23 @@ class InvalidNumber(DomainError):
     code = "invalid_number"
 
 
-def _local_pricing_guard() -> None:
-    """M9-e: nën SMS_PRICING_AUTHORITY=central çmimi komercial nuk ndryshohet lokalisht (vetëm aplikuesi i sinkronizimit)."""
-    from app.services import pricing  # vonuar: pricing importon rates
+class PricingFrozen(DomainError):
+    """Nën SMS_PRICING_AUTHORITY=central çmimi komercial nuk ndryshohet lokalisht (vetëm sync)."""
 
-    pricing.assert_local_pricing_mutable()
+    code = "pricing_authority_frozen"
+
+
+def assert_local_pricing_mutable() -> None:
+    if settings.pricing_authority == "central":
+        raise PricingFrozen(
+            "commercial pricing is owned by Central (SMS_PRICING_AUTHORITY=central): "
+            "local edits are blocked"
+        )
+
+
+def _local_pricing_guard() -> None:
+    """M9-e: nën SMS_PRICING_AUTHORITY=central çmimi komercial nuk ndryshohet lokalisht."""
+    assert_local_pricing_mutable()
 
 
 def create_card(db: Session, name: str, currency: str) -> RateCard:

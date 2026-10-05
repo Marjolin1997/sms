@@ -64,6 +64,8 @@ def test_package_is_leaf_and_stdlib_only():
         "control_plane/money/__init__.py",
         "control_plane/money/usage_v1.py",
         "control_plane/money/v1.py",
+        "control_plane/pricing/__init__.py",
+        "control_plane/pricing/v1.py",
         "control_plane/v1.py",
     ]
     forbidden = {"app", "apps", "sqlalchemy", "fastapi", "pydantic", "httpx", "requests", "starlette",

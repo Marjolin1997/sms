@@ -86,7 +86,7 @@ def create_plan(
     if fee < 0 or price < 0:
         raise InvalidAmount("prices must be >= 0")
     if price > 0:
-        pricing.assert_local_pricing_mutable()  # M9-e: çmimi i email nën central vjen vetëm nga Central
+        pricing.assert_local_pricing_mutable()  # M9-e: çmimi i email nën central vjen nga Central
     p = Plan(
         code=code, name=name, currency=currency.upper(), monthly_fee=fee,
         included_emails=included_emails, email_overage_price=price,
@@ -222,7 +222,7 @@ def _next_number(db: Session, year: int) -> str:
 def _invoice_lines(
     plan: Plan, usage: int, overage_price: Decimal | None = None
 ) -> list[tuple[str, Decimal, Decimal, Decimal]]:
-    """`overage_price` (M9-e) = çmimi i vendosur nga motori i çmimit (legacy plan ose Central); default = çmimi i planit."""
+    """`overage_price` (M9-e) = çmimi nga motori i çmimit; default = çmimi i planit."""
     price = plan.email_overage_price if overage_price is None else overage_price
     lines = []
     if plan.monthly_fee > 0:
@@ -288,9 +288,17 @@ def generate_invoice(
         db.flush()
         for desc, qty, unit, amount in lines:
             overage = desc.startswith("Email overage") and price_info is not None
-            db.add(InvoiceLine(invoice_id=inv.id, description=desc, quantity=qty, unit_price=unit, amount=amount,
-                               pricing_source=price_info.source if overage else "legacy_plan",
-                               pricing_version_ref=price_info.version_ref if overage else None))  # fmt: skip
+            db.add(
+                InvoiceLine(
+                    invoice_id=inv.id,
+                    description=desc,
+                    quantity=qty,
+                    unit_price=unit,
+                    amount=amount,
+                    pricing_source=price_info.source if overage else "legacy_plan",
+                    pricing_version_ref=price_info.version_ref if overage else None,
+                )
+            )
         db.flush()
     sub.periods_billed += 1
     if sub.pending_plan_id:

@@ -14,7 +14,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("sms_wallets", sa.Column("low_balance_threshold", sa.Numeric(20, 6), nullable=True))
+    op.add_column(
+        "sms_wallets", sa.Column("low_balance_threshold", sa.Numeric(20, 6), nullable=True)
+    )
     op.add_column(
         "sms_wallets",
         sa.Column("low_balance_notified", sa.Boolean(), nullable=False, server_default=sa.false()),

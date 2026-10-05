@@ -17,7 +17,12 @@ def upgrade() -> None:
     op.add_column("sms_api_keys", sa.Column("allowed_cidrs", sa.Text(), nullable=True))
     op.create_table(
         "sms_auth_failures",
-        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
+        sa.Column(
+            "id",
+            sa.BigInteger().with_variant(sa.Integer(), "sqlite"),
+            primary_key=True,
+            autoincrement=True,
+        ),
         sa.Column("ip", sa.String(45), nullable=False),
         sa.Column("prefix", sa.String(12), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

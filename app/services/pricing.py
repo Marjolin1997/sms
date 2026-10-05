@@ -20,7 +20,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.errors import DomainError
 from app.core.scope import Owner, owned
 from app.core.timeutil import as_utc, utcnow
 from app.models.control_plane import ENTITLEMENT_WITHDRAWN, Entitlement
@@ -43,10 +42,8 @@ from packages.contracts.control_plane.pricing import v1 as pv
 LOCAL, SHADOW, CENTRAL = "local", "shadow", "central"
 
 
-class PricingFrozen(DomainError):
-    """Nën SMS_PRICING_AUTHORITY=central çmimi komercial nuk ndryshohet lokalisht (vetëm aplikuesi i sinkronizimit)."""
-
-    code = "pricing_authority_frozen"
+PricingFrozen = rates.PricingFrozen
+assert_local_pricing_mutable = rates.assert_local_pricing_mutable
 
 
 class CentralPriceError(rates.NoRate):
@@ -59,13 +56,6 @@ class CentralPriceError(rates.NoRate):
 
 def authority() -> str:
     return settings.pricing_authority
-
-
-def assert_local_pricing_mutable() -> None:
-    if settings.pricing_authority == CENTRAL:
-        raise PricingFrozen(
-            "commercial pricing is owned by Central (SMS_PRICING_AUTHORITY=central): local edits are blocked"
-        )
 
 
 # --- vendimi ---------------------------------------------------------------------------------------------------

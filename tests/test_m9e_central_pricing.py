@@ -30,8 +30,10 @@ from apps.central.services import products as prod
 from apps.central.tools import pricing_import as cli
 from packages.contracts.control_plane.pricing import v1 as pv
 from tests.test_central import IS_PG, central_alembic, make_db  # noqa: F401
-from tests.test_central_auth import PW
-from tests.test_central_auth import auth_secret  # noqa: F401
+from tests.test_central_auth import (
+    PW,
+    auth_secret,  # noqa: F401
+)
 from tests.test_central_sync_api import assertion, auth, keypair
 
 T0 = datetime(2030, 1, 1, 12, tzinfo=UTC)
@@ -308,7 +310,9 @@ def test_retired_versions_are_never_selected_and_there_is_no_silent_fallback(env
 
 
 def test_price_decimal_exactness_and_validation(env):
-    big = "9999999999999.999999" if is_pg(env) else "12345.678901"  # NUMERIC i saktë vetëm në PG (SQLite = float)
+    big = (
+        "9999999999999.999999" if is_pg(env) else "12345.678901"
+    )  # NUMERIC i saktë vetëm në PG (SQLite = float)
     b, v = make_version(env, rules=(("355", "", "0.000001"), ("356", "", big)))
     with S(env) as s:
         assert pricing.lookup(s, b, "sms", "+355691234567", T0 + 2 * DAY).unit_price == D(
@@ -343,7 +347,15 @@ def test_set_rule_noop_and_audit_semantics(env):
             and pricing.remove_rule(s, a, v.id, "sms", prefix="355") is False
         )
         s.commit()
-    assert sorted(audit_actions(env)) == sorted(["price_book.create", "price_version.create", "price_rule.set", "price_rule.set", "price_rule.remove"])
+    assert sorted(audit_actions(env)) == sorted(
+        [
+            "price_book.create",
+            "price_version.create",
+            "price_rule.set",
+            "price_rule.set",
+            "price_rule.remove",
+        ]
+    )
 
 
 def test_revision_bumps_only_on_activation_retirement_and_assignment(env):
