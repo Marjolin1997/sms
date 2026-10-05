@@ -460,7 +460,7 @@ def test_pg_local_report_content_is_immutable_in_the_database(make_db):
         )
     for stmt in (
         "UPDATE sms_usage_reports SET ledger_max_id = 9",
-        "UPDATE sms_usage_reports SET payload = '{\"x\":1}'",
+        "UPDATE sms_usage_reports SET payload = '[]'",
         "UPDATE sms_usage_reports SET report_seq = 2",
         "DELETE FROM sms_usage_reports",
     ):

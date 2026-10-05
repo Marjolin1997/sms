@@ -356,8 +356,8 @@ def apply_batch(
         raise CursorMismatch("generation_mismatch")
     if isinstance(next_seq, bool) or not isinstance(next_seq, int) or next_seq < cur.last_seq:
         raise MoneySyncError(f"next_seq {next_seq!r} is behind the local cursor {cur.last_seq}")
-    prev = cur.last_seq
-    for ev in events:
+    prev = 0
+    for ev in events:  # rendi/kufiri vlerësohen mbi gjithë faqen
         if ev.seq <= prev or ev.seq > next_seq:
             raise MoneySyncError(
                 f"event seq {ev.seq} out of order/range (after {prev}, next {next_seq})"
@@ -366,6 +366,12 @@ def apply_batch(
     drain_deferred(db, now)
     last_ok = cur.last_seq
     for ev in events:
+        if (
+            ev.seq <= cur.last_seq
+        ):  # tashmë i konsumuar (p.sh. konsumator tjetër e çoi kursorin): no-op
+            res.outcomes.append((ev.seq, NOOP))
+            res.noop += 1
+            continue
         try:
             with db.begin_nested():
                 out = apply_event(db, ev, now)

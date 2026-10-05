@@ -260,7 +260,7 @@ def test_decimal_extremes_are_stored_exactly(env):
     # NUMERIC(20,6) është i saktë në PostgreSQL; SQLite (vetëm dev) ruan float ⇒ ekstremi i plotë vetëm në PG
     from decimal import Decimal as D
 
-    big = "99999999999999.999999" if IS_PG else "12345.678901"
+    big = "99999999999999.999999" if env.eng.dialect.name == "postgresql" else "12345.678901"
     small_avail = format(D(big) - D("0.000001"), "f")
     d = doc(env, gross=big, held="0.000001")
     d["wallet"]["available"] = small_avail
@@ -301,7 +301,7 @@ def test_stored_reports_are_immutable_orm_and_database(env):
         with pytest.raises(MoneyImmutableError):
             s.flush()
         s.rollback()
-    if IS_PG:
+    if env.eng.dialect.name == "postgresql":
         for stmt in (
             "UPDATE usage_reports SET ledger_max_id = 1",
             "DELETE FROM usage_reports",

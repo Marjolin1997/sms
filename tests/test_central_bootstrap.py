@@ -289,6 +289,7 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "payments",
         "credit_grants",
         "money_events",
+        "usage_reports",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë

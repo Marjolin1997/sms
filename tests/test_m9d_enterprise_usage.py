@@ -42,6 +42,10 @@ ROOT = Path(__file__).resolve().parents[1]
 T0 = datetime(2030, 1, 1, 12, tzinfo=UTC)
 
 
+def uv_aware(dt):
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
 def gen(now=T0):
     return mu.generate(engine, SessionLocal, now=now)
 
@@ -296,11 +300,7 @@ def test_central_outage_retains_the_report_without_touching_the_wallet_and_sms_c
     out = mu.deliver(SessionLocal, PostClient(lambda n, p: exc), now=T0)
     assert out.kind == kind and not out.ok
     r = reports(db)[0]
-    assert (
-        r.status == R_RETRY
-        and r.last_error
-        and r.next_attempt_at > T0.replace(tzinfo=None) - timedelta(days=1)
-    )
+    assert r.status == R_RETRY and r.last_error and uv_aware(r.next_attempt_at) > T0
     assert r.payload == uv.UsageReportV1.parse(r.payload).doc  # payload intact
     # SMS/wallet: reserve/capture/release continue; wallet unchanged by the failure
     assert bal(db, w) == before

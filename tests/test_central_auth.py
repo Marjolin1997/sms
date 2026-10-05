@@ -502,6 +502,7 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "payments",
         "credit_grants",
         "money_events",
+        "usage_reports",
         "registration_products",
         "product_registration_policy",
     }

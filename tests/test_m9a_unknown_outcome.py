@@ -986,6 +986,11 @@ def test_pg_human_resolution_vs_late_dlr_exactly_one_terminal_outcome(db, world,
             except Conflict:
                 s.rollback()
                 out.append("dlr_conflict")
+            except (
+                svc.NotFound
+            ):  # njeriu fitoi garën dhe mesazhi s'është më i pranueshëm për DLR: humbës i vlefshëm
+                s.rollback()
+                out.append("dlr_conflict")
 
     assert not run_threads([human, dlr])
     mv = movements(db, m)

@@ -149,6 +149,7 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "payments",
         "credit_grants",
         "money_events",
+        "usage_reports",
         "registration_products",
         "product_registration_policy",
     }
