@@ -168,13 +168,11 @@ def _triggers() -> None:
         "RAISE EXCEPTION 'message price snapshot is immutable' USING ERRCODE = '55000'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql"
     )
     op.execute("CREATE TRIGGER trg_sms_messages_price_guard BEFORE UPDATE ON sms_messages FOR EACH ROW EXECUTE FUNCTION sms_message_price_guard()")
-    op.execute("CREATE TRIGGER trg_sms_invoice_lines_immutable BEFORE UPDATE OR DELETE ON sms_invoice_lines FOR EACH ROW EXECUTE FUNCTION sms_pricing_forbid()")
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         for stmt in (
-            "DROP TRIGGER IF EXISTS trg_sms_invoice_lines_immutable ON sms_invoice_lines",
             "DROP TRIGGER IF EXISTS trg_sms_messages_price_guard ON sms_messages",
             "DROP FUNCTION IF EXISTS sms_message_price_guard()",
             "DROP TRIGGER IF EXISTS trg_sms_pricing_versions_guard ON sms_pricing_versions",

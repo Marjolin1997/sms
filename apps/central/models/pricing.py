@@ -200,7 +200,7 @@ def _never(*_) -> None:
     raise PricingImmutableError("pricing rows are never deleted; assignments are immutable history")
 
 
-_VERSION_ALWAYS = ("id", "price_book_id", "version", "imported", "created_by_id", "created_at")
+_VERSION_ALWAYS = ("id", "price_book_id", "version", "created_by_id", "created_at")
 
 
 @event.listens_for(PriceVersion, "before_update")
@@ -213,7 +213,7 @@ def _version_guard(_m, _c, t) -> None:
     ):  # active/retired: asnjë fushë financiare/identiteti s'ndryshon; vetëm active→retired
         _frozen(
             t,
-            ("effective_from", "content_hash", "activated_at", "activated_by_id"),
+            ("effective_from", "content_hash", "activated_at", "activated_by_id", "imported"),
             "activated price version",
         )
         if old_status == V_RETIRED or (

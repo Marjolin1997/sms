@@ -222,11 +222,11 @@ def _triggers() -> None:
     op.execute(
         "CREATE OR REPLACE FUNCTION central_price_versions_guard() RETURNS trigger AS $$ "
         "BEGIN IF NEW.id IS DISTINCT FROM OLD.id OR NEW.price_book_id IS DISTINCT FROM OLD.price_book_id "
-        "OR NEW.version IS DISTINCT FROM OLD.version OR NEW.imported IS DISTINCT FROM OLD.imported THEN "
+        "OR NEW.version IS DISTINCT FROM OLD.version THEN "
         "RAISE EXCEPTION 'price version identity is immutable' USING ERRCODE = '55000'; END IF; "
         "IF OLD.status <> 'draft' AND (NEW.effective_from IS DISTINCT FROM OLD.effective_from "
         "OR NEW.content_hash IS DISTINCT FROM OLD.content_hash OR NEW.activated_at IS DISTINCT FROM OLD.activated_at "
-        "OR NEW.activated_by_id IS DISTINCT FROM OLD.activated_by_id) THEN "
+        "OR NEW.activated_by_id IS DISTINCT FROM OLD.activated_by_id OR NEW.imported IS DISTINCT FROM OLD.imported) THEN "
         "RAISE EXCEPTION 'an activated price version is immutable' USING ERRCODE = '55000'; END IF; "
         "IF OLD.status = 'retired' AND NEW.status IS DISTINCT FROM OLD.status THEN "
         "RAISE EXCEPTION 'retired is final' USING ERRCODE = '55000'; END IF; "
