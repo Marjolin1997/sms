@@ -116,7 +116,16 @@ def complete(
         # Para mund të kenë ardhur me shumë tjetër: s'kreditojmë automatikisht, kërkon rakordim.
         p.status, p.failure_reason, p.completed_at = PaymentStatus.FAILED, "amount_mismatch", now
         raise Conflict("amount or currency does not match the payment; needs manual reconciliation")
-    _apply(db, p, now)
+    try:
+        _apply(db, p, now)
+    except wallets.MoneyAuthorityFrozen:
+        # M9-c: kredia lokale është e ngrirë; paraja s'humbet në heshtje — kërkon rakordim manual.
+        p.status, p.failure_reason, p.completed_at = (
+            PaymentStatus.FAILED, "money_authority_frozen", now,
+        )  # fmt: skip
+        raise Conflict(
+            "local credit is frozen by SMS_MONEY_AUTHORITY; needs manual reconciliation"
+        ) from None
     p.status, p.completed_at = PaymentStatus.SUCCEEDED, now
     events.emit(db, worker_owner(db, p), "payment.succeeded", "payment", p.id,
                 {"payment_id": p.id, "purpose": p.purpose.value, "amount": str(p.amount),
@@ -140,6 +149,7 @@ def _apply(db: Session, p: Payment, now: datetime) -> None:
         p.failure_reason = "invoice_already_settled"
     else:
         wallet_id = p.wallet_id
+    wallets.assert_local_mint_allowed()  # M9-c: para se të krijohet top-up i varur
     t = wallets.create_topup(
         db, wallet_id, p.amount, TopupMethod.ELECTRONIC,
         external_ref=f"{p.provider}:{p.external_id}",

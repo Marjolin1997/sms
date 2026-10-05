@@ -79,6 +79,23 @@ services:
       interval: 30s
       start_period: 30s
 
+  # M9-c (opsional, `--profile money-sync`): consumer i `cp.money.v1`. Boshe kur SMS_MONEY_AUTHORITY=local.
+  # Një aktiv për DB (kyç advisory i veçantë). Kredenciali Ed25519 duhet të ketë scope `money:read` te Central
+  # (`create_service_credential --scope money:read`); mund të jetë i njëjti klient me sync:read.
+  money-sync:
+    <<: *app
+    profiles: ["money-sync"]
+    command: python -m app.worker --role money_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
   web:
     build:
       context: .

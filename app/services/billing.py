@@ -278,7 +278,7 @@ def generate_invoice(
         events.emit(db, worker_owner(db, inv), "invoice.issued", "invoice", inv.number,
                     {"invoice_id": inv.number, "total": str(inv.total), "currency": inv.currency,
                      "due_at": inv.due_at.isoformat()})  # fmt: skip
-        if sub.auto_pay:
+        if sub.auto_pay and settings.money_authority == "local":  # M9-c: wallet-i është SMS-only
             try:
                 with db.begin_nested():
                     pay_from_wallet(db, worker_owner(db, inv), inv.id, now)
@@ -340,6 +340,10 @@ def pay_from_wallet(
         return inv
     if inv.status != InvoiceStatus.OPEN:
         raise Conflict(f"invoice is {inv.status.value}")
+    if settings.money_authority != "local":
+        # M9-c: nën shadow/central wallet-i është SMS-only (grant-e SMS, pa provenance produkti):
+        # faturat (tarifë plani + email overage) s'paguhen nga wallet-i.
+        raise Conflict("invoices cannot be paid from the wallet under SMS_MONEY_AUTHORITY≠local")
     w = db.scalar(select(Wallet).where(owned(Wallet, owner), Wallet.currency == inv.currency))
     if w is None:
         raise NotFound(f"no {inv.currency} wallet")

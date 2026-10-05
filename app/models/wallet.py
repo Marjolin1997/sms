@@ -70,6 +70,9 @@ class EntryType(str, enum.Enum):
     REFUND = "refund"
     ADJUSTMENT = "adjustment"
     INVOICE = "invoice"  # pagesë fature nga wallet (debit)
+    # M9-c: kredi e autorizuar nga Central (vetëm `money_sync`) + reversal-i konservativ i saj
+    GRANT = "grant"
+    GRANT_REVERSAL = "grant_reversal"
 
 
 class LedgerEntry(Base):

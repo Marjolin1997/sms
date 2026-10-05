@@ -261,6 +261,10 @@ class CreditGrant(Base):
     currency: Mapped[str] = mapped_column(String(3))
     amount: Mapped[Decimal] = mapped_column(MONEY)
     status: Mapped[str] = mapped_column(String(16), default=GRANT_ACTIVE, server_default="active")
+    # M9-c: tipi eksplicit i grantit (kurrë nga shënimi i lirë). `bootstrap` = autorizim i bilancit
+    # ekzistues të Enterprise-it (baseline); `baseline_ref` identifikon baseline-in, i vetmi për grant.
+    purpose: Mapped[str] = mapped_column(String(16), default="standard", server_default="standard")
+    baseline_ref: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[str] = mapped_column(String(128))
     request_hash: Mapped[str] = mapped_column(String(64))
     # lidhje informuese (jo kufizim): një pagesë mund të japë shumë grant-e
@@ -295,6 +299,19 @@ class CreditGrant(Base):
         Index("ix_credit_grants_account_status", "account_id", "status"),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint("status in ('active', 'reversed')", name="status"),
+        CheckConstraint("purpose in ('standard', 'bootstrap')", name="purpose"),
+        CheckConstraint(
+            "(purpose = 'bootstrap' AND baseline_ref IS NOT NULL AND length(baseline_ref) = 64) OR "
+            "(purpose = 'standard' AND baseline_ref IS NULL)",
+            name="purpose_baseline",
+        ),
+        Index(
+            "uq_credit_grants_baseline_ref",
+            "baseline_ref",
+            unique=True,
+            postgresql_where=text("baseline_ref IS NOT NULL"),
+            sqlite_where=text("baseline_ref IS NOT NULL"),
+        ),
         CheckConstraint(
             "(created_by_id IS NOT NULL AND created_by_label IS NULL) OR "
             "(created_by_id IS NULL AND created_by_label IS NOT NULL)",
@@ -376,7 +393,8 @@ PAYMENT_FROZEN = ("id", "enterprise_id", "account_id", "currency", "amount", "so
                   "created_at")  # fmt: skip
 GRANT_FROZEN = ("id", "account_id", "enterprise_id", "product_id", "currency", "amount",
                 "idempotency_key", "request_hash", "source_payment_id", "note",
-                "created_by_id", "created_by_label", "created_at")  # fmt: skip
+                "created_by_id", "created_by_label", "created_at", "purpose",
+                "baseline_ref")  # fmt: skip
 
 
 @event.listens_for(Payment, "before_update")

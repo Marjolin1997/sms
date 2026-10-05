@@ -70,7 +70,9 @@ def test_every_model_default_that_used_utcnow_is_still_a_callable_returning_awar
                 v = d.arg(None)  # SQLAlchemy e mbështjell callable-in me argumentin e kontekstit
                 if isinstance(v, datetime):
                     assert v.tzinfo is UTC, (table.name, col.name)
-    assert n == 48  # snapshot: 45 para M7-d + 3 të `sms_entitlements` (uuid4, 2×utcnow)
+    assert (
+        n == 51
+    )  # snapshot: 45 para M7-d + 3 `sms_entitlements` + 3 M9-c (baseline.created_at, grant.created_at/updated_at)
 
 
 # --- Garda e varësisë -------------------------------------------------------------------------------------
@@ -142,11 +144,11 @@ def _snapshot():
 
 
 def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
-    """Snapshot i marrë mbi kodin PARA M3-b(i) (42 tabela, 417 kolona; M7-d: +2 tabela, +17 kolona; M7-g: +1 kolonë; M9-a: +2 kolona `dispatch_started_at`). Çdo ndryshim i skemës ORM duhet
+    """Snapshot i marrë mbi kodin PARA M3-b(i) (42 tabela, 417 kolona; M7-d: +2 tabela, +17 kolona; M7-g: +1 kolonë; M9-a: +2 kolona `dispatch_started_at`; M9-c: +3 tabela, +41 kolona: kursor/baseline/grant-e të parave). Çdo ndryshim i skemës ORM duhet
     ta përditësojë këtë skedar me qëllim (dhe me migrim); zhvendosjet strukturore s'duhet ta prekin."""
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
-    assert len(golden) == 44 and sum(len(v["columns"]) for v in golden.values()) == 437
+    assert len(golden) == 47 and sum(len(v["columns"]) for v in golden.values()) == 478
 
 
 @pytest.mark.skipif(

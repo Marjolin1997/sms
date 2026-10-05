@@ -312,6 +312,7 @@ def run_loop(
     backoff: Backoff | None = None,
     tick: Callable[[], None] | None = None,
     poll: Callable[..., PollOutcome] = poll_once,
+    staleness: Callable[..., object] | None = None,
 ) -> None:
     """Cikli i poller-it deri te `stop`. Pas suksesit kthehet te `poll_interval_s`; pas dështimit
     pret `Backoff` (1→30 s me jitter; 403: 300 s). Humbja e kyçit ⇒ riprovim para poll-it tjetër."""
@@ -323,7 +324,7 @@ def run_loop(
             _sleep(stop, poll_interval_s, tick)
             continue
         out = poll(factory, client, snapshot_interval_s=snapshot_interval_s)
-        check_staleness(factory)
+        (staleness or check_staleness)(factory)
         if out.ok:
             failures = 0
             backoff.reset()

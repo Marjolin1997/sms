@@ -9,6 +9,7 @@ from apps.central.api import (
     enterprise_products,
     errors,
     health,
+    internal_money,
     internal_sync,
     products,
     registration_admin,
@@ -42,6 +43,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.include_router(products.router)
     app.include_router(enterprise_products.router)
     app.include_router(internal_sync.router)
+    app.include_router(internal_money.router)
     app.include_router(registration_public.router)
     app.include_router(registration_admin.router)
     errors.install(app)

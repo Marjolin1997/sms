@@ -13,6 +13,7 @@ shpenzuar tashmë; zbatimi i sigurt në planin operacional (debit ≤ available 
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -42,6 +43,7 @@ from apps.central.services import (
     money_sequence,
 )
 
+_BASELINE_REF = re.compile(r"^[0-9a-f]{64}$")
 ACTION_CREATE, ACTION_REVERSE = "credit_grant.create", "credit_grant.reverse"
 RESOURCE = "credit_grant"
 
@@ -87,6 +89,7 @@ def _payload(g: CreditGrant, event_type: str) -> dict:
         "grant_id": str(g.id), "account_id": str(g.account_id),
         "enterprise_id": str(g.enterprise_id), "product_id": str(g.product_id),
         "amount": _fmt(g.amount), "currency": g.currency,
+        "purpose": g.purpose, "baseline_ref": g.baseline_ref,
     }  # fmt: skip
     if event_type == EVENT_GRANT_ISSUED:
         return {**base, "status": GRANT_ACTIVE,
@@ -106,9 +109,12 @@ def _emit(db: Session, g: CreditGrant, event_type: str, now: datetime) -> MoneyE
     return ev
 
 
-def _fingerprint(amount: Decimal, source_payment_id, note) -> str:
-    blob = json.dumps({"amount": _fmt(amount), "source_payment_id": str(source_payment_id)
-                       if source_payment_id else None, "note": note}, sort_keys=True)  # fmt: skip
+def _fingerprint(amount: Decimal, source_payment_id, note, purpose="standard", baseline_ref=None):
+    doc = {"amount": _fmt(amount), "source_payment_id": str(source_payment_id)
+           if source_payment_id else None, "note": note}  # fmt: skip
+    if purpose != "standard":  # grant-et standard mbajnë fingerprint-in e M9-b (pa ndryshim)
+        doc.update(purpose=purpose, baseline_ref=baseline_ref)
+    blob = json.dumps(doc, sort_keys=True)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -122,6 +128,8 @@ def issue(
     system: str | None = None,
     source_payment_id=None,
     note=None,
+    purpose: str = "standard",
+    baseline_ref: str | None = None,
     now: datetime | None = None,
 ) -> CreditGrant:
     """Emeton një grant nga fondet e alokueshme. Idempotent sipas `(account, idempotency_key)`: e
@@ -141,7 +149,14 @@ def issue(
     text_note = money_common.optional_text(note, "note")
     aid = money_common.uid(account_id, "account id")
     spid = money_common.uid(source_payment_id, "payment id") if source_payment_id else None
-    fp = _fingerprint(amt, spid, text_note)
+    if purpose not in ("standard", "bootstrap"):
+        raise Invalid("purpose must be 'standard' or 'bootstrap'")
+    if purpose == "bootstrap":
+        if not isinstance(baseline_ref, str) or not _BASELINE_REF.match(baseline_ref):
+            raise Invalid("a bootstrap grant requires baseline_ref (sha256 hex of the baseline)")
+    elif baseline_ref is not None:
+        raise Invalid("baseline_ref is only allowed for purpose=bootstrap")
+    fp = _fingerprint(amt, spid, text_note, purpose, baseline_ref)
     money_sequence.lock(db)
     acct: CreditAccount = credit_accounts.get(db, aid, lock=True)
     prior = db.scalar(select(CreditGrant).where(CreditGrant.account_id == aid,
@@ -151,6 +166,10 @@ def issue(
             raise Conflict("idempotency_key was already used with a different grant request")
         return prior
     credit_accounts.require_active(acct)
+    if baseline_ref is not None and db.scalar(
+        select(CreditGrant.id).where(CreditGrant.baseline_ref == baseline_ref)
+    ):
+        raise Conflict("a bootstrap grant already exists for this baseline_ref")
     if spid is not None:
         pay = db.get(Payment, spid)
         if pay is None or pay.account_id != aid:
@@ -165,6 +184,7 @@ def issue(
         account_id=aid, enterprise_id=acct.enterprise_id, product_id=acct.product_id,
         currency=acct.currency, amount=amt, status=GRANT_ACTIVE, idempotency_key=key,
         request_hash=fp, source_payment_id=spid, note=text_note, created_by_id=actor_id,
+        purpose=purpose, baseline_ref=baseline_ref,
         created_by_label=label, created_at=now,
     )  # fmt: skip
     db.add(g)
@@ -175,7 +195,8 @@ def issue(
     )  # fmt: skip
     ev = _emit(db, g, EVENT_GRANT_ISSUED, now)
     detail = {"grant_id": str(g.id), "amount": str(amt), "currency": acct.currency,
-              "account_id": str(aid), "ledger_seq": entry.seq, "event_seq": ev.seq}  # fmt: skip
+              "account_id": str(aid), "ledger_seq": entry.seq, "event_seq": ev.seq,
+              "purpose": purpose}  # fmt: skip
     if actor is not None:
         audit.record(db, actor, ACTION_CREATE, RESOURCE, g.id, detail, now=now)
     else:

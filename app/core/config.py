@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     # M8-c: aplikuesi M7 mund të krijojë tenant "shell" lokal nga gjendja Enterprise e Central.
     # Çelës i veçantë (NUK nënkuptohet nga mode=enforce); default false ⇒ kalohet si panjohur.
     cp_tenant_autocreate: bool = False
+    # M9-c: autoriteti i parave. local = sjellja e sotme; shadow = validim i cutover-it (grant-et e
+    # marra REGJISTROHEN, s'kreditojnë; mint lokal i ngrirë); central = vetëm grant-et e Central
+    # krijojnë kredi pozitive operacionale. Rikthimi central→local = ROLLBACK emergjent (config).
+    money_authority: Literal["local", "shadow", "central"] = "local"
+    # Në prodhim `central` kërkon konfirmim eksplicit pasi `money_authority_readiness` kaloi.
+    money_authority_ack: bool = False
+    money_poll_interval_seconds: int = Field(30, ge=5, le=3600)
     cp_base_url: str = ""
     cp_client_id: str = ""
     cp_key_id: str = ""
@@ -139,6 +146,13 @@ class Settings(BaseSettings):
             bad.append(
                 "SMS_CP_SYNC_MODE=enforce requires SMS_CP_ENFORCE_READINESS_ACK=true "
                 "(M7-f dry-run, unexplained mismatches = 0, shadow period reviewed)"
+            )
+        if self.money_authority != "local" and not self.cp_base_url.startswith("https://"):
+            bad.append("SMS_CP_BASE_URL must be https:// when SMS_MONEY_AUTHORITY is not local")
+        if self.money_authority == "central" and not self.money_authority_ack:
+            bad.append(
+                "SMS_MONEY_AUTHORITY=central requires SMS_MONEY_AUTHORITY_ACK=true "
+                "(scripts.money_authority_readiness passed on this database)"
             )
         return bad
 

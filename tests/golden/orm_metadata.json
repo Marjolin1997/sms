@@ -3218,6 +3218,431 @@
    "ix_sms_messages_queue:['status', 'next_attempt_at']:False"
   ]
  },
+ "sms_money_baselines": {
+  "columns": {
+   "available_at_cutover": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "baseline_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "created_by": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "currency": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(3)"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "gross_at_cutover": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "held_at_cutover": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "ledger_max_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "product_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "status": {
+    "default": "scalar:'active'",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "superseded_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "wallet_id": {
+    "default": null,
+    "fks": [
+     "sms_wallets.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_money_baselines_gross",
+   "CheckConstraint:ck_sms_money_baselines_ledger_max_id",
+   "CheckConstraint:ck_sms_money_baselines_non_negative",
+   "CheckConstraint:ck_sms_money_baselines_status",
+   "CheckConstraint:ck_sms_money_baselines_status_consistency",
+   "ForeignKeyConstraint:fk_sms_money_baselines_wallet_id_sms_wallets",
+   "PrimaryKeyConstraint:pk_sms_money_baselines",
+   "UniqueConstraint:uq_sms_money_baselines_baseline_ref"
+  ],
+  "indexes": [
+   "ix_sms_money_baselines_wallet_id:['wallet_id']:False",
+   "uq_sms_money_baselines_active_wallet:['wallet_id']:True"
+  ]
+ },
+ "sms_money_cursor": {
+  "columns": {
+   "authorization_generation": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "epoch": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "id": {
+    "default": "scalar:1",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "last_error": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "TEXT"
+   },
+   "last_error_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "last_seq": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "BIGINT"
+   },
+   "last_success_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_money_cursor_singleton",
+   "PrimaryKeyConstraint:pk_sms_money_cursor"
+  ],
+  "indexes": []
+ },
+ "sms_money_grants": {
+  "columns": {
+   "account_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "amount": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "NUMERIC(20, 6)"
+   },
+   "baseline_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "currency": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(3)"
+   },
+   "detail": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(500)"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "grant_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "issued_event_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "issued_payload_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "issued_seq": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "ledger_entry_id": {
+    "default": null,
+    "fks": [
+     "sms_ledger_entries.id"
+    ],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "product_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "purpose": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "reversal_entry_id": {
+    "default": null,
+    "fks": [
+     "sms_ledger_entries.id"
+    ],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "reversed_event_id": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "reversed_seq": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "status": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(32)"
+   },
+   "updated_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "wallet_id": {
+    "default": null,
+    "fks": [
+     "sms_wallets.id"
+    ],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_money_grants_amount_positive",
+   "CheckConstraint:ck_sms_money_grants_purpose",
+   "CheckConstraint:ck_sms_money_grants_status",
+   "ForeignKeyConstraint:fk_sms_money_grants_ledger_entry_id_sms_ledger_entries",
+   "ForeignKeyConstraint:fk_sms_money_grants_reversal_entry_id_sms_ledger_entries",
+   "ForeignKeyConstraint:fk_sms_money_grants_wallet_id_sms_wallets",
+   "PrimaryKeyConstraint:pk_sms_money_grants",
+   "UniqueConstraint:uq_sms_money_grants_issued_event_id",
+   "UniqueConstraint:uq_sms_money_grants_issued_seq",
+   "UniqueConstraint:uq_sms_money_grants_reversed_event_id"
+  ],
+  "indexes": [
+   "ix_sms_money_grants_enterprise_id:['enterprise_id']:False",
+   "ix_sms_money_grants_status:['status']:False",
+   "uq_sms_money_grants_matched_baseline:['baseline_ref']:True"
+  ]
+ },
  "sms_payments": {
   "columns": {
    "amount": {

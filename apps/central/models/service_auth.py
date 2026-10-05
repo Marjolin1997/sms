@@ -28,7 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from apps.central.core.db import Base
 from apps.central.core.timeutil import utcnow
 
-ALLOWED_SCOPES = frozenset({"sync:read"})
+ALLOWED_SCOPES = frozenset({"sync:read", "money:read"})  # M9-c: money:read ≠ sync:read (ndarë)
 
 
 class CredentialStatus(enum.StrEnum):

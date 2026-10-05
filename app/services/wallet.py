@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.context import worker_owner
 from app.core.errors import (  # noqa: F401  (Conflict/NotFound: alias + përdorim)
     Conflict,
@@ -37,6 +38,46 @@ class InsufficientFunds(DomainError):
 
 class InvalidAmount(DomainError):
     code = "invalid_amount"
+
+
+class MoneyAuthorityFrozen(DomainError):
+    """M9-c: krijimi lokal i kredisë pozitive është i bllokuar (SMS_MONEY_AUTHORITY ≠ local)."""
+
+    code = "money_authority_frozen"
+
+
+AUTHORITATIVE_TYPES = frozenset({EntryType.GRANT, EntryType.GRANT_REVERSAL})
+
+
+def assert_local_mint_allowed() -> None:
+    """Porta e vetme e kredisë lokale: vetëm `local` lejon top-up/pagesë/rregullim pozitiv/refund."""
+    if settings.money_authority != "local":
+        raise MoneyAuthorityFrozen(
+            f"local credit creation is frozen (SMS_MONEY_AUTHORITY={settings.money_authority}); "
+            "positive credit may only come from Central grants"
+        )
+
+
+def check_posting(entry_type: EntryType, available_delta: Decimal, held_delta: Decimal,
+                  authoritative: bool) -> None:  # fmt: skip
+    """Invariant i hekurt mbi ÇDO rresht ledger (thirret nga `_post` dhe nga guard-i ORM).
+    Mint = rritje neto e parave të wallet-it (available + held). reserve/capture/release/charge ≤ 0."""
+    if entry_type in AUTHORITATIVE_TYPES and not authoritative:
+        raise MoneyAuthorityFrozen(f"{entry_type.value} entries are posted only by money_sync")
+    if available_delta + held_delta > 0:
+        if authoritative and entry_type == EntryType.GRANT:
+            if settings.money_authority != "central":
+                raise MoneyAuthorityFrozen("grant credit is posted only under authority=central")
+            return
+        assert_local_mint_allowed()
+
+
+@event.listens_for(LedgerEntry, "before_insert")
+def _ledger_gate(
+    _m, _c, target: LedgerEntry
+) -> None:  # mbrojtje në thellësi: INSERT i drejtpërdrejtë
+    check_posting(target.entry_type, target.available_delta, target.held_delta,
+                  bool(getattr(target, "_authoritative", False)))  # fmt: skip
 
 
 def money(value: Decimal | str | int) -> Decimal:
@@ -98,8 +139,12 @@ def _post(
     ref_type: str | None = None,
     ref_id: str | None = None,
     note: str | None = None,
+    *,
+    authoritative: bool = False,
 ) -> LedgerEntry:
-    """Shton një rresht në ledger. Thirret vetëm me wallet-in të kyçur."""
+    """Shton një rresht në ledger. Thirret vetëm me wallet-in të kyçur. `authoritative=True` vetëm nga
+    `money_sync` (GRANT/GRANT_REVERSAL); çdo rresht tjetër kalon `check_posting`."""
+    check_posting(entry_type, available_delta, held_delta, authoritative)
     dup = db.scalar(
         select(LedgerEntry).where(
             LedgerEntry.wallet_id == wallet_id, LedgerEntry.idempotency_key == key
@@ -128,6 +173,7 @@ def _post(
         ref_id=ref_id,
         note=note,
     )
+    entry._authoritative = authoritative
     db.add(entry)
     db.flush()
     _check_low_balance(db, wallet_id, entry.available_after)
@@ -289,12 +335,32 @@ def release(db: Session, hold_id: int) -> Hold:
     return hold
 
 
-def refund(db: Session, wallet_id: int, amount, key: str, note: str | None = None) -> LedgerEntry:
-    """Rimbursim pas capture (p.sh. DLR 'failed' i vonuar). Idempotent sipas key."""
+def refund(db: Session, hold_id: int, amount, key: str, note: str | None = None) -> LedgerEntry:
+    """Rimbursim pas capture (p.sh. DLR 'failed' i vonuar). M9-c: i KUFIZUAR — vetëm mbi një hold të
+    kapur dhe në total ≤ shumës së kapur (s'është më burim kredie arbitrare); idempotent sipas key;
+    i bllokuar plotësisht kur SMS_MONEY_AUTHORITY ≠ local (kredi pozitive)."""
     amount = positive(amount)
-    lock_wallet(db, wallet_id)
+    hold = _locked_hold(db, hold_id)
+    if hold.status != HoldStatus.CAPTURED:
+        raise Conflict("only a captured hold can be refunded")
+    rkey = f"refund:{key}"
+    dup = db.scalar(
+        select(LedgerEntry).where(LedgerEntry.wallet_id == hold.wallet_id,
+                                  LedgerEntry.idempotency_key == rkey)
+    )  # fmt: skip
+    if dup is None:
+        already = db.scalar(
+            select(func.coalesce(func.sum(LedgerEntry.available_delta), 0)).where(
+                LedgerEntry.wallet_id == hold.wallet_id,
+                LedgerEntry.entry_type == EntryType.REFUND,
+                LedgerEntry.ref_type == "hold_refund",
+                LedgerEntry.ref_id == str(hold.id),
+            )
+        )
+        if Decimal(already) + amount > hold.captured_amount:
+            raise InvalidAmount("refund exceeds the captured amount of the hold")
     return _post(
-        db, wallet_id, EntryType.REFUND, amount, ZERO, f"refund:{key}", "refund", key, note
+        db, hold.wallet_id, EntryType.REFUND, amount, ZERO, rkey, "hold_refund", str(hold.id), note
     )
 
 

@@ -26,6 +26,7 @@ log = logging.getLogger("sms.cp.client")
 
 AUDIENCE = "sms-central-sync"
 SCOPE = "sync:read"
+MONEY_SCOPE = "money:read"  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
 LIFETIME_S = 120  # ≤ 300 (kufiri i Central); i shkurtër: mbrojtje ndaj rrjedhjes
 SNAPSHOT_REQUIRED_CODES = frozenset(
     {
@@ -59,6 +60,17 @@ class CpTransportError(CpError):  # rrjet, timeout, 5xx, 429, përgjigje e palex
 
 class CpProtocolError(CpError):  # përgjigje që s'përputhet me kontratën
     pass
+
+
+class CpMoneyConflict(CpError):  # 409 i feed-it të parave (epoch/generation/cursor_ahead)
+    def __init__(self, code: str):
+        super().__init__(f"409 {code}")
+        self.code = code
+
+
+MONEY_CONFLICT_CODES = frozenset(
+    {"money_epoch_mismatch", "money_authorization_changed", "money_cursor_ahead"}
+)
 
 
 class CpSnapshotRequired(CpError):  # 409/410 me action=snapshot
@@ -130,12 +142,12 @@ def config_from_settings(s: Settings) -> ControlPlaneConfig:
     )  # fmt: skip
 
 
-def make_assertion(cfg: ControlPlaneConfig, now: datetime | None = None) -> str:
+def make_assertion(cfg: ControlPlaneConfig, now: datetime | None = None, scope: str = SCOPE) -> str:
     """Assertion i ri (jti unik) për NJË kërkesë."""
     iat = int((now or datetime.now(UTC)).timestamp())
     claims = {
         "iss": cfg.client_id, "sub": cfg.client_id, "aud": AUDIENCE, "iat": iat,
-        "exp": iat + LIFETIME_S, "jti": uuid.uuid4().hex, "scope": SCOPE,
+        "exp": iat + LIFETIME_S, "jti": uuid.uuid4().hex, "scope": scope,
     }  # fmt: skip
     return jwt.encode(claims, cfg.private_key, algorithm="EdDSA", headers={"kid": cfg.key_id})
 
@@ -176,8 +188,11 @@ class ControlPlaneClient:
     """`get_snapshot` / `get_changes`; asgjë tjetër. `http` injektohet në teste (httpx.Client,
     MockTransport ose TestClient i Central); në prodhim krijohet me timeout-in e konfiguruar."""
 
-    def __init__(self, cfg: ControlPlaneConfig, http: httpx.Client | None = None):
+    def __init__(
+        self, cfg: ControlPlaneConfig, http: httpx.Client | None = None, scope: str = SCOPE
+    ):
         self._cfg = cfg
+        self._scope = scope
         self._http = http or httpx.Client(timeout=cfg.timeout_s)
 
     def close(self) -> None:
@@ -187,7 +202,7 @@ class ControlPlaneClient:
         try:
             r = self._http.get(
                 self._cfg.base_url + path, params=params, timeout=self._cfg.timeout_s,
-                headers={"Authorization": f"Bearer {make_assertion(self._cfg)}"},
+                headers={"Authorization": f"Bearer {make_assertion(self._cfg, scope=self._scope)}"},
             )  # fmt: skip
         except httpx.HTTPError as e:  # timeout, lidhje, TLS, ...
             raise CpTransportError(f"{type(e).__name__} calling {path}") from None
@@ -205,6 +220,8 @@ class ControlPlaneClient:
             code = _error_code(r)
             if code in SNAPSHOT_REQUIRED_CODES:
                 raise CpSnapshotRequired(code, sc)
+            if code in MONEY_CONFLICT_CODES:
+                raise CpMoneyConflict(code)
             raise CpProtocolError(f"{sc} with unexpected code {code!r}")
         if sc == 429 or sc >= 500:
             raise CpTransportError(f"{sc} from central")
@@ -220,6 +237,25 @@ class ControlPlaneClient:
     ) -> ChangesPage:
         d = self._get(
             "/internal/sync/changes",
+            {"after_seq": after_seq, "epoch": str(epoch), "generation": generation, "limit": limit},
+        )
+        return parse_changes(d)
+
+    # --- M9-c: feed-i i parave (scope `money:read`; instancë me `scope=MONEY_SCOPE`) ---
+
+    def get_money_state(self) -> dict:
+        d = self._get("/internal/money/state")
+        try:
+            return {"epoch": uuid.UUID(str(d["epoch"])), "generation": _int(d, "authorization_generation"),
+                    "latest_seq": _int(d, "latest_seq")}  # fmt: skip
+        except (KeyError, ValueError, TypeError):
+            raise CpProtocolError("money state response is malformed") from None
+
+    def get_money_changes(
+        self, after_seq: int, epoch: uuid.UUID, generation: int, limit: int = 200
+    ) -> ChangesPage:
+        d = self._get(
+            "/internal/money/changes",
             {"after_seq": after_seq, "epoch": str(epoch), "generation": generation, "limit": limit},
         )
         return parse_changes(d)

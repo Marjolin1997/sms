@@ -75,7 +75,12 @@ def _topup_out(t: Topup) -> TopupOut:
 
 
 def _http(e: svc.WalletError) -> HTTPException:
-    status = {"not_found": 404, "conflict": 409, "insufficient_funds": 402}.get(e.code, 422)
+    status = {
+        "not_found": 404,
+        "conflict": 409,
+        "insufficient_funds": 402,
+        "money_authority_frozen": 409,
+    }.get(e.code, 422)
     return HTTPException(status, {"code": e.code, "message": str(e)})
 
 

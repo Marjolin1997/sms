@@ -164,3 +164,70 @@ Vendimet finale të miratuara: capture mbetet në DLR `delivered` · `UNKNOWN` m
 **Transaksioni:** shërbimet s'bëjnë commit; mutacioni + ledger + ngjarje + audit dalin/zhduken bashkë. **Mbrojtjet e pandryshueshmërisë:** ledger/events ORM + trigger PG `UPDATE/DELETE/TRUNCATE` (SQL i drejtpërdrejtë refuzohet); llogari/pagesë/grant: fusha të ngrira + statusi përfundimtar + pa DELETE (ORM + trigger PG).
 **Audit:** `credit_account.create|status_change`, `payment.create|approve|reject`, `credit_grant.create|reverse`, `credit_adjustment.create`, `debit_adjustment.create`; aktor njeri ose `system:<emër>`.
 **Mbetet te M9-c:** `cp.money.v1` (feed i `money_events` + scope-e shërbimi), aplikuesi i grant-it te Enterprise (`GRANT`/`GRANT_REVERSAL` në ledger lokal, kursor, idempotencë `grant:{id}`), `SMS_MONEY_AUTHORITY`, mbyllja e minting lokal pozitiv, reversal operacional, provat e outage/no-mint/replay. Pa API admin (M9-f), pa rakordim (M9-d), pa çmime (M9-e).
+
+## M9-c (zbatuar) — `cp.money.v1` + aplikuesi i grant-eve + `SMS_MONEY_AUTHORITY`
+
+**Rrjedha e vetme e autoritetit:** Central `money_events` → feed i autentikuar `GET /internal/money/changes`
+(`cp.money.v1`, scope `money:read`, autorizim per enterprise) → consumer Enterprise (`--role money_control_plane`)
+→ `sms_money_grants` + rresht ledger `GRANT` (`grant:<uuid>`, UNIQUE sipas wallet+key) → wallet-i lokal i
+shpenzueshëm. **Nuk ka thirrje të sinkronizuar drejt Central në rrugën e dërgimit** (provuar me test AST + test me rrjetin
+të bllokuar). Central jashtë funksionit ⇒ kredia e sinkronizuar mbetet e shpenzueshme, s'ka kredi të re, asgjë s'çaktivizohet.
+
+### Formulat dhe problemi i migrimit (vendimi i miratuar)
+`available = available_after` i rreshtit të fundit; `held = Σ held_delta` (= Σ ACTIVE holds); `gross = available + held`.
+Një Enterprise ekzistues ka p.sh. 1000 + 200 të krijuara lokalisht. Një grant "fillestar" i postuar si kredi normale do ta
+dyfishonte (2400). Zgjidhja = **baseline-match i pandryshueshëm** (Opsioni A): baseline regjistron autorizimin e parasë që
+ekziston, jo një wallet të dytë.
+
+1. **Baseline** (`scripts.money_authority baseline-create`, kërkon `SMS_MONEY_AUTHORITY=shadow`): `sms_money_baselines`
+   ruan `available/held/gross_at_cutover`, `ledger_max_id`, wallet, enterprise, monedhë, produkt SMS, `created_at/by` dhe
+   `baseline_ref` = SHA-256 i JSON-it kanonik të këtyre fushave (rillogaritet nga readiness). Fushat financiare janë të
+   pandryshueshme (guard ORM + trigger PG; `gross = available + held` si CHECK); vetëm `status` (active→superseded).
+   Gross përfshin holds aktive; baseline-i **nuk** krahasohet me bilancin aktual (trafiku mund ta ndryshojë).
+2. **Grant bootstrap** në Central: `purpose=bootstrap` + `baseline_ref` (fusha të ngrira, jo shënim i lirë; UNIQUE: një
+   baseline = një bootstrap). Aplikohet vetëm nëse `amount == baseline.gross_at_cutover`, monedha/produkti/enterprise/wallet
+   përputhen, baseline-i është aktiv me hash të vlefshëm, s'ka bootstrap tjetër të përputhur dhe **s'ka mint pozitiv lokal pas
+   baseline-it** (provuar nga ledger-i: `id > ledger_max_id`, rritje neto > 0, tip ≠ GRANT). Rezultati: `matched_to_existing_balance`,
+   rresht `GRANT` me **delta 0** — asnjë rritje bilanci. Çdo mospërputhje ⇒ `baseline_mismatch`, pa mutacion, pa fallback në
+   GRANT normal; kursori përparon vetëm pas regjistrimit durabël; readiness dështon.
+3. **Modalitetet:** `local` (default, sjellja e sotme; consumer boshe) · `shadow` (mint lokal i ngrirë; grant-et normale
+   REGJISTROHEN `deferred_shadow`, s'kreditojnë; fondet ekzistuese shpenzohen normalisht) · `central` (vetëm GRANT i Central krijon
+   kredi; `deferred_shadow` kreditohen sipas `issued_seq` në çdo cikël; wallet bosh krijohet për grantin e parë).
+   reserve/capture/release/dërgim/rregullim negativ vazhdojnë në të gjitha.
+4. **Porta e mint-it:** `wallet.check_posting` (thirret nga `_post` dhe nga guard-i ORM `before_insert` i `LedgerEntry`):
+   çdo rresht me rritje neto (available+held) > 0 bllokohet kur authority ≠ local (përveç GRANT autoritativ nën `central`);
+   GRANT/GRANT_REVERSAL postohen vetëm nga `money_sync` (`authoritative=True`). **`wallet.refund` u kufizua:** merr `hold_id`,
+   vetëm mbi hold të kapur, total ≤ shumës së kapur, idempotent (nuk është më burim kredie arbitrare) dhe plotësisht i bllokuar
+   nën shadow/central. `payments._apply` dështon me `money_authority_frozen` (pagesa → FAILED, rakordim manual).
+   **Wallet-i është SMS-only nën shadow/central:** `billing.pay_from_wallet`/auto-pay bllokohen (faturat përmbajnë tarifë plani
+   + email overage ⇒ pa provenance produkti); faturat paguhen online.
+5. **Mapimi (pa emra/FX):** `(enterprise_id, product_id, currency)` → wallet `(owner_ref, currency)` vetëm nëse `product_id` është
+   produkti i VETËM me kanal `sms` i enterprise-it (entitlements cp.v1, jo `withdrawn`). Zero/shumë produkte SMS, produkt
+   email, enterprise i panjohur ⇒ `unmapped` (regjistrohet, rivlerësohet kur mapimi bëhet i vlefshëm, bllokon readiness).
+6. **Reversal konservativ:** i regjistruar para kredisë (`deferred/mismatch/unmapped`) ⇒ `voided_before_apply`; i aplikuar ⇒ debit
+   `GRANT_REVERSAL` vetëm nëse `available ≥ shuma` (holds aktive s'preken); përndryshe `reconciliation_required` (pa mutacion,
+   kurrë negativ, kursori përparon pas regjistrimit). Pa provenance lot/FIFO. Zgjidhja finale e rakordimit është M9-d.
+7. **Kursori/protokolli:** `sms_money_cursor` (epoch, generation, last_seq, last_success_at, last_error). Faqja = një transaksion
+   (kursor→ngjarje idempotente sipas `grant_id`+`event_id`+hash→kursor). Ngjarje e palexueshme/në konflikt ⇒ kursori ndalet para saj
+   (prefiksi i mirë aplikohet), `last_error`, alarm. `money_authorization_changed` ⇒ rebase dhe riprodhim nga 0 (idempotent);
+   `money_epoch_mismatch`/`cursor_ahead` ⇒ veprim operatori (`reset-cursor --ack-replay`). Nuk ka snapshot parash.
+8. **Readiness** (`python -m scripts.money_authority_readiness [--json]`, vetëm lexim, kodi 1 me FAIL): mode, consumer i konfiguruar,
+   kursor i shëndetshëm (≤ 15 min, pa gabim), baseline per wallet ekzistues, hash valid, bootstrap i përputhur, **asnjë mint pozitiv
+   pas baseline-it**, asnjë rresht GRANT jetim, held = Σ holds aktive, ledger = Σ delta, bilanc jo-negativ, mapim i qartë, asnjë
+   mismatch/unmapped/reversal i pazgjidhur, `queue_readiness` pa FAIL, ACK në prodhim (`SMS_MONEY_AUTHORITY_ACK`; vendoset
+   kur readiness del PASS në shadow, para kalimit në `central`). Prodhimi `central` pa ACK ⇒ aplikacioni refuzon të nisë.
+
+### Runbook cutover (një enterprise me wallet ekzistues)
+1. Central: kredito llogarinë (pagesë ose rregullim manual i miratuar me maker-checker) për të paktën `gross`. Central nuk mutoi asgjë te Enterprise.
+2. Central: kredencial me scope `money:read` (`create_service_credential --scope money:read`) dhe autorizim per enterprise. Enterprise: `SMS_MONEY_AUTHORITY=shadow`, rinis web+worker; nis `money-sync` (`--role money_control_plane`).
+3. Parakusht: sinkronizimi cp.v1 (M7) ka aplikuar entitlement-et SMS të enterprise-it (mapimi i produktit lexon `sms_entitlements`).
+   `python -m scripts.money_authority baseline-create --wallet-id N --by <operator>` → jep `baseline_ref` te stafi Central.
+4. Central: `grants.issue(account, gross, purpose='bootstrap', baseline_ref=...)`; pritet `matched_to_existing_balance`.
+5. `python -m scripts.money_authority_readiness` ⇒ PASS (në prodhim: vendos `SMS_MONEY_AUTHORITY_ACK=true`).
+6. `SMS_MONEY_AUTHORITY=central`; rinis. Grant-et e regjistruara kreditohen sipas rendit.
+**Rollback emergjent central→local:** vetëm konfigurim; ledger-i i pandryshueshëm dhe historia e grant-eve mbeten (s'fshihen).
+Pas rikthimit mint-i lokal rihapet — çdo mint lokal i mëvonshëm do ta dështojë readiness-in te cutover i radhës (kërkon baseline të ri).
+
+### Çfarë NUK bën M9-c
+Pa rakordim të plotë (M9-d), pa çmime/FX (M9-e), pa API/UI klienti për para, pa ndryshim të semantikës së ngarkimit SMS (M9-a).
+Borxhe: `sms_money_grants` s'ka retention; grant-et në `reconciliation_required` zgjidhen manualisht deri te M9-d.
