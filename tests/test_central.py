@@ -128,7 +128,8 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/enterprises/{enterprise_id}/products",
         "/admin/enterprises/{enterprise_id}/products/{assignment_id}",
         "/internal/sync/changes", "/internal/sync/snapshot",
-        "/internal/money/changes", "/internal/money/state",
+        "/internal/money/changes", "/internal/money/state", "/internal/money/usage-reports",
+        "/internal/money/reconciliation",
         # M8-d: regjistrimi (publik + admin)
         "/registration", "/registration/products", "/registration/{registration_id}/status",
         "/admin/registrations", "/admin/registrations/{registration_id}",
@@ -168,8 +169,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0019_next.py").write_text(
-        'revision = "0019"\ndown_revision = "0018"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0020_next.py").write_text(
+        'revision = "0020"\ndown_revision = "0019"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -209,6 +210,7 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "payments",
         "credit_grants",
         "money_events",
+        "usage_reports",
         "registration_products",
         "product_registration_policy",
     }
@@ -242,6 +244,7 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "payments",
         "credit_grants",
         "money_events",
+        "usage_reports",
         "registration_products",
         "product_registration_policy",
     }
@@ -283,6 +286,7 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "payments",
         "credit_grants",
         "money_events",
+        "usage_reports",
         "registration_products",
         "product_registration_policy",
     }
@@ -372,5 +376,12 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "bot_challenge",
         "public_registration_require_challenge",
         "trusted_proxy_hops",
+        "money_report_fresh_seconds",
+        "money_report_stale_seconds",
+        "money_cursor_lag_grace_seconds",
+        "money_cursor_stale_warn_seconds",
+        "money_cursor_stale_fail_seconds",
+        "money_unresolved_reversal_fail_seconds",
+        "money_report_missing_grace_seconds",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"

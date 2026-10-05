@@ -271,7 +271,7 @@ def test_end_to_end_bootstrap_then_grants_then_reversal(env, db, monkeypatch):
     assert bal(db, w) == (D("10"), D("2"))  # 12, jo 24; normali s'kreditoi në shadow
     # readiness (pa queue/config të jashtëm) kalon
     monkeypatch.setattr(cc, "config_from_settings", lambda s: object())
-    rep = {c.name: c for c in mr.evaluate(db, include_queue=False)}
+    rep = {c.name: c for c in mr.evaluate(db, include_queue=False, include_usage=False)}
     assert mr.ok(list(rep.values())), {k: v.reason for k, v in rep.items() if v.level == "FAIL"}
     # cutover: central → grant-i i regjistruar kreditohet
     mode(monkeypatch, "central")
@@ -303,7 +303,7 @@ def test_end_to_end_bootstrap_then_grants_then_reversal(env, db, monkeypatch):
     reverse(env, boot)
     assert mp.poll_once(SessionLocal, client).ok
     assert grant_row(db, boot).status == G_RECON and bal(db, w) == (D("4"), D("5"))
-    rep = {c.name: c for c in mr.evaluate(db, include_queue=False)}
+    rep = {c.name: c for c in mr.evaluate(db, include_queue=False, include_usage=False)}
     assert rep["no_unresolved_reversal"].level == "FAIL"
 
 
@@ -328,7 +328,9 @@ def cfg_ok(monkeypatch):
 
 
 def checks(db, **kw):
-    return {c.name: c for c in mr.evaluate(db, now=NOW, include_queue=False, **kw)}
+    return {
+        c.name: c for c in mr.evaluate(db, now=NOW, include_queue=False, include_usage=False, **kw)
+    }
 
 
 def ready_world(db, monkeypatch):
@@ -410,7 +412,9 @@ def test_readiness_cursor_and_consumer_and_mode_checks(db, monkeypatch, cfg_ok):
     assert "money_cursor_healthy" not in fails(checks(db))
     late = {
         c.name: c
-        for c in mr.evaluate(db, now=datetime(2030, 1, 2, tzinfo=UTC), include_queue=False)
+        for c in mr.evaluate(
+            db, now=datetime(2030, 1, 2, tzinfo=UTC), include_queue=False, include_usage=False
+        )
     }
     assert "money_cursor_healthy" in fails(late)  # i vjetruar
     ms.record_error(db, "blocked on seq 9")
@@ -455,7 +459,7 @@ def test_production_requires_the_explicit_ack_for_central(monkeypatch):
     s = settings.model_copy(update={"money_authority": "central", "money_authority_ack": False,
                                     "cp_base_url": "https://central.example"})  # fmt: skip
     assert any("SMS_MONEY_AUTHORITY_ACK" in p for p in s.production_problems())
-    s2 = s.model_copy(update={"money_authority_ack": True})
+    s2 = s.model_copy(update={"money_authority_ack": True, "money_reporting": True})
     assert not any("SMS_MONEY_AUTHORITY" in p for p in s2.production_problems())
     s3 = s.model_copy(update={"money_authority": "shadow", "cp_base_url": "http://insecure"})
     assert any("https" in p and "MONEY_AUTHORITY" in p for p in s3.production_problems())
@@ -469,10 +473,10 @@ def test_production_requires_the_explicit_ack_for_central(monkeypatch):
 def test_cli_readiness_exit_codes_and_json(db, monkeypatch, capsys, cfg_ok):
     from scripts import money_authority_readiness as cli
 
-    assert cli.main(["--skip-queue"]) == 1  # authority=local
+    assert cli.main(["--skip-queue", "--skip-usage"]) == 1  # authority=local
     assert "FAIL authority_mode" in capsys.readouterr().out
     ready_world(db, monkeypatch)
-    assert cli.main(["--skip-queue", "--json"]) in (0, 1)
+    assert cli.main(["--skip-queue", "--skip-usage", "--json"]) in (0, 1)
     rows = json.loads(capsys.readouterr().out)
     assert all(set(r) == {"name", "level", "reason"} for r in rows)
 

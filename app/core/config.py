@@ -108,6 +108,15 @@ class Settings(BaseSettings):
     # Në prodhim `central` kërkon konfirmim eksplicit pasi `money_authority_readiness` kaloi.
     money_authority_ack: bool = False
     money_poll_interval_seconds: int = Field(30, ge=5, le=3600)
+    # M9-d: raportimi i përdorimit drejt Central (roli `money_usage_reporter`; jo në dërgim).
+    # Opsional në local; `central` në prodhim e kërkon (readiness + production_problems).
+    money_reporting: bool = False
+    money_report_interval_seconds: int = Field(300, ge=30, le=3600)
+    # Raport i ri edhe pa ndryshim përmbajtjeje vetëm çdo kaq sekonda (heartbeat; ≤ fresh).
+    money_report_heartbeat_seconds: int = Field(600, ge=60, le=3600)
+    # Mosha e raportit të dërguar: ≤ fresh = OK · ≤ stale = WARN · më shumë = FAIL (readiness).
+    money_report_fresh_seconds: int = Field(600, ge=60, le=86400)
+    money_report_stale_seconds: int = Field(1800, ge=60, le=604800)
     cp_base_url: str = ""
     cp_client_id: str = ""
     cp_key_id: str = ""
@@ -154,6 +163,8 @@ class Settings(BaseSettings):
                 "SMS_MONEY_AUTHORITY=central requires SMS_MONEY_AUTHORITY_ACK=true "
                 "(scripts.money_authority_readiness passed on this database)"
             )
+        if self.money_authority == "central" and not self.money_reporting:
+            bad.append("SMS_MONEY_AUTHORITY=central requires SMS_MONEY_REPORTING=true")
         return bad
 
     def validate_production(self) -> None:

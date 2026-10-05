@@ -225,7 +225,9 @@ def test_authorization_change_bumps_generation_and_state_endpoint_reports_it(env
 
 def test_feed_is_read_only_and_exposes_no_ack_or_mutation_routes(env):
     paths = {p: sorted(v) for p, v in env.app.openapi()["paths"].items() if "/internal/money" in p}
-    assert paths == {"/internal/money/state": ["get"], "/internal/money/changes": ["get"]}
+    # M9-d shtoi vetëm raportimin (POST idempotent, scope money:report) + verdiktin e rakordimit (GET); asnjë ack/mutim parash
+    assert paths == {"/internal/money/state": ["get"], "/internal/money/changes": ["get"],
+                     "/internal/money/usage-reports": ["post"], "/internal/money/reconciliation": ["get"]}  # fmt: skip
 
 
 def test_event_bytes_come_from_the_frozen_payload_not_from_current_grant_state(env):

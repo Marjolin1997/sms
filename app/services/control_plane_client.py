@@ -26,6 +26,7 @@ log = logging.getLogger("sms.cp.client")
 
 AUDIENCE = "sms-central-sync"
 SCOPE = "sync:read"
+REPORT_SCOPE = "money:report"  # M9-d: raportimi i përdorimit (scope i veçantë nga money:read)
 MONEY_SCOPE = "money:read"  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
 LIFETIME_S = 120  # ≤ 300 (kufiri i Central); i shkurtër: mbrojtje ndaj rrjedhjes
 SNAPSHOT_REQUIRED_CODES = frozenset(
@@ -71,6 +72,14 @@ class CpMoneyConflict(CpError):  # 409 i feed-it të parave (epoch/generation/cu
 MONEY_CONFLICT_CODES = frozenset(
     {"money_epoch_mismatch", "money_authorization_changed", "money_cursor_ahead"}
 )
+
+
+class CpReportRejected(
+    CpError
+):  # M9-d: 409/422 nga Central për një raport: PERMANENT (mos riprovo)
+    def __init__(self, status: int, code: str | None):
+        super().__init__(f"{status} {code}")
+        self.status, self.code = status, code
 
 
 class CpSnapshotRequired(CpError):  # 409/410 me action=snapshot
@@ -199,15 +208,22 @@ class ControlPlaneClient:
         self._http.close()
 
     def _get(self, path: str, params: dict | None = None) -> Any:
+        return self._call("GET", path, params=params)
+
+    def _call(
+        self, method: str, path: str, params: dict | None = None, json_body: Any = None
+    ) -> Any:
         try:
-            r = self._http.get(
-                self._cfg.base_url + path, params=params, timeout=self._cfg.timeout_s,
+            r = self._http.request(
+                method, self._cfg.base_url + path, params=params, json=json_body, timeout=self._cfg.timeout_s,
                 headers={"Authorization": f"Bearer {make_assertion(self._cfg, scope=self._scope)}"},
             )  # fmt: skip
         except httpx.HTTPError as e:  # timeout, lidhje, TLS, ...
             raise CpTransportError(f"{type(e).__name__} calling {path}") from None
         sc = r.status_code
-        if sc == 200:
+        if method == "POST" and sc in (409, 413, 422):
+            raise CpReportRejected(sc, _error_code(r))
+        if sc in (200, 201):
             try:
                 return r.json()
             except ValueError:
@@ -240,6 +256,23 @@ class ControlPlaneClient:
             {"after_seq": after_seq, "epoch": str(epoch), "generation": generation, "limit": limit},
         )
         return parse_changes(d)
+
+    # --- M9-d: raportimi i përdorimit + verdikti i rakordimit (scope `money:report`) ---
+
+    def post_usage_report(self, payload: dict) -> dict:
+        """POST idempotent; 200/201 = pranuar (stored|duplicate). 409/413/422 ⇒ `CpReportRejected` (permanente)."""
+        d = self._call("POST", "/internal/money/usage-reports", json_body=payload)
+        if not isinstance(d, dict) or d.get("status") not in ("stored", "duplicate"):
+            raise CpProtocolError("usage report response is malformed")
+        return d
+
+    def get_reconciliation(self, enterprise_id: uuid.UUID) -> dict:
+        d = self._call(
+            "GET", "/internal/money/reconciliation", params={"enterprise_id": str(enterprise_id)}
+        )
+        if not isinstance(d, dict) or d.get("status") not in ("PASS", "WARN", "FAIL", "CRITICAL"):
+            raise CpProtocolError("reconciliation response is malformed")
+        return d
 
     # --- M9-c: feed-i i parave (scope `money:read`; instancë me `scope=MONEY_SCOPE`) ---
 

@@ -62,6 +62,7 @@ def test_package_is_leaf_and_stdlib_only():
     assert files == [
         "control_plane/__init__.py",
         "control_plane/money/__init__.py",
+        "control_plane/money/usage_v1.py",
         "control_plane/money/v1.py",
         "control_plane/v1.py",
     ]

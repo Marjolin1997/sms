@@ -231,3 +231,73 @@ Pas rikthimit mint-i lokal rihapet — çdo mint lokal i mëvonshëm do ta dësh
 ### Çfarë NUK bën M9-c
 Pa rakordim të plotë (M9-d), pa çmime/FX (M9-e), pa API/UI klienti për para, pa ndryshim të semantikës së ngarkimit SMS (M9-a).
 Borxhe: `sms_money_grants` s'ka retention; grant-et në `reconciliation_required` zgjidhen manualisht deri te M9-d.
+
+## M9-d (zbatuar) — raportimi i përdorimit + rakordimi financiar (vetëm detektim/raportim)
+
+**Parim:** Central provon *çfarë ka autorizuar* kundrejt *çfarë ka marrë Enterprise* kundrejt *çfarë mban/shpenzon/rezervon
+Enterprise*, pa krijuar të vërtetë të dytë. **Asnjë korrigjim automatik**: asnjë `wallet ±=` diferencë, asnjë replay grant-i,
+asnjë reset kursori; operatori vepron eksplicit. Rakordimi Central është vetëm-lexim (provuar me test AST + numërim rreshtash).
+
+### 1. Skema e raportit (`cp.money.usage.v1`, `packages/contracts/control_plane/money/usage_v1.py`)
+Kumulativ (rikuperon nga raportet e humbura), stdlib-only, kanonik, golden-e te `tests/golden/control_plane_money_usage/`.
+`report_id` (UUID stabil), `report_seq` (monoton lokal per enterprise/product/currency — rendi kryesor, jo koha), `enterprise_id`,
+`product_id`, `currency`, `generated_at`, `authority_mode` (local|shadow|central), `ledger_max_id` (watermark), `wallet`
+{available, held, gross, active_hold_total, active_hold_count}, `baseline` {baseline_ref, gross_at_cutover, ledger_max_id, status}|null,
+`flows` (PAS baseline-it), `integrity`, `cursor` {epoch, last_seq, generation, last_success_at, has_error}, `grants[]` (grant_id, status,
+amount, currency, product_id, purpose, baseline_ref, issued_seq, reversed_seq, updated_at, detail; ≤ 5000). Shuma = string me 6 shifra
+(kurrë float); gjendjet e wallet-it pranojnë shenjë (bilanc negativ duhet të dukët CRITICAL, jo të refuzohet), totalet kumulative ≥ 0.
+Vetëm vlera të rillogaritshme nga ledger-i i pandryshueshëm dhe tabelat e parave: nuk raportohet asgjë që s'derivohet.
+
+### 2. Snapshot
+`money_usage.build_drafts` lexon NJË transaksion REPEATABLE READ vetëm-lexim (PG) — bilanci, holds, shumat e ledger-it, grant-et, baseline
+dhe kursori nga e njëjta pamje. Testuar në PG me trafik që commit-ohet ndërmjet leximeve (+ kontroll negativ: READ COMMITTED përzihet).
+
+### 3. Ekuacioni (nga llojet reale të ledger-it; HOLD/RELEASE janë neto 0 mbi gross)
+`gross = baseline_gross + grants_applied − grant_reversals − captured − negative_adjustments − invoice_debits − other_debits +
+positive_local_credit` (flukset = rreshtat me `id > baseline.ledger_max_id`; pa baseline: gjithçka). `positive_local_credit` = rritje neto e
+çdo lloji ≠ GRANT (TOPUP, REFUND, ADJUSTMENT+); `captured` = Σ CAPTURE; `negative_adjustments` = ADJUSTMENT neto<0; `invoice_debits` = INVOICE;
+`other_debits` = çdo debit tjetër (duhet 0). Plus: `held = Σ ACTIVE holds`, `stored = Σ delta ledger` (available dhe held), `orphan_grant_*`
+(rreshta GRANT/GRANT_REVERSAL pa rresht `sms_money_grants`).
+
+### 4. Transporti + auth
+Outbox i ngushtë `sms_usage_reports` (pending/sending/sent/retry/failed/superseded; lease 120 s; backoff 30 s→15 min; përmbajtja e ngrirë,
+guard ORM + trigger PG). Roli i veçantë `--role money_usage_reporter` (cikël `SMS_MONEY_REPORT_INTERVAL_SECONDS`=300; dedup me heartbeat 600 s;
+raportet kumulative të vjetra në pritje → `superseded`). **Jo në rrugën e dërgimit.** `POST /internal/money/usage-reports` me Ed25519 +
+scope **`money:report`** (nuk pranon `money:read`/`sync:read`); klienti duhet të jetë i autorizuar për enterprise-in e raportit (403 ndryshe).
+Përgjigje: 201 stored · 200 duplicate · 409 conflict/watermark · 422 i pavlefshëm · 403. 409/413/422 = dështim PERMANENT (alarm); rrjeti/5xx = retry.
+
+### 5. Ruajtja në Central
+`usage_reports` (migrimi 0019): append-only (ORM + trigger PG), UNIQUE(enterprise, product, currency, report_seq), indekse për
+(enterprise, generated_at) dhe (enterprise, product, currency, ledger_max_id). **Aktual = report_seq më i madh** (pa gjendje të ndryshueshme):
+raport i vjetër që vonohet ruhet por s'bëhet kurrë aktual. Idempotencë: i njëjti `report_id`+payload ⇒ no-op, payload tjetër ⇒ Conflict;
+(key, seq) i zënë nga tjetër ⇒ Conflict; `ledger_max_id` s'bie me `report_seq` ⇒ Conflict.
+
+### 6. Kategoritë dhe ashpërsia (`money_reconciliation`)
+INFO < WARN < FAIL < CRITICAL. **CRITICAL:** `negative_invariant`, `hold_total_mismatch`, `wallet_formula_mismatch`, `unexplained_positive_credit`
+(pas baseline-it në shadow/central ose GRANT jetim), `unexplained_debit` (other_debits/reversal jetim), `baseline_mismatch`, `unexpected_grant`,
+`grant_amount|currency|product_mismatch`, `grant_state_mismatch`, `epoch_mismatch`, `cursor_ahead`. **FAIL:** `missing_grant` (kursori e ka kaluar ose
+grace i skaduar), `missing_reversal`, `unresolved_reversal` (pas `unresolved_reversal_fail`), `stale_report` (> stale), `cursor_stale` (> fail ose gabim),
+`grant_unmapped`, `report_missing` (pas grace). **WARN:** `cursor_behind` brenda grace, `stale_report` (fresh..stale), `unresolved_reversal` i ri,
+`baseline_pending`, `grant_deferred_in_central`, `authority_mode_mismatch`, fatura nga wallet nën shadow/central. Pragjet (Central, konfigurueshme `CENTRAL_MONEY_*`):
+fresh 600 s, stale 1800 s, lag-grace 900 s, kursor warn/fail 900/3600 s, reversal-fail 3600 s, report-missing-grace 1800 s. Enterprise: `SMS_MONEY_REPORT_FRESH/STALE_SECONDS` 600/1800.
+Grant-et lidhen VETËM me `grant_id` (kurrë me shumë); `cursor_behind` vs `missing_grant` vendoset nga seq-i i ngjarjes kundrejt kursorit të raportuar.
+
+### 7. Modalitetet
+`local`: informative (mospërputhjet e autoritetit → INFO/WARN; invariantet e wallet-it mbeten të plota). `shadow`: raporti tregon grant-et e marra/deferred,
+projeksionin `projected_gross_after_cutover = gross + deferred_total`, mospërputhjet; asnjë mutacion. `central`: dëshmon që s'ka mint lokal, çdo pozitiv vjen nga
+bootstrap/grant, ekuacioni mbyllet, kursori i freskët, ngjarjet e pazgjidhura të dukshme (`--strict` ⇒ edhe WARN jep kod 1).
+
+### 8. Reversal i pazbatuar, baseline, grant-e
+Reversal `reconciliation_required` del me grant_id, shumën, `reversed_seq`, available/held aktual, arsyen dhe moshën; Central NUK e shënon kurrë të rakorduar. Baseline:
+bootstrap Central = `baseline.gross_at_cutover` (+ ref + `matched_to_existing_balance`), **kurrë** kundrejt bilancit aktual. Pa baseline në Enterprise por me bootstrap në Central ⇒
+CRITICAL; baseline pa bootstrap ende ⇒ `baseline_pending` WARN.
+
+### 9. Mjetet dhe readiness
+`python -m apps.central.tools.money_reconciliation [--enterprise-id U] [--strict] [--json]` (vetëm-lexim; 0/1/2). `GET /internal/money/reconciliation?enterprise_id=`
+(scope `money:report`, enterprise i autorizuar) kthen verdiktin. `scripts.money_authority_readiness` shton: `usage_reporting_enabled`, `usage_report_fresh`
+(raporti i dorëzuar), `usage_report_delivery` (asnjë i fundit i refuzuar), `usage_report_equation` (ekuacioni + hold për çdo wallet) dhe `central_reconciliation`
+(verdikt PASS; FAIL/CRITICAL/pa lidhje ⇒ FAIL; i detyrueshëm në prodhim, `--with-central` kudo; thirret vetëm nga ky CLI, kurrë nga dërgimi). `central` në prodhim kërkon `SMS_MONEY_REPORTING=true`.
+
+### Çfarë mbetet për M9-e
+Çmimi/FX dhe snapshot-i i çmimit për pagesën SMS; përdorimi i email-it në para (jashtë wallet-it sot); API/UI klienti për para; retention e `usage_reports`/`sms_usage_reports`
+(rreshta çdo ≥10 min; heartbeat+dedup e kufizon); zgjidhja operatore e `reconciliation_required` me provë (M9-d vetëm e raporton); alarm-e/dashboard mbi verdiktin.

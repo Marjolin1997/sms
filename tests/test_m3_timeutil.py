@@ -71,8 +71,8 @@ def test_every_model_default_that_used_utcnow_is_still_a_callable_returning_awar
                 if isinstance(v, datetime):
                     assert v.tzinfo is UTC, (table.name, col.name)
     assert (
-        n == 51
-    )  # snapshot: 45 para M7-d + 3 `sms_entitlements` + 3 M9-c (baseline.created_at, grant.created_at/updated_at)
+        n == 54
+    )  # snapshot: 45 para M7-d + 3 `sms_entitlements` + 3 M9-c + 3 M9-d (outbox created_at/updated_at/next_attempt_at)
 
 
 # --- Garda e varësisë -------------------------------------------------------------------------------------
@@ -148,7 +148,7 @@ def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
     ta përditësojë këtë skedar me qëllim (dhe me migrim); zhvendosjet strukturore s'duhet ta prekin."""
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
-    assert len(golden) == 47 and sum(len(v["columns"]) for v in golden.values()) == 478
+    assert len(golden) == 48 and sum(len(v["columns"]) for v in golden.values()) == 497
 
 
 @pytest.mark.skipif(

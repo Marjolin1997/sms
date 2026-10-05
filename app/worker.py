@@ -214,11 +214,66 @@ def run_money_control_plane(once: bool = False) -> int:
         client.close()
 
 
+def run_money_usage_reporter(once: bool = False) -> int:
+    """Raportuesi i përdorimit financiar (M9-d): rol i VEÇANTË (domen dështimi tjetër nga consumer-i i grant-eve
+    dhe nga dërgimi SMS). `SMS_MONEY_REPORTING=false` ⇒ proces boshe. Një aktiv për DB (kyç advisory i veçantë).
+    Çelësi Ed25519 duhet të ketë scope `money:report` te Central."""
+    from app.core.db import engine
+    from app.services import control_plane_poller as poller
+    from app.services import money_usage
+    from app.services.control_plane_client import (
+        REPORT_SCOPE,
+        ConfigError,
+        ControlPlaneClient,
+        config_from_settings,
+    )
+
+    stop = threading.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: stop.set())
+    if not settings.money_reporting:
+        log.info("SMS_MONEY_REPORTING=false: usage reporter idle")
+        while not stop.is_set():
+            heartbeat()
+            stop.wait(30)
+        return 0
+    try:
+        client = ControlPlaneClient(config_from_settings(settings), scope=REPORT_SCOPE)
+    except ConfigError as e:
+        log.critical("usage reporter misconfigured: %s", e)
+        return 2
+    lock = poller.PollerLock(engine, key=money_usage.LOCK_KEY)
+
+    def tick(factory, cl, **_):
+        try:
+            return money_usage.run_once(engine, factory, cl)
+        except Exception:  # noqa: BLE001  (një cikël i keq s'e vret procesin; rifillon pas backoff-it)
+            log.exception("usage report cycle failed")
+            return money_usage.DeliveryOutcome(kind="protocol_error", detail="cycle failed")
+
+    try:
+        if once:
+            if not lock.acquire():
+                return 0
+            return 0 if tick(SessionLocal, client).ok else 1
+        poller.run_loop(
+            SessionLocal, client, poll_interval_s=settings.money_report_interval_seconds,
+            snapshot_interval_s=0, stop=stop, lock=lock, tick=heartbeat, poll=tick,
+            staleness=lambda *_: None,
+        )  # fmt: skip
+        return 0
+    finally:
+        lock.release()
+        client.close()
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--role", choices=["sms", "webhooks", "control_plane", "money_control_plane"], default="sms"
+        "--role",
+        choices=["sms", "webhooks", "control_plane", "money_control_plane", "money_usage_reporter"],
+        default="sms",
     )
     ap.add_argument("--once", action="store_true", help="control_plane: një iteracion dhe dil")
     args = ap.parse_args()
@@ -226,4 +281,6 @@ if __name__ == "__main__":
         sys.exit(run_control_plane(args.once))
     if args.role == "money_control_plane":
         sys.exit(run_money_control_plane(args.once))
+    if args.role == "money_usage_reporter":
+        sys.exit(run_money_usage_reporter(args.once))
     run() if args.role == "sms" else run_webhooks()

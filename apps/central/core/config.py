@@ -53,6 +53,19 @@ class Settings(BaseSettings):
     public_registration_require_challenge: bool = False
     # Proxy të besuar për IP-në e klientit (vetëm për LOG; kufijtë IP jetojnë te proxy).
     trusted_proxy_hops: int = Field(default=0, ge=0, le=5)
+    # --- M9-d: pragje të rakordimit financiar (vetëm vëzhgim; konfigurueshme) ---
+    # Mosha e raportit (nga marrja): ≤ fresh = OK · ≤ stale = WARN · më shumë = FAIL.
+    money_report_fresh_seconds: int = Field(default=600, ge=60, le=86400)
+    money_report_stale_seconds: int = Field(default=1800, ge=60, le=604800)
+    # Grant/reversal i dhënë por jo ende i konsumuar (kursori pas): WARN brenda grace, FAIL pas saj.
+    money_cursor_lag_grace_seconds: int = Field(default=900, ge=60, le=86400)
+    # Kursori i parave i Enterprise pa sukses të ri (në çastin e raportit): WARN / FAIL.
+    money_cursor_stale_warn_seconds: int = Field(default=900, ge=60, le=86400)
+    money_cursor_stale_fail_seconds: int = Field(default=3600, ge=60, le=604800)
+    # Reversal i pazbatuar operacionalisht: WARN deri këtu, pastaj FAIL.
+    money_unresolved_reversal_fail_seconds: int = Field(default=3600, ge=60, le=2592000)
+    # Llogari me grant por pa asnjë raport: WARN brenda grace, pastaj FAIL.
+    money_report_missing_grace_seconds: int = Field(default=1800, ge=60, le=604800)
 
 
 settings = Settings()
