@@ -245,6 +245,7 @@ def test_end_to_end_bootstrap_then_grants_then_reversal(env, db, monkeypatch):
     from app.models.enterprise import Enterprise
 
     db.add(Enterprise(id=eid, owner_ref="acme"))
+    db.flush()
     db.add(Entitlement(enterprise_id=eid, assignment_id=uuid.uuid4(), product_id=env.ids["sms"],
                        product_code="sms", channel="sms", status="active", revision=1))  # fmt: skip
     db.flush()
@@ -623,6 +624,8 @@ def test_pg_migration_triggers(make_db):  # noqa: F811
     from sqlalchemy.exc import DBAPIError
 
     url = make_db("ent")
+    if url.startswith("sqlite"):
+        pytest.skip("needs PostgreSQL triggers")
     enterprise_alembic(url, "upgrade", "head")
     eng = create_engine(url)
     with eng.begin() as c:

@@ -47,6 +47,7 @@ def mode(monkeypatch, value):
 def mk_world(db, balance="12", hold="2", sms_entitlement=True, owner="acme"):
     """Enterprise + entitlement SMS + wallet EUR me bilanc lokal (kredituar në mode local)."""
     db.add(Enterprise(id=EID, owner_ref=owner))
+    db.flush()  # PG: FK sms_entitlements → sms_enterprises
     if sms_entitlement:
         db.add(Entitlement(enterprise_id=EID, assignment_id=uuid.uuid4(), product_id=SMS_P,
                            product_code="sms", channel="sms", status="active", revision=1))  # fmt: skip
