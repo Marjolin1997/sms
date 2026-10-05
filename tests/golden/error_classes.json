@@ -119,6 +119,23 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.models.money_authority.MoneyAuthorityImmutableError": {
+   "name": "MoneyAuthorityImmutableError",
+   "module": "app.models.money_authority",
+   "code": null,
+   "app_mro": [
+    "MoneyAuthorityImmutableError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
   "app.models.rates.RateFrozenError": {
    "app_mro": [
     "RateFrozenError"
@@ -379,6 +396,24 @@
    "name": "CpForbidden",
    "own_init": false,
    "str": "boom"
+  },
+  "app.services.control_plane_client.CpMoneyConflict": {
+   "name": "CpMoneyConflict",
+   "module": "app.services.control_plane_client",
+   "code": null,
+   "app_mro": [
+    "CpMoneyConflict",
+    "CpError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "409 boom",
+   "args": [
+    "409 boom"
+   ],
+   "own_init": true
   },
   "app.services.control_plane_client.CpProtocolError": {
    "app_mro": [
@@ -773,6 +808,95 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.services.money_authority.BaselineError": {
+   "name": "BaselineError",
+   "module": "app.services.money_authority",
+   "code": "baseline_error",
+   "app_mro": [
+    "BaselineError",
+    "DomainError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
+  "app.services.money_authority.Unmapped": {
+   "name": "Unmapped",
+   "module": "app.services.money_authority",
+   "code": "money_unmapped",
+   "app_mro": [
+    "Unmapped",
+    "DomainError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
+  "app.services.money_sync.CursorMismatch": {
+   "name": "CursorMismatch",
+   "module": "app.services.money_sync",
+   "code": null,
+   "app_mro": [
+    "CursorMismatch",
+    "MoneySyncError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": true
+  },
+  "app.services.money_sync.EventConflict": {
+   "name": "EventConflict",
+   "module": "app.services.money_sync",
+   "code": null,
+   "app_mro": [
+    "EventConflict",
+    "MoneySyncError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
+  "app.services.money_sync.MoneySyncError": {
+   "name": "MoneySyncError",
+   "module": "app.services.money_sync",
+   "code": null,
+   "app_mro": [
+    "MoneySyncError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
   "app.services.net_guard.UnsafeUrl": {
    "app_mro": [
     "UnsafeUrl"
@@ -1005,6 +1129,24 @@
    "name": "InvalidAmount",
    "own_init": false,
    "str": "boom"
+  },
+  "app.services.wallet.MoneyAuthorityFrozen": {
+   "name": "MoneyAuthorityFrozen",
+   "module": "app.services.wallet",
+   "code": "money_authority_frozen",
+   "app_mro": [
+    "MoneyAuthorityFrozen",
+    "DomainError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
   },
   "app.services.wallet.NotFound": {
    "app_mro": [

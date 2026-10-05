@@ -360,4 +360,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0015_service_client_auto_grant.py",
         "0016_registration_verification.py",
         "0017_money_ledger.py",
+        "0018_grant_purpose.py",
     ]

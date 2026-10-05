@@ -128,6 +128,7 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/enterprises/{enterprise_id}/products",
         "/admin/enterprises/{enterprise_id}/products/{assignment_id}",
         "/internal/sync/changes", "/internal/sync/snapshot",
+        "/internal/money/changes", "/internal/money/state",
         # M8-d: regjistrimi (publik + admin)
         "/registration", "/registration/products", "/registration/{registration_id}/status",
         "/admin/registrations", "/admin/registrations/{registration_id}",
@@ -167,8 +168,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0018_next.py").write_text(
-        'revision = "0018"\ndown_revision = "0017"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0019_next.py").write_text(
+        'revision = "0019"\ndown_revision = "0018"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)

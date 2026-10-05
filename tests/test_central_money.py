@@ -732,6 +732,7 @@ def test_grant_emits_an_immutable_money_event_with_a_frozen_payload(m):
             "grant_id": str(gid), "account_id": str(aid), "enterprise_id": str(m.ent),
             "product_id": str(m.sms), "amount": "40.000000", "currency": "EUR", "status": "active",
             "source_payment_id": None, "created_at": ev.payload["created_at"],
+            "purpose": "standard", "baseline_ref": None,
         }  # fmt: skip
         assert "internal note" not in str(ev.payload)  # pa shënime/arsye të brendshme
         frozen = dict(ev.payload)
@@ -1139,10 +1140,12 @@ def test_money_modules_are_central_only_and_expose_no_http_routes(m):
     from apps.central.main import create_app
 
     paths = create_app(m.eng).openapi()["paths"]
+    # M9-c: vetëm feed-i i brendshëm lexim-vetëm `/internal/money/*` lejohet (asnjë mutacion/API klienti)
     assert not [
         p
         for p in paths
-        if any(w in p.lower() for w in ("payment", "grant", "credit", "money", "ledger"))
+        if not p.startswith("/internal/money/")
+        and any(w in p.lower() for w in ("payment", "grant", "credit", "money", "ledger"))
     ]
 
 
@@ -1155,12 +1158,8 @@ def test_enterprise_money_and_authority_are_untouched_by_m9b(m):
         if t.startswith(("credit_", "money_", "commercial_"))
     }
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("0*.py"))
-    assert versions[-1].startswith("0022")  # koka e Enterprise e pandryshuar nga M9-b
-    src = (ROOT / "app/services/wallet.py").read_text()
-    assert (
-        "SMS_MONEY_AUTHORITY" not in src
-        and "money_authority" not in (ROOT / "app/core/config.py").read_text()
-    )
+    # M9-b s'preku Enterprise; M9-c shtoi 0023 (autoriteti i parave) — kjo ruan që 0022 ekziston ende pa u ndryshuar
+    assert "0022_dispatch_started_at.py" in versions and versions[-1].startswith("0023")
 
 
 def test_migration_0017_up_down_up_readiness_and_metadata(make_db):

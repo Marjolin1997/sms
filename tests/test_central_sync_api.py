@@ -519,7 +519,7 @@ def test_epoch_is_persistent_and_changes_only_by_explicit_rotation(env):
 
 def test_feed_is_read_only_and_has_no_ack_or_mutation_routes(env):
     paths = env.app.openapi()["paths"]
-    sync_paths = {p: set(m) for p, m in paths.items() if p.startswith("/internal")}
+    sync_paths = {p: set(m) for p, m in paths.items() if p.startswith("/internal/sync")}
     assert sync_paths == {"/internal/sync/changes": {"get"}, "/internal/sync/snapshot": {"get"}}
     for method in ("post", "put", "patch", "delete"):
         assert getattr(env, method)(
