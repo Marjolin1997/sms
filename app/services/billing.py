@@ -37,7 +37,7 @@ from app.models.billing import (
 )
 from app.models.email import Email, EmailStatus
 from app.models.wallet import Wallet
-from app.services import events
+from app.services import events, pricing
 from app.services import wallet as wallets
 from app.services.wallet import InvalidAmount
 
@@ -85,6 +85,8 @@ def create_plan(
     price = wallets.money(email_overage_price)
     if fee < 0 or price < 0:
         raise InvalidAmount("prices must be >= 0")
+    if price > 0:
+        pricing.assert_local_pricing_mutable()  # M9-e: çmimi i email nën central vjen vetëm nga Central
     p = Plan(
         code=code, name=name, currency=currency.upper(), monthly_fee=fee,
         included_emails=included_emails, email_overage_price=price,
@@ -217,17 +219,20 @@ def _next_number(db: Session, year: int) -> str:
     return f"INV-{year}-{row.last_number:06d}"
 
 
-def _invoice_lines(plan: Plan, usage: int) -> list[tuple[str, Decimal, Decimal, Decimal]]:
+def _invoice_lines(
+    plan: Plan, usage: int, overage_price: Decimal | None = None
+) -> list[tuple[str, Decimal, Decimal, Decimal]]:
+    """`overage_price` (M9-e) = çmimi i vendosur nga motori i çmimit (legacy plan ose Central); default = çmimi i planit."""
+    price = plan.email_overage_price if overage_price is None else overage_price
     lines = []
     if plan.monthly_fee > 0:
         lines.append(
             (f"{plan.name} - monthly fee", Decimal(1), plan.monthly_fee, cents(plan.monthly_fee))
         )
     extra = max(0, usage - plan.included_emails)
-    if extra and plan.email_overage_price > 0:
+    if extra and price > 0:
         lines.append((f"Email overage ({extra} above {plan.included_emails} included)",
-                      Decimal(extra), plan.email_overage_price,
-                      cents(Decimal(extra) * plan.email_overage_price)))  # fmt: skip
+                      Decimal(extra), price, cents(Decimal(extra) * price)))  # fmt: skip
     return lines
 
 
@@ -247,7 +252,24 @@ def generate_invoice(
         log.warning("no billing profile for %s; invoice postponed", sub.owner_ref)
         return None
     plan = db.get(Plan, sub.plan_id)
-    lines = _invoice_lines(plan, email_usage(db, worker_owner(db, sub), start, end))
+    usage = email_usage(db, worker_owner(db, sub), start, end)
+    price_info = None
+    if (
+        usage > plan.included_emails
+    ):  # M9-e: çmimi i overage vjen nga motori (legacy | shadow | central), i ngrirë në linjë
+        try:
+            price_info = pricing.email_overage(db, worker_owner(db, sub), plan, now)
+        except (
+            pricing.CentralPriceError
+        ) as e:  # central: pa çmim të vlefshëm ⇒ fail-closed (fatura shtyhet)
+            log.warning(
+                "no valid Central email price for %s (%s); invoice postponed",
+                sub.owner_ref,
+                e.reason,
+            )
+            return None
+        pricing.record_email_comparison(db, price_info, f"invoice:{sub.id}:{sub.periods_billed}")
+    lines = _invoice_lines(plan, usage, price_info.unit_price if price_info is not None else None)
     inv = None
     if lines:
         subtotal = sum((ln[3] for ln in lines), Decimal(0))
@@ -265,8 +287,10 @@ def generate_invoice(
         db.add(inv)
         db.flush()
         for desc, qty, unit, amount in lines:
-            db.add(InvoiceLine(invoice_id=inv.id, description=desc, quantity=qty,
-                               unit_price=unit, amount=amount))  # fmt: skip
+            overage = desc.startswith("Email overage") and price_info is not None
+            db.add(InvoiceLine(invoice_id=inv.id, description=desc, quantity=qty, unit_price=unit, amount=amount,
+                               pricing_source=price_info.source if overage else "legacy_plan",
+                               pricing_version_ref=price_info.version_ref if overage else None))  # fmt: skip
         db.flush()
     sub.periods_billed += 1
     if sub.pending_plan_id:

@@ -1,6 +1,7 @@
 """Pipeline i dërgimit: plani i llogarisë, routes, mesazhet dhe historiku i statuseve."""
 
 import enum
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -15,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     event,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -105,8 +107,16 @@ class Message(TenantOwned, Base):
     currency: Mapped[str] = mapped_column(String(3))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(20, 6))
     total_price: Mapped[Decimal] = mapped_column(MONEY)
-    rate_version_id: Mapped[int] = mapped_column(ForeignKey("sms_rate_card_versions.id"))
-    rate_id: Mapped[int] = mapped_column(ForeignKey("sms_rates.id"))
+    # Referencat ligjëruese (NULL kur çmimi vjen nga snapshot-i Central: price_source='central').
+    rate_version_id: Mapped[int | None] = mapped_column(ForeignKey("sms_rate_card_versions.id"))
+    rate_id: Mapped[int | None] = mapped_column(ForeignKey("sms_rates.id"))
+    # M9-e: burimi i çmimit dhe identitetet e snapshot-it Central (të ngrira me mesazhin; nuk kërkohet kërkim i ri për ta shpjeguar).
+    price_source: Mapped[str | None] = mapped_column(
+        String(8)
+    )  # legacy | central (NULL = para M9-e = legacy)
+    pricing_book_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    pricing_version_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    pricing_rule_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     provider: Mapped[str] = mapped_column(String(32))
     provider_message_id: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[MessageStatus] = mapped_column(
@@ -166,3 +176,22 @@ class DlrReceipt(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (Index("ix_sms_dlr_receipts_pmid", "provider", "provider_message_id"),)
+
+
+MESSAGE_PRICE_FROZEN = ("currency", "unit_price", "total_price", "segments", "encoding", "rate_version_id", "rate_id",
+                        "price_source", "pricing_book_ref", "pricing_version_ref", "pricing_rule_ref")  # fmt: skip
+
+
+class MessagePriceFrozenError(RuntimeError):
+    pass
+
+
+@event.listens_for(Message, "before_update")
+def _message_price_frozen(_m, _c, target) -> None:
+    """M9-e: snapshot-i i çmimit të mesazhit s'ndryshon kurrë (rezervimi/capture/DLR përdorin vlerën e ngrirë)."""
+    from sqlalchemy import inspect
+
+    attrs = inspect(target).attrs
+    changed = [f for f in MESSAGE_PRICE_FROZEN if getattr(attrs, f).history.has_changes()]
+    if changed:
+        raise MessagePriceFrozenError(f"message price snapshot is immutable: {changed}")

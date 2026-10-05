@@ -27,7 +27,8 @@ log = logging.getLogger("sms.cp.client")
 AUDIENCE = "sms-central-sync"
 SCOPE = "sync:read"
 REPORT_SCOPE = "money:report"  # M9-d: raportimi i përdorimit (scope i veçantë nga money:read)
-MONEY_SCOPE = "money:read"  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
+MONEY_SCOPE = "money:read"
+PRICING_SCOPE = "pricing:read"  # M9-e: snapshot-i i çmimeve  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
 LIFETIME_S = 120  # ≤ 300 (kufiri i Central); i shkurtër: mbrojtje ndaj rrjedhjes
 SNAPSHOT_REQUIRED_CODES = frozenset(
     {
@@ -256,6 +257,22 @@ class ControlPlaneClient:
             {"after_seq": after_seq, "epoch": str(epoch), "generation": generation, "limit": limit},
         )
         return parse_changes(d)
+
+    # --- M9-e: snapshot-i i çmimeve (scope `pricing:read`) ---
+
+    def get_pricing_snapshot(
+        self, known_epoch=None, known_revision=None, known_generation=None
+    ) -> dict:
+        params = {k: v for k, v in (("known_epoch", known_epoch), ("known_revision", known_revision),
+                                    ("known_generation", known_generation)) if v is not None}  # fmt: skip
+        d = self._get("/internal/pricing/snapshot", params)
+        if (
+            not isinstance(d, dict)
+            or not isinstance(d.get("changed"), bool)
+            or (d["changed"] and "snapshot" not in d)
+        ):
+            raise CpProtocolError("pricing snapshot response is malformed")
+        return d
 
     # --- M9-d: raportimi i përdorimit + verdikti i rakordimit (scope `money:report`) ---
 

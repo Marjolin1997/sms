@@ -170,6 +170,13 @@ def upsert_plan(
     p: Principal = Depends(require("plans:write")),
 ):
     plan = db.scalar(select(AccountPlan).where(AccountPlan.owner_ref == owner_ref))
+    if plan is None or plan.rate_card_id != body.rate_card_id:
+        from app.services import pricing
+
+        try:  # M9-e: nën central nuk ndërrohet rate card-i lokal (override çmimi)
+            pricing.assert_local_pricing_mutable()
+        except pricing.PricingFrozen as e:
+            raise HTTPException(409, {"code": e.code, "message": str(e)}) from e
     if plan is None:
         plan = AccountPlan(owner_ref=owner_ref, rate_card_id=body.rate_card_id)
         db.add(plan)

@@ -21,6 +21,7 @@ from app.models.rates import Rate, RateCard, RateCardVersion
 from app.models.sending import AccountPlan, Message, MessageStatus
 from app.models.wallet import EntryType, LedgerEntry, Topup, TopupStatus, Wallet
 from app.services import messages as msg_svc
+from app.services import pricing as pricing_svc
 from app.services import rates as rates_svc
 from app.services import templates as tpl
 from app.services import wallet as wallets
@@ -156,7 +157,9 @@ def quote_message(
             )
         dest = body.to.lstrip("+")
         route = msg_svc.find_route(db, dest)
-        q = rates_svc.quote(db, plan.rate_card_id, dest, body.text)
+        q = pricing_svc.quote(
+            db, owner, dest, body.text, plan=plan
+        )  # M9-e: i njëjti motor me submit
     except DomainError as e:
         raise HTTPException(_STATUS.get(e.code, 422), {"code": e.code, "message": str(e)}) from e
     return {

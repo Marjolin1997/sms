@@ -117,6 +117,19 @@ class Settings(BaseSettings):
     # Mosha e raportit të dërguar: ≤ fresh = OK · ≤ stale = WARN · më shumë = FAIL (readiness).
     money_report_fresh_seconds: int = Field(600, ge=60, le=86400)
     money_report_stale_seconds: int = Field(1800, ge=60, le=604800)
+    # M9-e: autoriteti i ÇMIMEVE të klientit (i pavarur nga money authority): local = tarifat lokale (sjellja e sotme) ·
+    # shadow = kalkulon edhe snapshot-in Central, krahason, por CHARGE me lokalin · central = snapshot-i Central është autoritar.
+    pricing_authority: Literal["local", "shadow", "central"] = "local"
+    pricing_authority_ack: bool = (
+        False  # prodhim + central: readiness kaloi (`scripts.pricing_authority_readiness`)
+    )
+    pricing_poll_interval_seconds: int = Field(60, ge=5, le=3600)
+    # Mosha e sinkronizimit të suksesshëm: ≤ warn = OK · ≤ fail = WARN (alarm; përdoret snapshot-i i fundit) · më shumë = FAIL (readiness).
+    pricing_stale_warn_seconds: int = Field(900, ge=30, le=86400)
+    pricing_stale_fail_seconds: int = Field(3600, ge=60, le=604800)
+    pricing_shadow_sample: float = Field(
+        1.0, ge=0.0, le=1.0
+    )  # pjesa e vendimeve që krahasohen në shadow (jo para)
     cp_base_url: str = ""
     cp_client_id: str = ""
     cp_key_id: str = ""
@@ -163,6 +176,10 @@ class Settings(BaseSettings):
                 "SMS_MONEY_AUTHORITY=central requires SMS_MONEY_AUTHORITY_ACK=true "
                 "(scripts.money_authority_readiness passed on this database)"
             )
+        if self.pricing_authority != "local" and not self.cp_base_url.startswith("https://"):
+            bad.append("SMS_CP_BASE_URL must be https:// when SMS_PRICING_AUTHORITY is not local")
+        if self.pricing_authority == "central" and not self.pricing_authority_ack:
+            bad.append("SMS_PRICING_AUTHORITY=central requires SMS_PRICING_AUTHORITY_ACK=true")
         if self.money_authority == "central" and not self.money_reporting:
             bad.append("SMS_MONEY_AUTHORITY=central requires SMS_MONEY_REPORTING=true")
         return bad

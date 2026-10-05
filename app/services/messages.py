@@ -37,6 +37,7 @@ from app.services import (
     consent,
     entitlements,
     events,
+    pricing,
     rates,
     sender_ids,
     switches,
@@ -198,7 +199,9 @@ def submit(
         except ValueError as e:
             raise InvalidMessage(str(e)) from e
 
-    q = rates.quote(db, plan.rate_card_id, destination, text, now)
+    q = pricing.quote(
+        db, owner, destination, text, now, plan=plan
+    )  # M9-e: motori i vetëm i çmimit (authority-aware)
     if q.total <= 0:
         raise rates.NoRate("zero-priced destinations are not supported")
     wallet = db.scalar(select(Wallet).where(owned(Wallet, owner), Wallet.currency == q.currency))
@@ -214,12 +217,13 @@ def submit(
                 request_hash=digest, wallet_id=wallet.id, hold_id=hold.id,
                 category=category, sender=sender, destination=destination,
                 country=route.country, text=text,
-                template_version_id=template_version_id, encoding=q.encoding,
-                segments=q.segments, currency=q.currency, unit_price=q.unit_price,
-                total_price=q.total, rate_version_id=q.version_id, rate_id=q.rate_id,
+                template_version_id=template_version_id, **pricing.message_fields(q),
                 provider=route.provider, next_attempt_at=now,
             )  # fmt: skip
             queue.publish(db, m)
+            pricing.record_comparison(
+                db, q.shadow, public_id
+            )  # shadow: krahasim (pa efekt parash); lokali ngarkohet
             db.add(MessageEvent(message_id=m.id, from_status=None, to_status="queued"))
     except IntegrityError:
         # kërkesë paralele me të njëjtin key fitoi garën

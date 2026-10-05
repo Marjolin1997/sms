@@ -37,6 +37,7 @@ from app.services import (
     email_domains,
     emails,
     events,
+    pricing,
     rates,
     switches,
     templates,
@@ -353,7 +354,9 @@ def _submit_sms(db, c, r, values, plan, reserved, now):
     text = _subst(c.text, values) if c.text else None  # tekst i lirë: personalizim {{emri}}
     if c.max_cost is not None and plan is not None:
         quote_text = text or templates.render(db, worker_owner(db, c), c.template_id, values).text
-        q = rates.quote(db, plan.rate_card_id, r.address, quote_text, now)
+        q = pricing.quote(
+            db, worker_owner(db, c), r.address, quote_text, now, plan=plan
+        )  # M9-e: i njëjti motor me submit
         if reserved + q.total > c.max_cost:
             raise _BudgetExhausted
     with db.begin_nested():
@@ -577,7 +580,9 @@ def estimate(db: Session, owner: Owner, campaign_id: int, now: datetime | None =
                     if c.text
                     else templates.render(db, owner, c.template_id, values).text
                 )
-                q = rates.quote(db, plan.rate_card_id, r.address, text, now)
+                q = pricing.quote(
+                    db, owner, r.address, text, now, plan=plan
+                )  # M9-e: vlerësim informues; çmimi final ngrihet në submit
             except DomainError:
                 est.excluded += 1
                 continue

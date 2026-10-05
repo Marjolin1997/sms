@@ -11,6 +11,13 @@ from apps.central.models.money import (
     MoneySequence,
     Payment,
 )
+from apps.central.models.pricing import (
+    PriceAssignment,
+    PriceBook,
+    PricingSequence,
+    PriceRule,
+    PriceVersion,
+)
 from apps.central.models.product import Channel, Product, ProductStatus
 from apps.central.models.registration import (
     NotificationOutbox,
@@ -29,6 +36,11 @@ from apps.central.models.usage import UsageReport
 from apps.central.models.user import CentralUser, Role, UserStatus
 
 __all__ = [
+    "PriceAssignment",
+    "PriceBook",
+    "PriceRule",
+    "PriceVersion",
+    "PricingSequence",
     "UsageReport",
     "AssignmentStatus",
     "AuditLog",

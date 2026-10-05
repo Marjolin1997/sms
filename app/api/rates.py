@@ -55,7 +55,12 @@ class QuoteOut(BaseModel):
 
 
 def _http(e: DomainError) -> HTTPException:
-    status = {"not_found": 404, "conflict": 409, "no_rate": 404}.get(e.code, 422)
+    status = {
+        "not_found": 404,
+        "conflict": 409,
+        "no_rate": 404,
+        "pricing_authority_frozen": 409,
+    }.get(e.code, 422)
     return HTTPException(status, {"code": e.code, "message": str(e)})
 
 

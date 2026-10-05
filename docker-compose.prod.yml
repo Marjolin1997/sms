@@ -112,6 +112,22 @@ services:
       interval: 30s
       start_period: 30s
 
+  # M9-e (opsional, `--profile pricing-sync`): konsumatori i çmimeve Central (`cp.pricing.v1`). Boshe kur SMS_PRICING_AUTHORITY=local.
+  # Kredenciali Ed25519 duhet të ketë scope `pricing:read` (+ autorizim per enterprise).
+  pricing-sync:
+    <<: *app
+    profiles: ["pricing-sync"]
+    command: python -m app.worker --role pricing_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
   web:
     build:
       context: .

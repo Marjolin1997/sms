@@ -23,7 +23,15 @@ class InvalidNumber(DomainError):
     code = "invalid_number"
 
 
+def _local_pricing_guard() -> None:
+    """M9-e: nën SMS_PRICING_AUTHORITY=central çmimi komercial nuk ndryshohet lokalisht (vetëm aplikuesi i sinkronizimit)."""
+    from app.services import pricing  # vonuar: pricing importon rates
+
+    pricing.assert_local_pricing_mutable()
+
+
 def create_card(db: Session, name: str, currency: str) -> RateCard:
+    _local_pricing_guard()
     if db.scalar(select(RateCard).where(RateCard.name == name)):
         raise Conflict("rate card name already exists")
     card = RateCard(name=name, currency=currency.upper())
@@ -34,6 +42,7 @@ def create_card(db: Session, name: str, currency: str) -> RateCard:
 
 def new_draft(db: Session, card_id: int) -> RateCardVersion:
     """Draft i ri; kopjon tarifat e versionit të fundit që të ndryshohet vetëm delta."""
+    _local_pricing_guard()
     if db.get(RateCard, card_id) is None:
         raise NotFound("rate card not found")
     last = db.scalar(
@@ -71,6 +80,7 @@ def _draft(db: Session, version_id: int) -> RateCardVersion:
 
 
 def set_rate(db: Session, version_id: int, prefix: str, price, operator: str = "") -> Rate:
+    _local_pricing_guard()
     _draft(db, version_id)
     if not re.fullmatch(r"[1-9]\d{0,15}", prefix):
         raise InvalidNumber("prefix must be digits without '+' or leading zero")
@@ -96,6 +106,7 @@ def publish(
 ) -> RateCardVersion:
     """effective_from duhet të jetë në të ardhmen dhe pas versionit të mëparshëm, që
     asnjë çmim i kaluar të mos rishkruhet."""
+    _local_pricing_guard()
     v = _draft(db, version_id)
     now = as_utc(now or datetime.now(UTC))
     eff = as_utc(effective_from)

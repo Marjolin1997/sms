@@ -1,6 +1,7 @@
 """Faturimi: plane, abonime, profil fature, fatura të pandryshueshme, pagesa online."""
 
 import enum
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -16,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     event,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -156,6 +158,9 @@ class InvoiceLine(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(20, 6))
     amount: Mapped[Decimal] = mapped_column(MONEY)
+    # M9-e: nga ku vjen çmimi i linjës (legacy_plan | central) dhe versioni Central kur ka; i ngrirë me faturën.
+    pricing_source: Mapped[str | None] = mapped_column(String(12))
+    pricing_version_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
 
 class PaymentPurpose(enum.StrEnum):

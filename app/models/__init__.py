@@ -24,6 +24,15 @@ from app.models.events import Event, WebhookDelivery, WebhookEndpoint  # noqa: F
 from app.models.inbound import InboundMessage, Keyword  # noqa: F401
 from app.models.messaging import SenderId, Template, TemplateVersion  # noqa: F401
 from app.models.money_authority import MoneyBaseline, MoneyCursor, MoneyGrant  # noqa: F401
+from app.models.pricing import (  # noqa: F401
+    PricingAssignment,
+    PricingBook,
+    PricingComparison,
+    PricingRule,
+    PricingSnapshot,
+    PricingState,
+    PricingVersion,
+)
 from app.models.money_usage import UsageReport  # noqa: F401
 from app.models.rates import Rate, RateCard, RateCardVersion  # noqa: F401
 from app.models.sending import AccountPlan, DlrReceipt, Message, MessageEvent, Route  # noqa: F401
