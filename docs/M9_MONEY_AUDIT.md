@@ -301,3 +301,39 @@ CRITICAL; baseline pa bootstrap ende ⇒ `baseline_pending` WARN.
 ### Çfarë mbetet për M9-e
 Çmimi/FX dhe snapshot-i i çmimit për pagesën SMS; përdorimi i email-it në para (jashtë wallet-it sot); API/UI klienti për para; retention e `usage_reports`/`sms_usage_reports`
 (rreshta çdo ≥10 min; heartbeat+dedup e kufizon); zgjidhja operatore e `reconciliation_required` me provë (M9-d vetëm e raporton); alarm-e/dashboard mbi verdiktin.
+
+## M9-e (zbatuar) — autoriteti i çmimeve në Central + foto e pandryshueshme e çmimit
+
+### Auditi i çmimeve ekzistuese (para kodit)
+
+| Koncept | Pronari (para M9-e) | Model | Shkruesi | Lexuesi | Monedha | Versionimi | Foto historike | Vendimi M9-e |
+|---|---|---|---|---|---|---|---|---|
+| Tarifa SMS (rate card → version → rate) | Enterprise | `sms_rate_cards/_versions/_rates` (prefiks, operator, çmim, `effective_from`) | admin Enterprise (`services/rates.py`) | `rates.quote` | `RateCard.currency` | draft/active/retired, i pandryshueshëm pas publikimit | `Message.rate_version_id/rate_id`, `unit_price`, `total_price` | Mbetet LEGACY (`local`); Central bëhet autoriteti nën `central` |
+| Caktimi i tarifës te llogaria | Enterprise | `sms_account_plans.rate_card_id` | admin | `messages`, `campaigns`, `console` | — | pa histori | — | Zëvendësohet nga `price_assignments` (Central, histori e pandryshueshme) |
+| Çmimi mujor + overage email | Enterprise | `sms_plans` (`monthly_fee`, `email_overage_price`) | admin / `billing.create_plan` | `billing` | `Plan.currency` | pa versione | `InvoiceLine.unit_price/amount` | Overage → Central (`email_overage`); tarifa mujore mbetet dyshim M10 |
+| Vlerësimi i fushatës | Enterprise | `campaigns.estimate` | — | UI | e llogarisë | — | informativ | Përdor të njëjtin motor (`pricing.quote`) |
+| Kosto provider-i | askush | — | — | — | — | — | — | NUK shpikur; `customer_price` ≠ `provider_cost` |
+
+### Modeli kanonik (Central)
+`price_books` → `price_versions` (draft→active→retired; një draft për libër) → `price_rules` (UNIQUE(version, channel, prefix, operator); email: prefiks/operator bosh) · `price_assignments` (histori e pandryshueshme, UNIQUE(enterprise, product, effective_from)) · `pricing_sequence` (epoch, revision — rritet në activate/retire/assign). Triggera PG + guard ORM e bëjnë versionin aktiv/retired dhe rregullat e tij të pandryshueshme.
+
+### Precedenca e kërkimit (nga dimensionet REALE: prefiks, operator)
+Prefiksi më i gjatë fiton; në barazim, rregulla me operator të saktë mmbi atë pa operator. Pa rregull ⇒ `NoRate` (fail-closed). Version i retired ⇒ fail-closed, pa fallback te i vjetri. Funksionet e pastra (`pick_rule`, `select_version`, `select_assignment`, `candidate_prefixes`, `line_total`) jetojnë në `packages/contracts/control_plane/pricing/v1.py` dhe i ndajnë Central + Enterprise.
+
+### Kontrata dhe sinkronizimi
+`cp.pricing.v1` (jo `cp.money.v1`): snapshot i plotë me `snapshot_hash` + `content_hash` për version; `GET /internal/pricing/state|snapshot` (scope `pricing:read`, autorizim për enterprise). Aplikimi është atomik (`pricing_sync.apply_snapshot`), pa version të përzier; epokë/revision të vjetra injorohen; përmbajtje e ndryshuar e versionit ekzistues ⇒ `PricingApplyError`, asgjë s'aktivizohet. Kursor/shëndet i veçantë (`sms_pricing_state`), worker role `pricing_control_plane` (profil `pricing-sync`). Ndërprerje ⇒ përdoret snapshot-i i fundit i plotë; pa snapshot ⇒ fail-closed; vjetërsia vetëm alarmon.
+
+### Modalitetet `SMS_PRICING_AUTHORITY`
+`local` (parazgjedhje) · `shadow` (llogarit të dyja, krahason, CHARGE me legacy; klasat: missing_rule, currency_mismatch, unit_price_mismatch, total_mismatch, precedence_mismatch, version_missing → `sms_pricing_comparisons`) · `central` (kërkon `SMS_PRICING_AUTHORITY_ACK=true` në prodhim; mutacionet lokale të tarifave bllokohen me `pricing_authority_frozen`, përveç aplikuesit të sinkronizimit). Pavarur nga `SMS_MONEY_AUTHORITY`.
+
+### Foto në mesazh, rezervim, rrumbullakim, monedha
+`Message`: `price_source`, `pricing_book_ref`, `pricing_version_ref`, `pricing_rule_ref`, `currency`, `unit_price`, `segments`, `total_price` — e pandryshueshme (guard ORM `MessagePriceFrozenError`). Reserve/capture/DLR/UNKNOWN përdorin vlerën e ngrirë; DLR nuk bën kërkim çmimi. Segmentimi pandryshuar (`count_segments`). Rrumbullakimi: `total = unit × segments` e saktë në 6 shifra dhjetore (kontekst dhjetor eksplicit, ROUND_HALF_UP); rreshtat e faturës në cent HALF_UP (siç ishte). Pa FX: monedha e çmimit duhet të përputhet me atë të wallet-it, përndryshe `currency_mismatch` (fail-closed).
+
+### Email
+Central zotëron çmimin/versionin e email; overage postpaid mbetet jashtë wallet-it SMS; linja e faturës ngrin `pricing_source`, `pricing_version_ref`, sasinë, çmimin, monedhën; faturat e vjetra nuk rillogariten; `pay_from_wallet` mbetet i bllokuar (M9-c). Nëse çmimi Central s'ka ⇒ fatura shtyhet (`CentralPriceError`), nuk përdoret çmim i supozuar.
+
+### Runbook i kalimit (rendi)
+1. Money authority në `central` fillimisht (M9-c/d).  2. Pricing mbetet `local`.  3. `python -m scripts.pricing_bootstrap export --out pricing.json` (read-only).  4. Central: `python -m apps.central.tools.pricing_import --proposal pricing.json` (dry-run: exact/conflict/invalid/unmapped), pastaj `--apply --actor-email <admin> --ack-proposal-hash <hash>` (vetëm `exact`).  5. Aktivizo versionin + cakto `price_assignment` në Central.  6. Enterprise: `SMS_PRICING_AUTHORITY=shadow`, nise worker-in `pricing-sync`, mblidh krahasime.  7. `python -m scripts.pricing_authority_readiness` (read-only; PASS duhet, në prodhim kërkon ACK).  8. `SMS_PRICING_AUTHORITY=central` + `SMS_PRICING_AUTHORITY_ACK=true`.  Rikthim: kthe `local` (fotot e mesazheve mbeten të vlefshme).
+
+### Borxhe që mbeten (jo në M9-e)
+M9-f: UI admin i çmimeve + hardening/retention i `sms_pricing_comparisons` dhe snapshot-eve të vjetra. M10: tarifa mujore e planit (`monthly_fee`) dhe fatura nga Central. M13: pastrimi i tabelave legacy të tarifave (`sms_rate_*`), kolonat legacy `rate_version_id/rate_id`.
