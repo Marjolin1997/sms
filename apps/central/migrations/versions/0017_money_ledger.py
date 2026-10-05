@@ -139,6 +139,9 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("id", "currency", name="uq_credit_accounts_id_currency"),
         sa.UniqueConstraint(
+            "id", "enterprise_id", "currency", name="uq_credit_accounts_id_enterprise_currency"
+        ),
+        sa.UniqueConstraint(
             "id", "enterprise_id", "product_id", "currency", name="uq_credit_accounts_scope"
         ),
         sa.CheckConstraint(CUR, name=op.f("ck_credit_accounts_currency_format")),

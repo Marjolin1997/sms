@@ -117,6 +117,9 @@ class CreditAccount(Base):
         ),
         UniqueConstraint("id", "currency", name="uq_credit_accounts_id_currency"),
         UniqueConstraint(
+            "id", "enterprise_id", "currency", name="uq_credit_accounts_id_enterprise_currency"
+        ),
+        UniqueConstraint(
             "id", "enterprise_id", "product_id", "currency", name="uq_credit_accounts_scope"
         ),
         CheckConstraint(_CURRENCY_OK, name="currency_format"),
