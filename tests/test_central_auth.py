@@ -496,6 +496,12 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "service_assertion_jti",
         "registration_requests",
         "notification_outbox",
+        "money_sequence",
+        "credit_accounts",
+        "commercial_ledger_entries",
+        "payments",
+        "credit_grants",
+        "money_events",
         "registration_products",
         "product_registration_policy",
     }

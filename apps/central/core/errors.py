@@ -14,6 +14,14 @@ class Invalid(CentralError):
     pass
 
 
+class Forbidden(CentralError):
+    """Aktori s'ka të drejtë për veprimin (p.sh. para: vetëm admin njeri)."""
+
+
+class InsufficientFunds(Conflict):
+    """Fondet tregtare të alokueshme nuk mjaftojnë (M9-b); asnjë ndryshim nuk bëhet."""
+
+
 class TooManyRequests(CentralError):
     """Kuota e abuzimit u tejkalua (p.sh. kërkesa regjistrimi për email në 24h)."""
 

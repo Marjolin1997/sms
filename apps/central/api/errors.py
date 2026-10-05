@@ -2,10 +2,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from apps.central.api.registration_public import PublicError
-from apps.central.core.errors import Conflict, Invalid, NotFound
+from apps.central.core.errors import Conflict, Forbidden, Invalid, NotFound
 from apps.central.services.sync_feed import SyncApiError
 
-_MAP = {NotFound: (404, "not_found"), Conflict: (409, "conflict"), Invalid: (422, "invalid")}
+_MAP = {
+    NotFound: (404, "not_found"),
+    Conflict: (409, "conflict"),
+    Invalid: (422, "invalid"),
+    Forbidden: (403, "forbidden"),
+}
 
 
 def install(app: FastAPI) -> None:

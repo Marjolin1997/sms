@@ -283,6 +283,12 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "service_assertion_jti",
         "registration_requests",
         "notification_outbox",
+        "money_sequence",
+        "credit_accounts",
+        "commercial_ledger_entries",
+        "payments",
+        "credit_grants",
+        "money_events",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -353,4 +359,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0014_product_registration_policy.py",
         "0015_service_client_auto_grant.py",
         "0016_registration_verification.py",
+        "0017_money_ledger.py",
     ]
