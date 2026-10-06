@@ -501,10 +501,22 @@ def test_cli_baseline_cursor_and_reset(db, monkeypatch, capsys):
         and len(shown[0]["baseline_ref"]) == 64
     )
     assert cli.main(["cursor-show"]) == 0
-    assert cli.main(["reset-cursor", "--epoch", str(uuid.uuid4()), "--generation", "1"]) == 2
+    assert (
+        cli.main(["reset-cursor", "--epoch", str(uuid.uuid4()), "--generation", "1", "--by", "ops"])
+        == 2
+    )
     assert (
         cli.main(
-            ["reset-cursor", "--epoch", str(uuid.uuid4()), "--generation", "1", "--ack-replay"]
+            [
+                "reset-cursor",
+                "--epoch",
+                str(uuid.uuid4()),
+                "--generation",
+                "1",
+                "--ack-replay",
+                "--by",
+                "ops",
+            ]
         )
         == 0
     )

@@ -129,6 +129,20 @@ class Settings(BaseSettings):
     # snapshot-i i fundit) · më shumë = FAIL (readiness).
     pricing_stale_warn_seconds: int = Field(900, ge=30, le=86400)
     pricing_stale_fail_seconds: int = Field(3600, ge=60, le=604800)
+    # M9-f: retention i krahasimeve shadow (0 = pa fshirje; vetëm me mjetin, dry-run parazgjedhje).
+    # Rreshtat OK > ok_days, mospërputhjet > mismatch_days.
+    pricing_comparison_ok_days: int = Field(90, ge=0, le=3650)
+    pricing_comparison_mismatch_days: int = Field(365, ge=1, le=3650)
+    # M9-f: retention i outbox-it të raporteve (0 = pa fshirje, parazgjedhje konservatore).
+    # Vetëm sent/superseded, kurrë pending/retry/failed; `keep_last` të fundit ruhen gjithmonë.
+    usage_outbox_retention_days: int = Field(0, ge=0, le=3650)
+    usage_outbox_keep_last: int = Field(50, ge=1, le=100000)
+    # M9-f: pragjet e alarmit financiar (Enterprise): UNKNOWN i vjetër, kursor parash i ngecur.
+    financial_unknown_warn_seconds: int = Field(3600, ge=60, le=2592000)
+    financial_unknown_critical_seconds: int = Field(86400, ge=60, le=2592000)
+    financial_money_cursor_warn_seconds: int = Field(900, ge=30, le=604800)
+    financial_money_cursor_critical_seconds: int = Field(3600, ge=60, le=2592000)
+    financial_unresolved_reversal_critical_seconds: int = Field(3600, ge=60, le=2592000)
     pricing_shadow_sample: float = Field(
         1.0, ge=0.0, le=1.0
     )  # pjesa e vendimeve që krahasohen në shadow (jo para)

@@ -1140,11 +1140,12 @@ def test_money_modules_are_central_only_and_expose_no_http_routes(m):
     from apps.central.main import create_app
 
     paths = create_app(m.eng).openapi()["paths"]
-    # M9-c: vetëm feed-i i brendshëm lexim-vetëm `/internal/money/*` lejohet (asnjë mutacion/API klienti)
+    # M9-c: feed-i i brendshëm `/internal/money/*`; M9-f: API admin me RBAC (`/admin/money|financial|pricing`).
+    # Asnjë API klienti/publik për para: çdo rrugë parash është ose e brendshme ose admin.
     assert not [
         p
         for p in paths
-        if not p.startswith("/internal/money/")
+        if not p.startswith(("/internal/money/", "/admin/money/", "/admin/financial/"))
         and any(w in p.lower() for w in ("payment", "grant", "credit", "money", "ledger"))
     ]
 
@@ -1159,7 +1160,7 @@ def test_enterprise_money_and_authority_are_untouched_by_m9b(m):
     }
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("0*.py"))
     # M9-b s'preku Enterprise; M9-c shtoi 0023 (autoriteti i parave) — kjo ruan që 0022 ekziston ende pa u ndryshuar
-    assert "0022_dispatch_started_at.py" in versions and versions[-1].startswith("0025")
+    assert "0022_dispatch_started_at.py" in versions and versions[-1].startswith("0026")
 
 
 def test_migration_0017_up_down_up_readiness_and_metadata(make_db):

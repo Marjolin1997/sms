@@ -337,3 +337,119 @@ Central zotëron çmimin/versionin e email; overage postpaid mbetet jashtë wall
 
 ### Borxhe që mbeten (jo në M9-e)
 M9-f: UI admin i çmimeve + hardening/retention i `sms_pricing_comparisons` dhe snapshot-eve të vjetra. M10: tarifa mujore e planit (`monthly_fee`) dhe fatura nga Central. M13: pastrimi i tabelave legacy të tarifave (`sms_rate_*`), kolonat legacy `rate_version_id/rate_id`.
+
+## M9-f (zbatuar) — API admin financiare, operacione, hardening përfundimtar
+
+M9-f mbyll M9: nuk ndryshon semantikën e parave/çmimeve (asnjë bug konkret në M9-a…e që ta kërkonte); e bën nënsistemin
+**të administrueshëm, të vëzhgueshëm, të audituar, të gatshëm për prodhim dhe të mbështetshëm operacionalisht**.
+Asnjë frontend, asnjë API klienti për para, asnjë M10/M11/M13.
+
+### 1. API admin (Central) — `GET/POST` vetëm; admin = shkrim, operator = lexim; pa DELETE/PUT/PATCH
+Përgjigje UI-ready (`items/limit/offset/has_more`, shuma/çmime string me 6 decimale, kohë ISO, asnjë ORM/hash idempotence).
+Shumat/çmimet pranohen **vetëm si string dhjetor** (`^(0|[1-9]\d{0,13})(\.\d{1,6})?$`; JSON number/float, `1e3`, `+5`, `" 5"` ⇒ 422);
+`extra=forbid`; UUID strikt; monedha `^[A-Z]{3}$`; arsye ≤ 500 shenja pa karaktere kontrolli; çelës idempotence `^[A-Za-z0-9._:-]{8,128}$`.
+
+| Zona | Rruga | Roli | Shënim |
+|---|---|---|---|
+| Llogari | `GET /admin/money/accounts[/{id}]` | op | + totals (funds, outstanding_grants, available_to_grant) |
+| | `POST /admin/money/accounts/{id}/status` | admin | `active`/`suspended` + arsye; no-op ⇒ pa audit |
+| | `POST …/adjustments` | admin | `kind credit|debit`, `idempotency_key` i detyrueshëm; debit s'e çon `available_to_grant` < 0 |
+| | `GET …/ledger?after_seq&limit` | op | vetëm lexim, `next_after_seq` |
+| Pagesa | `GET/POST /admin/money/payments`, `GET /{id}`, `POST /{id}/approve|reject` | op/admin | maker-checker (shërbim + CHECK DB); `(source, external_reference)` unik; i miratuar s'refuzohet/s'ndryshohet |
+| Grant-e | `GET/POST /admin/money/grants`, `GET /{id}`, `POST /{id}/reverse` | op/admin | vetëm `standard` (bootstrap vetëm nga mjeti i cutover-it); `idempotency_key` eksplicit |
+| Rakordim | `GET /admin/money/reconciliation?min_severity` | op | verdikti aktual (vetëm lexim) |
+| Raporte | `GET /admin/money/usage-reports`, `/history`, `/{report_id}` | op | aktuali / historia / payload i plotë |
+| Çmime | `/admin/pricing/books`, `/books/{id}`, `POST /books/{id}/versions`, `GET /versions/{id}`, `POST /versions/{id}/rules`, `…/rules/remove`, `…/activate`, `…/retire`, `GET/POST /assignments`, `GET /state|/preview|/readiness` | op/admin | versioni aktiv/retired i pandryshueshëm (shërbim + trigger PG); heqja e rregullës nga DRAFT = `POST …/rules/remove` (pa DELETE) |
+| Operacione | `GET /admin/financial/overview|alerts|unresolved-reversals|readiness` | op | vetëm lexim |
+| Enterprise | `GET /v1/admin/financial` (`monitor:read`) | staf | UNKNOWN, wallet/hold, kursor, reversal-e, outbox, çmime, shadow |
+
+Pa API klienti: asnjë endpoint publik/klienti për top-up, pagesë ose mutacion wallet-i (provuar me test mbi `openapi()`).
+
+### 2. Gate financiar i agreguar
+`python -m apps.central.tools.financial_readiness [--json] [--strict] [--no-enterprise-checks] [--enterprise-cwd DIR]` — vetëm lexim (provuar:
+zero INSERT/UPDATE/DELETE). Pjesa **Central** (rakordim pa CRITICAL/FAIL, pa mint pozitiv të pashpjeguar, pa reversal të pasigurt, raporte të freskëta,
+baseline/cutover, çmim efektiv + monedhë libri = monedhë llogarie, kredenciale shërbimi financiare aktive) dhe pjesa **Enterprise** si PROCESE të veçanta
+(Central s'importon `app`): `scripts.queue_readiness`, `scripts.money_authority_readiness`, `scripts.pricing_authority_readiness`, `scripts.financial_ops`
+(UNKNOWN backlog, kursor/sinkron, shadow mismatch, ACK-et e prodhimit mbulohen nga dy të parët). Çdo kontroll që nuk ekzekutohet ⇒ **FAIL**
+(`--no-enterprise-checks` ⇒ më së shumti WARN "NOT VERIFIED", kurrë PASS). Dalja `PASS|WARN|FAIL`; kodi 0 PASS (WARN pa `--strict`), 1 FAIL (ose WARN me `--strict`), 2 gabim.
+**Prodhimi s'është i gatshëm pa `PASS` (rekomandim: `--strict`).** Mjeti nuk ndryshon asnjë konfigurim.
+
+### 3. Alarmet (të vetmet; pa integrim të rremë — lexohen nga mjeti/API/log)
+| Nivel | Kodi | Kushti | Pragu (konfig) |
+|---|---|---|---|
+| CRITICAL | `unexplained_positive_credit` | kredi pozitive lokale pa grant (rakordim) | çdo |
+| CRITICAL | `negative_invariant` / `negative_balance` | bilanc negativ | çdo |
+| CRITICAL | `wallet_hold_mismatch` | `held ≠ Σ holds ACTIVE` ose formula e ruajtjes e thyer | çdo |
+| CRITICAL | `unresolved_reversal` | reversal i pazbatuar | `CENTRAL_MONEY_UNRESOLVED_REVERSAL_FAIL_SECONDS` (3600) / `SMS_FINANCIAL_UNRESOLVED_REVERSAL_CRITICAL_SECONDS` |
+| CRITICAL | `money_feed_broken` | mode `central` + kursor pa epokë / me gabim / mosha > prag / grant-reversal mungon | `SMS_FINANCIAL_MONEY_CURSOR_CRITICAL_SECONDS` (3600) |
+| CRITICAL | `pricing_missing` | mode `central` + pa snapshot / sinkron me gabim / mosha > fail | `SMS_PRICING_STALE_FAIL_SECONDS` (3600) |
+| WARN | `stale_usage_report` | raport mes fresh e stale | `CENTRAL_MONEY_REPORT_FRESH/STALE_SECONDS` (600/1800) |
+| WARN | `cursor_lag`, `money_cursor_lag` | kursor mbrapa / i vjetër | `…CURSOR_WARN_SECONDS` (900) |
+| WARN | `shadow_pricing_mismatch` | ≥ 1 mospërputhje shadow | — |
+| WARN | `unknown_backlog` | UNKNOWN më i vjetër se pragu (me shumën e mbajtur) | `SMS_FINANCIAL_UNKNOWN_WARN_SECONDS` (3600); `queue_readiness` e bën FAIL në 24h |
+| WARN | `reconciliation_drift` | diskrepancë WARN/FAIL jo-kritike | — |
+| WARN | `stale_pending_payments`, `price_assignment_missing`, `usage_reports_stale`, `pricing_snapshot_stale` | operacion i ngecur / pa çmim / outbox i pa-dërguar / sinkron i vjetër | `CENTRAL_PAYMENT_PENDING_STALE_SECONDS` (172800) … |
+
+### 4. Reversal-et e pazgjidhura — rrjedha e operatorit
+`GET /admin/financial/unresolved-reversals` (+ `scripts.financial_ops`): `grant_id`, shuma, monedha, `available`, `held`, `age_seconds`, arsyeja (Central), gjendja Central
+(`reversed`+koha) dhe Enterprise (`reconciliation_required`+detail), ashpërsia (WARN→FAIL pas pragut). **Nuk ka "shëno si zgjidhur"** dhe asnjë debit i detyruar negativ:
+diskrepanca mbetet e dukshme derisa Enterprise ta raportojë `reversed`. Veprimet e lejuara (secili veprim financiar real, i audituar): (a) shtimi i fondeve në wallet-in
+Enterprise nga grant i ri Central (kështu `available ≥ shuma` dhe reversal-i aplikohet në ciklin e radhës); (b) rregullim Central i miratuar (`debit_adjustment`) që e kompenson;
+(c) korrigjim operacional i miratuar (p.sh. kalimi i UNKNOWN në outcome përfundimtar që lëshon/kap hold-in). Origjinali mbetet në historinë e raporteve.
+
+### 5. UNKNOWN në operacionet financiare
+`UNKNOWN` mban hold ACTIVE ⇒ para e ngrirë dhe e dukshme: `scripts.financial_ops` / `GET /v1/admin/financial` tregojnë numrin, moshën më të vjetër dhe shumën e mbajtur per monedhë;
+alarmi `unknown_backlog`; `queue_readiness` hyn në gate. Semantika e M9-a pa ndryshim (kurrë ridërgim/release/capture automatik; zgjidhje vetëm DLR autoritativ ose stafi me audit).
+
+### 6. Mbulimi i audit-it
+Test dinamik (`tests/test_m9f_audit_and_credentials.py`): çdo transaksion që prek tabela financiare/autorizimi (Payment, CreditGrant, Ledger, CreditAccount, MoneyEvent, PriceBook/Version/Rule/Assignment,
+ServiceClient/Key/Enterprise, CentralUser) përmban rresht audit në të njëjtin commit (≥ 25 transaksione provohen). Veprimet: `credit_account.create|status_change`, `payment.create|approve|reject`,
+`credit_grant.create|reverse`, `credit_adjustment.create`, `debit_adjustment.create`, `price_book.create`, `price_version.create|activate|import|retire`, `price_rule.set|remove`, `price_assignment.create`,
+`service_client.create|grant|revoke|disable_key|disable_client|enable_auto_grant|disable_auto_grant`, `service_key.add`, `user.create`, `usage_report.retention` (Central);
+`money.baseline_create`, `money.cursor_reset`, `money.grant_recorded|grant_credited|grant_reversal_recorded`, `pricing.snapshot_apply`, `message.unknown_resolve`, `email.unknown_resolve`,
+`wallet.adjust`, `topup.create|confirm`, `financial.retention` (Enterprise). **Boshllëqe të mbyllura në M9-f:** krijimi i klientit/çelësit të shërbimit, krijimi i admin-it, baseline-i, reset-i i kursorit,
+aplikimi i grant-eve/çmimeve nga sinkronizimi. Nuk auditohet qëllimisht: ingestimi i raporteve (evidencë e pandryshueshme me frekuencë të lartë), `pricing_sequence` (pjesë e veprimit të audituar).
+Konfigurimi i autoritetit (`SMS_*_AUTHORITY`, ACK) vjen vetëm nga mjedisi — asnjë rrugë runtime nuk e ndryshon (provuar me AST), pra s'ka mutacion për t'u audituar.
+Asnjë sekret/JWT/çelës/fjalëkalim në `detail` (provuar me skanim).
+
+### 7. Kredencialet e shërbimit
+Scope-t e vetme: `sync:read`, `money:read`, `money:report`, `pricing:read`; çdo endpoint kërkon SAKTËSISHT scope-in e vet (matrica 4×8 e provuar: scope tjetër ⇒ 403), token që pretendon scope që klienti s'e ka ⇒ 403,
+lipsë/e prishur/skaduar/replay (`jti`)/nënshkrim i gabuar/`kid`/audience i gabuar ⇒ 401, klient i çaktivizuar dhe çelës i çaktivizuar ⇒ 401, enterprise jashtë autorizimit ⇒ 403 / jashtë snapshot-it,
+`auth_generation` rritet vetëm kur ndryshon bashkësia (grant/revoke), konsumatori e sheh. **Pa ngritje scope-i:** asnjë kod nuk cakton `.scopes` pas krijimit; `create_service_credential` refuzon (kod 2) një klient ekzistues me scope të ndryshëm.
+Rekomandim operimi: një klient per scope/roli (worker `money_control_plane`, `money_usage_reporter`, `pricing_control_plane`), jo një klient me të gjitha.
+
+### 8. Retention (vetëm operacional, i kufizuar, i audituar, dry-run parazgjedhje)
+| Të dhëna | Politika | Mjeti |
+|---|---|---|
+| Central `usage_reports` | `CENTRAL_USAGE_REPORT_RETENTION_DAYS=0` (parazgjedhje: **pa fshirje**). Me >0: raporti aktual dhe `KEEP_LAST` (20) të fundit per çelës ruhen gjithmonë; ≤ `FULL_DAYS` (30) të gjitha; mes `FULL_DAYS` dhe `RETENTION_DAYS` një per ditë UTC; më i vjetër fshihet | `python -m apps.central.tools.retention [--apply]` |
+| Enterprise `sms_pricing_comparisons` | OK > `SMS_PRICING_COMPARISON_OK_DAYS` (90; 0 = jo), mospërputhje > `…MISMATCH_DAYS` (365). Nuk fshihet gjatë `shadow` (dritarja përdoret nga readiness) pa `--include-shadow` | `python -m scripts.financial_retention [--apply]` |
+| Enterprise outbox `sms_usage_reports` | `SMS_USAGE_OUTBOX_RETENTION_DAYS=0` (pa fshirje); me >0 vetëm `sent`/`superseded`, jashtë `KEEP_LAST` (50) të fundit | i njëjti |
+Fshirja kalon vetëm nga ky kod: trigger-at PG lejojnë DELETE vetëm me `central.retention_delete=on` / `sms.retention_delete=on` brenda transaksionit; UPDATE/TRUNCATE ndalohen gjithmonë.
+**NUK fshihen kurrë:** ledger tregtar, grant-e, pagesa, `money_events`, audit financiar, ledger/holds/grants/baseline të Enterprise, mesazhet (foto e çmimit), faturat, versionet/rregullat/snapshot-et e çmimeve (shpjegojnë ngarkesat).
+Politika e pa-vendosur ligjore ⇒ dokumentuar, jo fshirë: `audit_log` (Central+Enterprise), `sms_money_grants`, `sms_pricing_snapshots` rriten ngadalë; vendim retention-i ligjor para M13.
+
+### 9. Hot path (SQL për `submit+commit`, PostgreSQL; `process_one` = 10 në të tre)
+`local` **21** (identik me para-M9-e) · `central` **25** (= 21 − 3 legacy [card, versione, rate] + 7 lokale [`sms_pricing_state`, enterprise, entitlement, caktim, libër, version, rregulla]) · `shadow` **30** (= 21 + 7 + 1 INSERT krahasimi + 1 flush; përkohësisht).
+Zero thirrje rrjeti/Central në asnjë modalitet (httpx + `socket.connect` të bllokuara në test). Në `local` u hoq një SELECT i tepërt (`Rate`) që M9-e kishte shtuar.
+
+### 10. Backup / restore financiar
+**Central (burim i së vërtetës për paranë dhe çmimin e klientit):** `money_sequence`, `commercial_ledger_entries`, `credit_accounts`, `payments`, `credit_grants`, `money_events`, `usage_reports`, `price_books|versions|rules|assignments`, `pricing_sequence`, `users`, `audit_log`, `service_*`.
+**Enterprise:** `sms_ledger_entries`, `sms_holds`, `sms_wallets`, `sms_money_cursor|baselines|grants`, `sms_usage_reports`, `sms_pricing_state|snapshots|books|versions|rules|assignments|comparisons`, `sms_messages` (foto), `sms_invoices/lines`, `sms_audit_log`.
+Çdo bazë: `scripts/backup.sh` (pg_dump custom + checksum) **plus WAL archiving/PITR për Central** (shih 11). Restore vetëm në bazë të re (`scripts/restore.sh`), pastaj verifikim:
+Enterprise `python -m scripts.verify_ledger`; Central `python -m apps.central.tools.money_reconciliation --strict` dhe `python -m apps.central.tools.financial_readiness`.
+**Rendi i rikuperimit:** (1) Central DB → migrime në kokë (`0021`) → verifiko `usage_reports`/ledger; (2) Enterprise DB → migrime (`0026`) → `verify_ledger`; (3) shërbimet Central; (4) workers Enterprise në rend:
+`pricing_control_plane`, `money_control_plane` (kursori), `money_usage_reporter`; (5) `financial_readiness --strict`; (6) hap trafikun. Authority qëndron `shadow` (mint i bllokuar) deri në PASS.
+
+### 11. Semantika e DR (pa reset të heshtur)
+| Skenari | Sjellja | Veprimi |
+|---|---|---|
+| Central i rikthyer MBRAPA kursorit të Enterprise (seq Enterprise > Central) | `cursor_ahead`/`CURSOR_AHEAD` ⇒ kursori ndalet, alarm `money_feed_broken` (central), rakordim | **Grant-et e humbura s'mund të ri-emetohen me të njëjtin ID.** Prandaj Central duhet **PITR/WAL ose replikë sinkrone (RPO≈0) për tabelat e parave**; restore nga dump i natës mbetet bllokues prodhimi (shih blloqet). Nëse ndodh: freeze (shadow), rakordim, vendim financiar i audituar. |
+| Epokë e re e Central (bazë e krijuar nga e para) | `money_epoch_mismatch`, kursori ndalet | `scripts.money_authority reset-cursor --epoch <e re> --generation N --ack-replay --by <operator>` (audit `money.cursor_reset`); riprodhim nga 0, idempotent; grant-et që Central s'i ka ⇒ `unexpected_grant` CRITICAL |
+| Enterprise i rikthyer MBRAPA Central | kursori më i ulët ⇒ riprodhim idempotent nga `last_seq`; grant-et e njohur = no-op; raportet vazhdojnë me `report_seq` lokal | `financial_readiness`; rakordimi tregon `cursor_behind` deri sa të arrijë |
+| Replay i ngjarjeve dublikatë | no-op (UNIQUE `grant_id`, `event_id`+hash); ngjarje me ID të njëjtë por përmbajtje tjetër ⇒ konflikt, kursori ndalet | — |
+| Çmime: Central i rikthyer mbrapa (i njëjti epoch, revision më i ulët) | snapshot më i vjetër ⇒ `STALE`, Enterprise vazhdon me snapshot-in e fundit të plotë; përmbajtje e ndryshuar për version ekzistues ⇒ `PricingApplyError`, asgjë s'aktivizohet | rikrijo versionet e humbura me ID të reja në Central (fotot e mesazheve mbeten të vlefshme); s'ka reset epoke për çmime në M9 |
+| Snapshot i çmimeve i humbur në Enterprise | pa snapshot ⇒ fail-closed nën `central`; `pricing_missing` CRITICAL | sinkron i ri (`known_*` bosh ⇒ snapshot i plotë) |
+Asnjë rikuperim nuk ndryshon authority-n automatikisht; rikthimi i money authority `central→local` hap sërish mint-in lokal (shih M9-c) — përdor `shadow` si gjendje të sigurt.
+
+### 12. Bllokuesit e mbetur për prodhim (shih edhe `docs/M9_PRODUCTION_CHECKLIST.md`)
+1. **PITR/RPO≈0 për Central** nuk është pjesë e repo-s (infra): pa të, DR i grant-eve nuk është i sigurt. 2. **Provider idempotency:** asnjë adapter real nuk ka provë `idempotent_by_reference` (Twilio/HTTP = false) ⇒ UNKNOWN mbetet procesi njerëzor. 3. **Pagesa/gateway:** vetëm manuale me maker-checker (pa gateway, qëllimisht). 4. `pay_from_wallet`/auto-pay të bllokuara nën shadow/central (M9-c) — faturimi nga Central është M10. 5. Tarifa mujore e planit + overage email ende nga plani Enterprise (M10). 6. Retention ligjor i `audit_log`/grant-eve i pavendosur. 7. Gate-i `financial_readiness` kërkon mjedisin Enterprise (`SMS_*`) në hostin që e ekzekuton. 8. Pa alarm-integrim (pa pager/Prometheus): alarmet lexohen nga mjeti/API. 9. M8: SMTP/CAPTCHA/proxy të vërtetë (shih checklist). 10. M11 UI dhe M13 pastrimi legacy.

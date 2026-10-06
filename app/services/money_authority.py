@@ -34,6 +34,7 @@ from app.models.money_authority import (
     MoneyGrant,
 )
 from app.models.wallet import EntryType, Hold, HoldStatus, LedgerEntry, Wallet
+from app.services import audit
 from app.services import wallet as wallets
 
 ZERO = Decimal("0")
@@ -199,6 +200,9 @@ def create_baseline(
     )  # fmt: skip
     db.add(b)
     db.flush()
+    audit._append(db, actor=created_by, role="operator", action="money.baseline_create", target_type="money_baseline",
+                  target_id=ref, detail={"wallet_id": w.id, "currency": w.currency, "available": str(avail), "held": str(held),
+                                         "gross": str(gross), "superseded": prior.baseline_ref if prior else None})  # fmt: skip
     return b
 
 

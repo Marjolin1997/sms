@@ -3,7 +3,7 @@
     python -m scripts.money_authority baseline-create --wallet-id N --by <operator>   # kërkon authority=shadow
     python -m scripts.money_authority baseline-show   [--wallet-id N]
     python -m scripts.money_authority cursor-show
-    python -m scripts.money_authority reset-cursor --epoch <uuid> --generation N --ack-replay
+    python -m scripts.money_authority reset-cursor --epoch <uuid> --generation N --ack-replay --by <operator>
 
 `baseline-create` regjistron `gross_at_cutover` (available+held) të pandryshueshëm dhe shtyp `baseline_ref`,
 që stafi i Central e jep te grant-i `purpose=bootstrap`. Nuk krijon para. `reset-cursor` është për epokë të
@@ -45,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--epoch", required=True)
     r.add_argument("--generation", type=int, required=True)
     r.add_argument("--ack-replay", action="store_true")
+    r.add_argument("--by", required=True)
     a = ap.parse_args(argv)
     with SessionLocal() as db:
         try:
@@ -68,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
                 if not a.ack_replay:
                     print("refused: --ack-replay is required", file=sys.stderr)  # noqa: T201
                     return 2
-                ms.reset_epoch(db, uuid.UUID(a.epoch), a.generation)
+                ms.reset_epoch(db, uuid.UUID(a.epoch), a.generation, a.by)
                 db.commit()
                 print("cursor reset; the consumer will replay from seq 0")  # noqa: T201
         except (ma.BaselineError, ValueError) as e:

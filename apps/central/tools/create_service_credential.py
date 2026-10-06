@@ -23,16 +23,27 @@ from apps.central.core.config import settings
 from apps.central.core.db import make_engine
 from apps.central.core.errors import CentralError, Conflict
 from apps.central.models.service_auth import ServiceClient
-from apps.central.services import service_auth
+from apps.central.services import audit, service_auth
+
+LABEL = "system:service_client_configuration"
 
 
 def run(client_id, kid, public_key_pem, scopes, enterprise_ids, engine=None) -> tuple[int, str]:
     engine = engine or make_engine(settings.database_url)
     with Session(engine, expire_on_commit=False) as db:
         try:
-            exists = db.scalar(select(ServiceClient.id).where(ServiceClient.client_id == client_id))
+            existing = db.scalar(select(ServiceClient).where(ServiceClient.client_id == client_id))
+            exists = None if existing is None else existing.id
+            if existing is not None and scopes and sorted(set(scopes)) != sorted(existing.scopes):
+                return 2, "client exists: its scopes cannot be changed here (no escalation)"
             if exists is None:
-                service_auth.create_client(db, client_id, scopes, enterprise_ids)
+                client = service_auth.create_client(db, client_id, scopes, enterprise_ids)
+                audit.record_system(
+                    db, label=LABEL, action="service_client.create", resource_type="service_client",
+                    resource_id=client.id,
+                    detail={"client_id": client_id, "scopes": list(client.scopes),
+                            "enterprises": sorted(str(e) for e in enterprise_ids)},
+                )  # fmt: skip
                 created = True
             else:
                 if enterprise_ids:
@@ -41,7 +52,15 @@ def run(client_id, kid, public_key_pem, scopes, enterprise_ids, engine=None) -> 
                         "client exists: use service_credential_admin grant to change enterprises",
                     )
                 created = False
-            _, new_key = service_auth.add_key(db, client_id, kid, public_key_pem)
+            key, new_key = service_auth.add_key(db, client_id, kid, public_key_pem)
+            if (
+                new_key
+            ):  # vetëm çelësi PUBLIK ekziston këtu; në audit shkon vetëm kid (jo materiali)
+                audit.record_system(
+                    db, label=LABEL, action="service_key.add", resource_type="service_client",
+                    resource_id=service_auth.get_client(db, client_id).id,
+                    detail={"client_id": client_id, "kid": kid},
+                )  # fmt: skip
         except Conflict as e:
             db.rollback()
             return 1, f"conflict: {e}"

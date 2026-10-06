@@ -141,6 +141,39 @@ def test_central_has_only_health_routes_and_no_docs():
         "/registration/{registration_id}/verify",
         "/registration/{registration_id}/verification/resend", "/admin/registration-ops",
             "/internal/pricing/state", "/internal/pricing/snapshot",
+        # M9-f: API admin financiare (admin = shkrim, operator = lexim; pa DELETE)
+        "/admin/financial/alerts",
+        "/admin/financial/overview",
+        "/admin/financial/readiness",
+        "/admin/financial/unresolved-reversals",
+        "/admin/money/accounts",
+        "/admin/money/accounts/{account_id}",
+        "/admin/money/accounts/{account_id}/adjustments",
+        "/admin/money/accounts/{account_id}/ledger",
+        "/admin/money/accounts/{account_id}/status",
+        "/admin/money/grants",
+        "/admin/money/grants/{grant_id}",
+        "/admin/money/grants/{grant_id}/reverse",
+        "/admin/money/payments",
+        "/admin/money/payments/{payment_id}",
+        "/admin/money/payments/{payment_id}/approve",
+        "/admin/money/payments/{payment_id}/reject",
+        "/admin/money/reconciliation",
+        "/admin/money/usage-reports",
+        "/admin/money/usage-reports/history",
+        "/admin/money/usage-reports/{report_id}",
+        "/admin/pricing/assignments",
+        "/admin/pricing/books",
+        "/admin/pricing/books/{book_id}",
+        "/admin/pricing/books/{book_id}/versions",
+        "/admin/pricing/preview",
+        "/admin/pricing/readiness",
+        "/admin/pricing/state",
+        "/admin/pricing/versions/{version_id}",
+        "/admin/pricing/versions/{version_id}/activate",
+        "/admin/pricing/versions/{version_id}/retire",
+        "/admin/pricing/versions/{version_id}/rules",
+        "/admin/pricing/versions/{version_id}/rules/remove",
     }  # fmt: skip
 
 
@@ -170,8 +203,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0021_next.py").write_text(
-        'revision = "0021"\ndown_revision = "0020"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0022_next.py").write_text(
+        'revision = "0022"\ndown_revision = "0021"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -399,5 +432,9 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "money_cursor_stale_fail_seconds",
         "money_unresolved_reversal_fail_seconds",
         "money_report_missing_grace_seconds",
+        "payment_pending_stale_seconds",
+        "usage_report_retention_days",
+        "usage_report_full_days",
+        "usage_report_keep_last",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"

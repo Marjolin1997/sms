@@ -25,6 +25,7 @@ from app.models.pricing import (
     PricingState,
     PricingVersion,
 )
+from app.services import audit
 from packages.contracts.control_plane.pricing import v1 as pv
 
 APPLIED, NOOP, STALE = "applied", "noop", "stale"
@@ -139,6 +140,9 @@ def apply_snapshot(
     state.activated_at, state.last_success_at = now, now
     state.first_active_at = state.first_active_at or now
     state.last_error = state.last_error_at = None
+    audit.system_event(db, "system:pricing_sync", "pricing.snapshot_apply", "pricing_snapshot", snap_row.id,
+                       {"epoch": str(epoch), "revision": rev, "generation": gen, "snapshot_hash": d["snapshot_hash"],
+                        "retired_versions": res.retired})  # fmt: skip
     return res
 
 

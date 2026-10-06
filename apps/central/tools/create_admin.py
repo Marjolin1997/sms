@@ -21,7 +21,7 @@ from apps.central.core.config import settings
 from apps.central.core.db import make_engine
 from apps.central.core.errors import CentralError
 from apps.central.models.user import Role
-from apps.central.services import users
+from apps.central.services import audit, users
 
 
 def _password() -> str:
@@ -52,6 +52,10 @@ def run(email: str, password: str, role: str, engine=None) -> tuple[int, str]:
                 f"user {existing.email} exists with different credentials or role; no changes made",
             )
         user = users.create_user(db, email, password, role)
+        audit.record_system(
+            db, label="system:create_admin", action="user.create", resource_type="user",
+            resource_id=user.id, detail={"email": user.email, "role": user.role},
+        )  # fmt: skip
         db.commit()
         return 0, f"created {user.role} {user.email} id={user.id}"
 

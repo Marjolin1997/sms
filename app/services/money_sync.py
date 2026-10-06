@@ -42,6 +42,7 @@ from app.models.money_authority import (
     MoneyGrant,
 )
 from app.models.wallet import EntryType
+from app.services import audit
 from app.services import money_authority as ma
 from app.services import wallet as wallets
 from packages.contracts.control_plane.money import v1
@@ -111,12 +112,15 @@ def rebase_generation(db: Session, epoch: uuid.UUID, generation: int) -> None:
     cur.authorization_generation, cur.last_seq = generation, 0
 
 
-def reset_epoch(db: Session, epoch: uuid.UUID, generation: int) -> None:
+def reset_epoch(db: Session, epoch: uuid.UUID, generation: int, by: str = "operator") -> None:
     """VETËM operator (skripti `money_authority reset-cursor --ack`): epokë e re e Central ⇒ riprodhim
     nga 0. Grant-et e aplikuar mbeten; ato që Central s'i ka më janë çështje rakordimi (M9-d)."""
     cur = get_cursor(db, lock=True)
+    before = {"epoch": str(cur.epoch) if cur.epoch else None, "last_seq": cur.last_seq}
     cur.epoch, cur.authorization_generation, cur.last_seq = epoch, generation, 0
     cur.last_error = cur.last_error_at = None
+    audit._append(db, actor=by[:64], role="operator", action="money.cursor_reset", target_type="money_cursor",
+                  target_id="1", detail={"before": before, "epoch": str(epoch), "generation": generation})  # fmt: skip
 
 
 def sync_age_seconds(cur: MoneyCursor, now: datetime | None = None) -> float | None:
@@ -283,10 +287,31 @@ def _apply_reversed(db: Session, ev: v1.MoneyEventV1, now: datetime) -> str:
     return APPLIED
 
 
+SYNC_ACTOR = "system:money_sync"
+
+
+def _audit_grant(db: Session, action: str, grant_id, ev_seq: int | None = None) -> None:
+    """M9-f: çdo tranzicion real i grant-it në Enterprise lë gjurmë audit (sistem; pa sekrete)."""
+    g = db.get(
+        MoneyGrant, grant_id if isinstance(grant_id, uuid.UUID) else uuid.UUID(str(grant_id))
+    )
+    audit.system_event(
+        db, SYNC_ACTOR, action, "money_grant", g.grant_id,
+        {"status": g.status, "amount": str(g.amount), "currency": g.currency, "seq": ev_seq,
+         "purpose": g.purpose, "detail": g.detail},
+    )  # fmt: skip
+
+
 def apply_event(db: Session, ev: v1.MoneyEventV1, now: datetime) -> str:
     if ev.event_type == v1.EVENT_GRANT_ISSUED:
-        return _apply_issued(db, ev, now)
-    return _apply_reversed(db, ev, now)
+        res = _apply_issued(db, ev, now)
+        if res == APPLIED:
+            _audit_grant(db, "money.grant_recorded", ev.grant_id, ev.seq)
+        return res
+    res = _apply_reversed(db, ev, now)
+    if res == APPLIED:
+        _audit_grant(db, "money.grant_reversal_recorded", ev.grant_id, ev.seq)
+    return res
 
 
 def drain_deferred(db: Session, now: datetime | None = None) -> int:
@@ -314,7 +339,9 @@ def drain_deferred(db: Session, now: datetime | None = None) -> int:
             g.status, g.detail, g.updated_at = G_DEFERRED, "mapping valid: not credited", now
         if mode == "central":
             _credit_row(db, g, now)
-            n += g.status == G_APPLIED
+            if g.status == G_APPLIED:
+                n += 1
+                _audit_grant(db, "money.grant_credited", g.grant_id, g.issued_seq)
     db.flush()
     return n
 

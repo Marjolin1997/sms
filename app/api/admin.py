@@ -386,6 +386,15 @@ def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor
     }
 
 
+@router.get("/financial")
+def financial(db: Session = Depends(get_db), _: Principal = Depends(require("monitor:read"))):
+    """M9-f: pamja financiare operacionale + alarmet (vetëm lexim; pa sekrete/PII)."""
+    from app.services import financial_ops
+
+    snap = financial_ops.snapshot(db)
+    return {"snapshot": snap, "alerts": financial_ops.alerts(snap)}
+
+
 # --- UNKNOWN: rezultat i panjohur i dërgimit (M9-a) -------------------------------------------
 
 

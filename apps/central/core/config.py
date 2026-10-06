@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     money_unresolved_reversal_fail_seconds: int = Field(default=3600, ge=60, le=2592000)
     # Llogari me grant por pa asnjë raport: WARN brenda grace, pastaj FAIL.
     money_report_missing_grace_seconds: int = Field(default=1800, ge=60, le=604800)
+    # --- M9-f: operacione financiare (pragje alarmi + retention i kufizuar) ---
+    # Pagesë `pending` më e vjetër se kjo = operacion i ngecur (WARN).
+    payment_pending_stale_seconds: int = Field(default=172800, ge=3600, le=2592000)
+    # Retention i `usage_reports`: 0 = pa fshirje (parazgjedhje konservatore). Raporti aktual dhe
+    # `keep_last` të fundit per çelës NUK fshihen kurrë; mes `full_days` dhe `retention_days`
+    # mbahet një raport per ditë UTC.
+    usage_report_retention_days: int = Field(default=0, ge=0, le=3650)
+    usage_report_full_days: int = Field(default=30, ge=1, le=3650)
+    usage_report_keep_last: int = Field(default=20, ge=1, le=10000)
 
 
 settings = Settings()
