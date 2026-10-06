@@ -365,7 +365,10 @@ def test_central_exposes_no_registration_and_no_business_endpoints(api):
     paths = set(c.app.openapi()["paths"])
     assert {"/healthz", "/readyz", "/auth/token", "/auth/me", "/admin/ping"} <= paths
     assert not [p for p in paths if "signup" in p]  # M8-d: /registration* ekziston me qëllim
-    assert all("/products" in p for p in paths if "enterprise" in p)  # pa CRUD Enterprise
+    # pa CRUD Enterprise (M9-g1: rrugët e faturimit përdorin `enterprise_id` vetëm si çelës lidhjeje)
+    assert all(
+        "/products" in p or p.startswith("/admin/billing/") for p in paths if "enterprise" in p
+    )
 
 
 # --- sekrete jo në log ---------------------------------------------------------------------------------
