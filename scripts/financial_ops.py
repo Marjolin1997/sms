@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
             snap = financial_ops.snapshot(db)
             db.rollback()
         alerts = financial_ops.alerts(snap)
+        financial_ops.emit(alerts)
     except Exception as e:  # noqa: BLE001
         print(f"internal error: {type(e).__name__}: {e}", file=sys.stderr)  # noqa: T201
         return 2

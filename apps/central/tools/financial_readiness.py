@@ -15,6 +15,7 @@ Prodhimi NUK është i gatshëm pa PASS të plotë (pa asnjë FAIL; me `--strict
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 from collections.abc import Callable
@@ -28,6 +29,7 @@ from apps.central.core.timeutil import utcnow
 from apps.central.services import financial_ops
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
+log = logging.getLogger("central.financial_readiness")
 ENTERPRISE_RUNS = (
     ("queue", "scripts.queue_readiness", ["--json"]),
     ("money", "scripts.money_authority_readiness", ["--json"]),
@@ -160,6 +162,11 @@ def main(argv: list[str] | None = None, engine=None, run: Runner | None = None) 
         print(f"internal error: {type(e).__name__}: {str(e)[:200]}", file=sys.stderr)  # noqa: T201
         return 2
     status = overall(items)
+    for i in items:
+        if i.level != PASS:
+            (log.error if i.level == FAIL else log.warning)(
+                "ALERT %s %s:%s: %s", i.level, i.source, i.name, i.reason
+            )
     if a.json:
         print(
             json.dumps(

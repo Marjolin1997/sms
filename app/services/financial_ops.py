@@ -5,6 +5,7 @@
 (`scripts.financial_ops`, `GET /v1/admin/financial`, `apps.central.tools.financial_readiness`). Asnjë mutacion.
 """
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -26,6 +27,7 @@ from app.models.sending import Message, MessageStatus
 from app.models.wallet import Hold, HoldStatus, LedgerEntry, Wallet
 
 CRITICAL, WARN = "CRITICAL", "WARN"
+log = logging.getLogger("sms.financial_ops")
 
 
 def _age(now: datetime, then: datetime | None) -> int | None:
@@ -293,3 +295,11 @@ def alerts(snap: dict) -> list[dict]:
         add(WARN, "unknown_backlog", "queue", f"{k['sms']} sms / {k['email']} email UNKNOWN, oldest {k['oldest_age_seconds']}s, held {k['held_amount_by_currency']}")  # fmt: skip
     order = {CRITICAL: 0, WARN: 1}
     return sorted(out, key=lambda a: (order[a["level"]], a["code"], a["subject"]))
+
+
+def emit(alerts_: list[dict]) -> None:
+    """Stili i log-ut ekzistues (`ALERT …`): CRITICAL ⇒ ERROR, WARN ⇒ WARNING. Pa integrim të jashtëm."""
+    for a in alerts_:
+        (log.error if a["level"] == CRITICAL else log.warning)(
+            "ALERT %s %s %s: %s", a["level"], a["code"], a["subject"], a["message"]
+        )

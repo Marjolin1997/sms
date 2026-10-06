@@ -451,5 +451,11 @@ Enterprise `python -m scripts.verify_ledger`; Central `python -m apps.central.to
 | Snapshot i çmimeve i humbur në Enterprise | pa snapshot ⇒ fail-closed nën `central`; `pricing_missing` CRITICAL | sinkron i ri (`known_*` bosh ⇒ snapshot i plotë) |
 Asnjë rikuperim nuk ndryshon authority-n automatikisht; rikthimi i money authority `central→local` hap sërish mint-in lokal (shih M9-c) — përdor `shadow` si gjendje të sigurt.
 
-### 12. Bllokuesit e mbetur për prodhim (shih edhe `docs/M9_PRODUCTION_CHECKLIST.md`)
+### 12. Rishikimi i sigurisë së pagesave (rezultat)
+Maker-checker: shërbim (`approve` refuzon krijuesin njeri) **dhe** CHECK në DB (`approved_by_id <> created_by_id`); aktori është gjithmonë `CentralUser` admin (operator ⇒ 403; proces sistemi vetëm si krijues me etiketë `system:<emër>`, kurrë miratues);
+replay/idempotencë: `(source, external_reference)` unik (i njëjti përmbajtje ⇒ e njëjta pagesë, tjetër ⇒ 409), miratimi përsëritet pa kredi të dytë (UNIQUE `(entry_type, source)` në ledger), garat e provuara në PG;
+shuma: string dhjetor, 0 < x ≤ 9 999 999 999 999.999999, ≤ 6 decimale, pa float/eksponent; arsye e detyrueshme për refuzim/rregullim/reversal/status; tranzicionet: `pending→approved|rejected`, përfundimtare (trigger PG + CHECK `status_consistency`);
+pagesa e miratuar s'ndryshohet dhe s'fshihet (trigger PG, API pa DELETE). Asnjë ndryshim kodi nuk u desh për këto (M9-b i mbulonte); M9-f shton vetëm provat përmes API-së.
+
+### 13. Bllokuesit e mbetur për prodhim (shih edhe `docs/M9_PRODUCTION_CHECKLIST.md`)
 1. **PITR/RPO≈0 për Central** nuk është pjesë e repo-s (infra): pa të, DR i grant-eve nuk është i sigurt. 2. **Provider idempotency:** asnjë adapter real nuk ka provë `idempotent_by_reference` (Twilio/HTTP = false) ⇒ UNKNOWN mbetet procesi njerëzor. 3. **Pagesa/gateway:** vetëm manuale me maker-checker (pa gateway, qëllimisht). 4. `pay_from_wallet`/auto-pay të bllokuara nën shadow/central (M9-c) — faturimi nga Central është M10. 5. Tarifa mujore e planit + overage email ende nga plani Enterprise (M10). 6. Retention ligjor i `audit_log`/grant-eve i pavendosur. 7. Gate-i `financial_readiness` kërkon mjedisin Enterprise (`SMS_*`) në hostin që e ekzekuton. 8. Pa alarm-integrim (pa pager/Prometheus): alarmet lexohen nga mjeti/API. 9. M8: SMTP/CAPTCHA/proxy të vërtetë (shih checklist). 10. M11 UI dhe M13 pastrimi legacy.
