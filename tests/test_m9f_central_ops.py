@@ -589,6 +589,8 @@ def test_pg_usage_reports_remain_append_only_outside_the_retention_path(env):
     from sqlalchemy import text
     from sqlalchemy.exc import DBAPIError
 
+    if env.eng.dialect.name != "postgresql":
+        pytest.skip("needs PostgreSQL triggers")
     seed_reports(env, n=3)
     with Session(env.eng) as s:
         rid = s.scalar(select(UsageReport.report_id).order_by(UsageReport.report_seq).limit(1))

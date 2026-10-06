@@ -7,7 +7,7 @@ Bashkon: (1) pjesën Central (rakordim, raporte përdorimi, reversal-e të pazgj
 çmime, kredenciale shërbimi) dhe (2) pjesën Enterprise, të ekzekutuar si PROCES të veçantë (Central nuk importon `app`):
 `scripts.queue_readiness` (UNKNOWN/SENDING), `scripts.money_authority_readiness` (autoriteti, kursori, ACK),
 `scripts.pricing_authority_readiness` (sinkron, shadow, ACK) dhe `scripts.financial_ops` (alarmet CRITICAL/WARN).
-Mjedisi i Enterprise (SMS_*) duhet të jetë i disponueshëm për proceset fëmijë. Çdo kontroll që s'mund të ekzekutohet është FAIL
+Mjedisi i konfigurimit të Enterprise duhet të jetë i disponueshëm për proceset fëmijë. Çdo kontroll që s'mund të ekzekutohet është FAIL
 (`--no-enterprise-checks` jep vetëm WARN "NOT VERIFIED": kurrë PASS i rremë).
 
 Dalja: PASS | WARN | FAIL. Kodi: 0 PASS (ose WARN pa `--strict`) · 1 FAIL (ose WARN me `--strict`) · 2 gabim i brendshëm.

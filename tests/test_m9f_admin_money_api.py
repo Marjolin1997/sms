@@ -14,7 +14,7 @@ from apps.central.models import AuditLog, CommercialLedgerEntry, CreditAccount, 
 from apps.central.services import credit_accounts as accts
 from apps.central.services import enterprises
 from apps.central.services import products as prod_svc
-from tests.test_central import IS_PG, make_db  # noqa: F401
+from tests.test_central import make_db  # noqa: F401
 from tests.test_central_auth import auth_secret, bearer, mk, token_for  # noqa: F401
 from tests.test_central_products import cdb  # noqa: F401
 
@@ -506,7 +506,9 @@ def test_valid_amounts_are_stored_exactly(api, amount, expected):
         headers=api.a1,
     )
     assert r.status_code == 201 and r.json()["amount"] == expected
-    if IS_PG:  # SQLite ruan NUMERIC si float: vetëm PostgreSQL e provon saktësinë e kolonës
+    if (
+        api.eng.dialect.name == "postgresql"
+    ):  # SQLite ruan NUMERIC si float: vetëm PostgreSQL e provon saktësinë e kolonës
         with Session(api.eng) as s:
             assert s.scalar(select(Payment.amount)) == D(expected)
 

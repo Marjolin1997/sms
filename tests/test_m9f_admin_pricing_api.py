@@ -549,6 +549,8 @@ def test_pricing_endpoints_require_admin_for_writes_and_never_leak_internal_fiel
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_triggers_back_up_the_api_immutability(api):
+    if api.eng.dialect.name != "postgresql":
+        pytest.skip("needs PostgreSQL triggers")
     from sqlalchemy import text
     from sqlalchemy.exc import DBAPIError
 

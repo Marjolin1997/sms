@@ -382,7 +382,13 @@ def test_report_routes_exist_only_under_internal_money(env):
     assert paths == {
         "/internal/money/usage-reports": ["post"],
         "/internal/money/reconciliation": ["get"],
+        # M9-f: pamje admin vetëm-lexim (RBAC admin/operator; asnjë shkrim)
+        "/admin/money/reconciliation": ["get"],
+        "/admin/money/usage-reports": ["get"],
+        "/admin/money/usage-reports/history": ["get"],
+        "/admin/money/usage-reports/{report_id}": ["get"],
     }
+    assert all(m == ["get"] for p, m in paths.items() if p.startswith("/admin/"))
 
 
 def test_central_migration_0019_up_down_up(make_db):  # noqa: F811

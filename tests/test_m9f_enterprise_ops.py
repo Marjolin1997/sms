@@ -21,6 +21,7 @@ from app.models.wallet import Hold, HoldStatus
 from app.services import financial_ops as fo
 from scripts import financial_ops as fo_cli
 from scripts import financial_retention as fr
+from tests.test_central import make_db  # noqa: F401
 from tests.test_m9a_unknown_outcome import Stub, stub, to_unknown  # noqa: F401
 from tests.test_pipeline import OK, fake, send, world  # noqa: F401
 
@@ -39,7 +40,8 @@ def test_unknown_backlog_counts_held_amount_and_ages_into_a_warn_alert(
     db, world, stub, monkeypatch
 ):
     m = to_unknown(db, stub)
-    snap = fo.snapshot(db, NOW + timedelta(hours=3))
+    now = datetime.now(UTC)
+    snap = fo.snapshot(db, now + timedelta(hours=3))
     u = snap["unknown"]
     assert u["sms"] == 1 and u["email"] == 0 and u["held_amount_by_currency"] == {"EUR": "0.050000"}
     assert u["oldest_age_seconds"] >= 3 * 3600 - 5
@@ -50,9 +52,9 @@ def test_unknown_backlog_counts_held_amount_and_ages_into_a_warn_alert(
     al = fo.alerts(snap)
     assert [(a["level"], a["code"]) for a in al] == [("WARN", "unknown_backlog")]
     assert "0.050000" in al[0]["message"]
-    assert fo.alerts(fo.snapshot(db, NOW)) == []  # i ri ⇒ pa alarm
+    assert fo.alerts(fo.snapshot(db, now)) == []  # i ri ⇒ pa alarm
     monkeypatch.setattr(settings, "financial_unknown_warn_seconds", 60)
-    assert codes(fo.alerts(fo.snapshot(db, NOW + timedelta(minutes=5)))) == ["unknown_backlog"]
+    assert codes(fo.alerts(fo.snapshot(db, now + timedelta(minutes=5)))) == ["unknown_backlog"]
     assert m.public_id not in json.dumps(snap)  # asnjë id mesazhi/PII në pamje agregate
 
 
@@ -428,34 +430,49 @@ def test_usage_outbox_retention_never_touches_unsent_or_the_latest_and_is_off_by
 
 
 @pytest.mark.skipif(not PG, reason="needs PostgreSQL")
-def test_pg_deletes_are_blocked_outside_retention_and_updates_never_allowed(db):
-    cid = cmp_row(db, ok=True, age_days=1)
-    rid = outbox(db, 1, "sent", 1)
-    db.commit()
-    for sql, params in (("DELETE FROM sms_pricing_comparisons WHERE id = :i", {"i": cid}), ("UPDATE sms_pricing_comparisons SET ok = false WHERE id = :i", {"i": cid}),
-                        ("DELETE FROM sms_usage_reports WHERE report_id = :i", {"i": rid})):  # fmt: skip
-        with pytest.raises(DBAPIError):
-            db.execute(text(sql), params)
-        db.rollback()
-    db.execute(text("SELECT set_config('sms.retention_delete', 'on', true)"))
-    with pytest.raises(DBAPIError):  # edhe me GUC, UPDATE mbetet i ndaluar
-        db.execute(text("UPDATE sms_pricing_comparisons SET ok = false WHERE id = :i"), {"i": cid})
-    db.rollback()
-    db.execute(text("SELECT set_config('sms.retention_delete', 'on', true)"))
-    assert (
-        db.execute(text("DELETE FROM sms_pricing_comparisons WHERE id = :i"), {"i": cid}).rowcount
-        == 1
-    )
-    assert (
-        db.execute(text("DELETE FROM sms_usage_reports WHERE report_id = :i"), {"i": rid}).rowcount
-        == 1
-    )
-    db.commit()
-    cid2 = cmp_row(db, ok=True, age_days=1)
-    db.commit()
-    with pytest.raises(DBAPIError):  # GUC ishte vetëm brenda transaksionit të mëparshëm
-        db.execute(text("DELETE FROM sms_pricing_comparisons WHERE id = :i"), {"i": cid2})
-    db.rollback()
+def test_pg_deletes_are_blocked_outside_retention_and_updates_never_allowed(make_db):
+    """Trigger-at vijnë nga migrimet (skema e `db` fixture është create_all, pa trigger): DB e migruar + SQL i papërpunuar."""
+    from sqlalchemy import create_engine
+
+    from tests.test_central import enterprise_alembic
+
+    url = make_db("ent")
+    if not url.startswith("postgresql"):
+        pytest.skip("needs PostgreSQL triggers")
+    enterprise_alembic(url, "upgrade", "head")
+    eng = create_engine(url)
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO sms_pricing_comparisons (kind, ref, classification, ok, created_at) VALUES ('sms', 'r1', 'match', true, now())"
+            )
+        )
+        c.execute(text("INSERT INTO sms_usage_reports (report_id, enterprise_id, product_id, currency, report_seq, authority_mode, ledger_max_id, generated_at, payload, "
+                       "payload_hash, content_hash, status, attempts, next_attempt_at, created_at, updated_at) VALUES (:r, :e, :p, 'EUR', 1, 'central', 1, now(), '{}', "
+                       "'a', 'b', 'sent', 0, now(), now(), now())"), {"r": uuid.uuid4(), "e": uuid.uuid4(), "p": uuid.uuid4()})  # fmt: skip
+    for sql in (
+        "DELETE FROM sms_pricing_comparisons",
+        "UPDATE sms_pricing_comparisons SET ok = false",
+        "DELETE FROM sms_usage_reports",
+    ):
+        with pytest.raises(DBAPIError), eng.begin() as c:
+            c.execute(text(sql))
+    with pytest.raises(DBAPIError), eng.begin() as c:  # edhe me GUC, UPDATE mbetet i ndaluar
+        c.execute(text("SELECT set_config('sms.retention_delete', 'on', true)"))
+        c.execute(text("UPDATE sms_pricing_comparisons SET ok = false"))
+    with eng.begin() as c:
+        c.execute(text("SELECT set_config('sms.retention_delete', 'on', true)"))
+        assert c.execute(text("DELETE FROM sms_pricing_comparisons")).rowcount == 1
+        assert c.execute(text("DELETE FROM sms_usage_reports")).rowcount == 1
+    with eng.begin() as c:  # GUC ishte vetëm brenda transaksionit të mëparshëm
+        c.execute(
+            text(
+                "INSERT INTO sms_pricing_comparisons (kind, ref, classification, ok, created_at) VALUES ('sms', 'r2', 'match', true, now())"
+            )
+        )
+    with pytest.raises(DBAPIError), eng.begin() as c:
+        c.execute(text("DELETE FROM sms_pricing_comparisons"))
+    eng.dispose()
 
 
 def test_retention_only_deletes_operational_tables_never_money_or_price_history():
