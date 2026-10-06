@@ -295,6 +295,14 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "price_rules",
         "price_assignments",
         "pricing_sequence",
+        "commercial_plans",
+        "plan_versions",
+        "billing_profiles",
+        "billing_subscriptions",
+        "invoice_number_sequence",
+        "invoices",
+        "invoice_lines",
+        "billing_periods",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -370,4 +378,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0019_usage_reports.py",
         "0020_pricing_authority.py",
         "0021_usage_report_retention_guard.py",
+        "0022_billing_g1.py",
     ]

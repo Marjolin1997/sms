@@ -174,6 +174,24 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/pricing/versions/{version_id}/retire",
         "/admin/pricing/versions/{version_id}/rules",
         "/admin/pricing/versions/{version_id}/rules/remove",
+        # M9-g1: faturimi periodik (admin = shkrim, operator = lexim; pa DELETE, pa ekzekutim faturimi në HTTP)
+        "/admin/billing/plans",
+        "/admin/billing/plans/{plan_id}",
+        "/admin/billing/plans/{plan_id}/versions",
+        "/admin/billing/plan-versions/{version_id}",
+        "/admin/billing/plan-versions/{version_id}/update",
+        "/admin/billing/plan-versions/{version_id}/activate",
+        "/admin/billing/plan-versions/{version_id}/retire",
+        "/admin/billing/profiles/{enterprise_id}",
+        "/admin/billing/subscriptions",
+        "/admin/billing/subscriptions/{enterprise_id}",
+        "/admin/billing/subscriptions/{enterprise_id}/assign",
+        "/admin/billing/subscriptions/{enterprise_id}/cancel",
+        "/admin/billing/subscriptions/{enterprise_id}/resume",
+        "/admin/billing/periods",
+        "/admin/billing/invoices",
+        "/admin/billing/invoices/{invoice_id}",
+        "/admin/billing/invoices/{invoice_id}/void",
     }  # fmt: skip
 
 
@@ -203,8 +221,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0022_next.py").write_text(
-        'revision = "0022"\ndown_revision = "0021"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0023_next.py").write_text(
+        'revision = "0023"\ndown_revision = "0022"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -250,6 +268,14 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "price_rules",
         "price_assignments",
         "pricing_sequence",
+        "commercial_plans",
+        "plan_versions",
+        "billing_profiles",
+        "billing_subscriptions",
+        "invoice_number_sequence",
+        "invoices",
+        "invoice_lines",
+        "billing_periods",
         "registration_products",
         "product_registration_policy",
     }
@@ -289,6 +315,14 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "price_rules",
         "price_assignments",
         "pricing_sequence",
+        "commercial_plans",
+        "plan_versions",
+        "billing_profiles",
+        "billing_subscriptions",
+        "invoice_number_sequence",
+        "invoices",
+        "invoice_lines",
+        "billing_periods",
         "registration_products",
         "product_registration_policy",
     }
@@ -336,6 +370,14 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "price_rules",
         "price_assignments",
         "pricing_sequence",
+        "commercial_plans",
+        "plan_versions",
+        "billing_profiles",
+        "billing_subscriptions",
+        "invoice_number_sequence",
+        "invoices",
+        "invoice_lines",
+        "billing_periods",
         "registration_products",
         "product_registration_policy",
     }
@@ -436,5 +478,9 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "usage_report_retention_days",
         "usage_report_full_days",
         "usage_report_keep_last",
+        "invoice_due_days",
+        "issuer_name",
+        "issuer_address",
+        "issuer_tax_id",
     }
     assert Settings().database_url != "sqlite:///./sms_dev.db"

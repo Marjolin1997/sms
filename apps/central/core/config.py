@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     usage_report_retention_days: int = Field(default=0, ge=0, le=3650)
     usage_report_full_days: int = Field(default=30, ge=1, le=3650)
     usage_report_keep_last: int = Field(default=20, ge=1, le=10000)
+    # --- M9-g1: faturimi periodik (Central lëshon). Issuer-i ngrihet në çdo faturë në lëshim. ---
+    invoice_due_days: int = Field(default=14, ge=0, le=365)
+    issuer_name: str = Field(default="Your Company Ltd", max_length=120)
+    issuer_address: str = Field(default="Street 1, City, Country", max_length=300)
+    issuer_tax_id: str = Field(default="", max_length=40)
 
 
 settings = Settings()

@@ -155,6 +155,14 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "price_rules",
         "price_assignments",
         "pricing_sequence",
+        "commercial_plans",
+        "plan_versions",
+        "billing_profiles",
+        "billing_subscriptions",
+        "invoice_number_sequence",
+        "invoices",
+        "invoice_lines",
+        "billing_periods",
         "registration_products",
         "product_registration_policy",
     }
@@ -303,7 +311,10 @@ def test_no_hard_delete_exists_anywhere_in_central():
 def test_central_has_no_management_routes_yet():
     paths = set(client_for("sqlite://")[0].app.openapi()["paths"])
     # pa CRUD Enterprise: vetëm rrugët e assignment-it nën /admin/enterprises/{id}/products
-    assert all("/products" in p for p in paths if "enterprise" in p)
+    # M9-g1: rrugët e faturimit marrin `enterprise_id` si çelës lidhjeje, jo si CRUD i enterprise-it
+    assert all(
+        "/products" in p or p.startswith("/admin/billing/") for p in paths if "enterprise" in p
+    )
 
 
 def test_service_layer_has_no_enterprise_or_sync_dependencies():

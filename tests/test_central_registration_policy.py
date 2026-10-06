@@ -592,7 +592,7 @@ def test_migration_0014_up_down_up_readiness_and_metadata(make_db):
             c, opts={"compare_type": True, "version_table": "central_alembic_version"}
         )
         assert compare_metadata(ctx, Base.metadata) == []
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0021"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0022"
     assert readiness.check(eng) is None
     eng.dispose()
 
