@@ -264,11 +264,14 @@ def test_email_sql_statement_counts_of_the_hot_path_are_unchanged(db, world, ver
     cancel_n, ok = measure(lambda s: emails.cancel_if_queued(s, eid))
     assert ok is True
     if db.get_bind().dialect.name == "postgresql":
-        assert (submit_n, process_n, retry_n, cancel_n) == (
-            10,
-            12,
-            11,
-            6,
-        )  # M9-a: +2 SQL në process_one; M9-g2: +1 INSERT (prova e billable) vetëm kur dërgimi arrin SENT (jo te retry/cancel/submit)
+        assert (
+            (submit_n, process_n, retry_n, cancel_n)
+            == (
+                10,
+                12,
+                12,
+                6,
+            )
+        )  # M9-a: +2 SQL në process_one; M9-g2: +1 INSERT (prova e billable) kur dërgimi arrin SENT; submit/cancel pa ndryshim
     else:
         assert min(submit_n, process_n, retry_n, cancel_n) > 0

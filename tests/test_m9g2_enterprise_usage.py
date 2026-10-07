@@ -182,14 +182,62 @@ def test_evidence_is_immutable_orm_and_postgres_trigger(db, verified):
     with pytest.raises(BillingEvidenceImmutableError):
         db.flush()
     db.rollback()
-    if engine.dialect.name == "postgresql":
-        for sql in (
-            "UPDATE sms_email_billable_events SET first_status = 'bounced'",
-            "DELETE FROM sms_email_billable_events",
-            "TRUNCATE sms_email_billable_events",
-        ):
-            with engine.begin() as c, pytest.raises(DBAPIError):
+
+
+def test_pg_triggers_reject_mutation_on_a_migrated_database(make_db):
+    """Schema-ja e suitës vjen nga `create_all` (pa trigger-a): trigger-at provohen te një DB e migruar me alembic, me rreshta realë."""
+    from sqlalchemy import create_engine
+
+    from tests.test_central import enterprise_alembic
+
+    url = make_db("ent")
+    if not url.startswith("postgresql"):
+        pytest.skip("postgres parametrization only")
+    enterprise_alembic(url, "upgrade", "head")
+    eng = create_engine(url)
+    eid, rid = uuid.uuid4(), uuid.uuid4()
+    with (
+        eng.begin() as c
+    ):  # FK-ja drejt sms_emails hiqet vetëm në këtë DB provë (trigger-at nuk varen prej saj)
+        c.execute(
+            text(
+                "ALTER TABLE sms_email_billable_events DROP CONSTRAINT fk_sms_email_billable_events_email_id_sms_emails"
+            )
+        )
+        c.execute(
+            text(
+                "INSERT INTO sms_email_billable_events (email_id, enterprise_id, first_status, billable_at, created_at) VALUES (1, :e, 'sent', now(), now())"
+            ),
+            {"e": eid},
+        )
+        c.execute(
+            text(
+                "INSERT INTO sms_billing_usage_reports (report_id, enterprise_id, product_id, report_seq, watermark, cumulative_billable_count, generated_at, payload, payload_hash, content_hash, status, attempts, next_attempt_at, created_at, updated_at) VALUES (:r, :e, :e, 1, 1, 1, now(), '{}', 'h', 'c', 'pending', 0, now(), now(), now())"
+            ),
+            {"r": rid, "e": eid},
+        )
+    for sql in (
+        "UPDATE sms_email_billable_events SET first_status = 'bounced'",
+        "DELETE FROM sms_email_billable_events",
+        "TRUNCATE sms_email_billable_events",
+        "UPDATE sms_billing_usage_reports SET cumulative_billable_count = 0, watermark = 0",
+        "UPDATE sms_billing_usage_reports SET payload = '{\"x\": 1}'",
+        "DELETE FROM sms_billing_usage_reports",
+    ):
+        with eng.connect() as c:
+            with pytest.raises(DBAPIError):
                 c.execute(text(sql))
+            c.rollback()
+    with (
+        eng.begin() as c
+    ):  # delivery state (status/attempts) remains mutable: the outbox must keep working
+        c.execute(
+            text(
+                "UPDATE sms_billing_usage_reports SET status = 'sent', attempts = 1, sent_at = now(), updated_at = now()"
+            )
+        )
+        assert c.execute(text("SELECT count(*) FROM sms_email_billable_events")).scalar() == 1
+    eng.dispose()
 
 
 def test_first_billable_is_atomic_with_the_status_change(db, verified):
