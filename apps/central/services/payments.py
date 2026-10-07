@@ -137,7 +137,9 @@ def approve(db: Session, payment_id, actor, *, now: datetime | None = None) -> P
     actor = money_common.admin(actor)
     actor_id = actor.id  # lexo para ndryshimeve (actor i skaduar do shkaktonte autoflush)
     pre = get(db, payment_id)
-    if pre.purpose != PURPOSE_CREDIT:  # M9-g3: pagesat e faturave miratohen vetëm përmes `invoice_payments.approve`
+    if (
+        pre.purpose != PURPOSE_CREDIT
+    ):  # M9-g3: pagesat e faturave miratohen vetëm përmes `invoice_payments.approve`
         raise NotFound("payment not found")
     money_sequence.lock(db)
     acct = credit_accounts.get(db, pre.account_id, lock=True)
@@ -162,7 +164,15 @@ def approve(db: Session, payment_id, actor, *, now: datetime | None = None) -> P
     return p
 
 
-def reject(db: Session, payment_id, actor, reason, *, now: datetime | None = None, purpose: str = PURPOSE_CREDIT) -> Payment:
+def reject(
+    db: Session,
+    payment_id,
+    actor,
+    reason,
+    *,
+    now: datetime | None = None,
+    purpose: str = PURPOSE_CREDIT,
+) -> Payment:
     """pending → rejected (pa kredit). rejected ⇒ no-op; approved ⇒ Conflict (paraja s'fshihet)."""
     actor = money_common.admin(actor)
     actor_id = actor.id

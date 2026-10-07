@@ -390,7 +390,10 @@ def get_invoice(
     invoice_id: uuid.UUID, db: Session = Depends(get_db), _: CentralUser = Depends(READ)
 ):
     inv = billing.get_invoice(db, invoice_id)
-    return {**invoice_out(inv, billing.lines_of(db, inv.id)), "settlement": settlement_out(db, inv)}  # M9-g3
+    return {
+        **invoice_out(inv, billing.lines_of(db, inv.id)),
+        "settlement": settlement_out(db, inv),
+    }  # M9-g3
 
 
 @router.post("/invoices/{invoice_id}/void")

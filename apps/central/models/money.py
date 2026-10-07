@@ -232,7 +232,9 @@ class Payment(Base):
             name="fk_payments_invoice_scope",
             ondelete="RESTRICT",
         ),
-        UniqueConstraint("id", "invoice_id", "currency", "amount", name="uq_payments_allocation_ref"),
+        UniqueConstraint(
+            "id", "invoice_id", "currency", "amount", name="uq_payments_allocation_ref"
+        ),
         Index("ix_payments_account_status", "account_id", "status"),
         Index("ix_payments_invoice_status", "invoice_id", "status"),
         CheckConstraint("amount > 0", name="amount_positive"),

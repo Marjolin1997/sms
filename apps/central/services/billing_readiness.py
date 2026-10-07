@@ -155,7 +155,13 @@ def settlement_checks(db: Session, now: datetime) -> list[Check]:
     out.append(Check("billing_invoice_payments_not_stale", WARN if ip["stale_pending"] else PASS,
                      f"{ip['stale_pending']} invoice payment(s) pending > {ip['stale_after_seconds']}s" if ip["stale_pending"] else "none"))  # fmt: skip
     ov = st["invoices"]["overdue_open"]
-    out.append(Check("billing_invoices_not_overdue", WARN if ov else PASS, f"{ov} open invoice(s) past due" if ov else "none"))
+    out.append(
+        Check(
+            "billing_invoices_not_overdue",
+            WARN if ov else PASS,
+            f"{ov} open invoice(s) past due" if ov else "none",
+        )
+    )
     rj = st["rejected_on_overdue_open_invoice"]
     out.append(Check("billing_rejected_payments_reconciled", WARN if rj else PASS,
                      f"{len(rj)} rejected invoice payment(s) on an overdue unpaid invoice (manual reconciliation)" if rj else "none"))  # fmt: skip
