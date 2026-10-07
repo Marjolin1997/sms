@@ -20,7 +20,10 @@ def doc(n, *, seq=1, watermark=0, count=0, at="2030-01-01T12:00:00.000000+00:00"
 def cases() -> list[tuple[str, dict]]:
     return [
         ("empty_first_report", doc(1)),
-        ("with_usage", doc(2, seq=2, watermark=17, count=15, at="2030-01-02T00:00:00.000000+00:00")),
+        (
+            "with_usage",
+            doc(2, seq=2, watermark=17, count=15, at="2030-01-02T00:00:00.000000+00:00"),
+        ),
         ("gaps_in_ids_are_allowed", doc(3, seq=3, watermark=1000, count=3)),
         ("edge_high_values", doc(4, seq=2**62, watermark=bv.INT64_MAX, count=bv.INT64_MAX)),
     ]
@@ -31,7 +34,16 @@ def main() -> None:
     for name, d in cases():
         r = bv.BillingUsageReportV1.parse(d)
         (HERE / f"{name}.body").write_bytes(r.to_bytes())
-        meta.append({"name": name, "input": d, "parsed": r.to_dict(), "payload_hash": r.payload_hash(), "content_hash": r.content_hash(), "body_file": f"{name}.body"})
+        meta.append(
+            {
+                "name": name,
+                "input": d,
+                "parsed": r.to_dict(),
+                "payload_hash": r.payload_hash(),
+                "content_hash": r.content_hash(),
+                "body_file": f"{name}.body",
+            }
+        )
     (HERE / "cases.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
 
 

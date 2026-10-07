@@ -121,7 +121,9 @@ def evaluate(db: Session, run: Runner | None) -> list[Item]:
     items = [
         Item("central", c.name, c.level, c.reason) for c in financial_ops.readiness_checks(db, now)
     ]
-    items.extend(Item("billing", c.name, c.level, c.reason) for c in billing_readiness.checks(db, now))  # M9-g2
+    items.extend(
+        Item("billing", c.name, c.level, c.reason) for c in billing_readiness.checks(db, now)
+    )  # M9-g2
     if run is None:
         items.append(
             Item("enterprise", "skipped", WARN, "NOT VERIFIED: Enterprise checks were skipped")

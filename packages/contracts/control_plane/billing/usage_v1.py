@@ -111,15 +111,23 @@ class BillingUsageReportV1:
         return json.loads(self.to_bytes())
 
     def to_bytes(self) -> bytes:
-        return json.dumps(self.doc, separators=(",", ":"), sort_keys=True, ensure_ascii=True).encode("utf-8")
+        return json.dumps(
+            self.doc, separators=(",", ":"), sort_keys=True, ensure_ascii=True
+        ).encode("utf-8")
 
     def payload_hash(self) -> str:
         return hashlib.sha256(self.to_bytes()).hexdigest()
 
     def content_hash(self) -> str:
         """Hash i gjendjes (pa report_id/report_seq/generated_at): dy raporte me të njëjtin (watermark, count) janë të njëjta."""
-        d = {k: v for k, v in self.doc.items() if k not in ("report_id", "report_seq", "generated_at")}
-        return hashlib.sha256(json.dumps(d, separators=(",", ":"), sort_keys=True, ensure_ascii=True).encode()).hexdigest()
+        d = {
+            k: v
+            for k, v in self.doc.items()
+            if k not in ("report_id", "report_seq", "generated_at")
+        }
+        return hashlib.sha256(
+            json.dumps(d, separators=(",", ":"), sort_keys=True, ensure_ascii=True).encode()
+        ).hexdigest()
 
     @classmethod
     def parse(cls, d: Any) -> "BillingUsageReportV1":
@@ -129,13 +137,17 @@ class BillingUsageReportV1:
             raise UnsupportedSchemaError(f"unsupported schema {d.get('schema')!r}")
         extra, missing = set(d) - _TOP, _TOP - set(d)
         if extra or missing:
-            raise ContractError(f"report fields: unexpected {sorted(extra)}, missing {sorted(missing)}")
+            raise ContractError(
+                f"report fields: unexpected {sorted(extra)}, missing {sorted(missing)}"
+            )
         watermark = _int(d["watermark"], "watermark")
         count = _int(d["cumulative_billable_count"], "cumulative_billable_count")
         if count > watermark:
             raise ContractError("cumulative_billable_count cannot exceed watermark")
         if (count == 0) != (watermark == 0):
-            raise ContractError("watermark and cumulative_billable_count are both zero or both positive")
+            raise ContractError(
+                "watermark and cumulative_billable_count are both zero or both positive"
+            )
         doc = {
             "schema": SCHEMA,
             "report_id": _uuid(d["report_id"], "report_id"),

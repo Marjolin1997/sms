@@ -38,12 +38,16 @@ def upgrade() -> None:
             name=op.f("ck_billing_usage_reports_counts"),
         ),
         sa.ForeignKeyConstraint(
-            ["enterprise_id"], ["enterprises.id"],
-            name=op.f("fk_billing_usage_reports_enterprise_id_enterprises"), ondelete="RESTRICT",
+            ["enterprise_id"],
+            ["enterprises.id"],
+            name=op.f("fk_billing_usage_reports_enterprise_id_enterprises"),
+            ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["product_id"], ["products.id"],
-            name=op.f("fk_billing_usage_reports_product_id_products"), ondelete="RESTRICT",
+            ["product_id"],
+            ["products.id"],
+            name=op.f("fk_billing_usage_reports_product_id_products"),
+            ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("report_id", name=op.f("pk_billing_usage_reports")),
         sa.UniqueConstraint(
@@ -61,11 +65,17 @@ def upgrade() -> None:
         batch.add_column(sa.Column("usage_to_report_id", sa.Uuid(), nullable=True))
         batch.create_foreign_key(
             op.f("fk_billing_periods_usage_from_report_id_billing_usage_reports"),
-            "billing_usage_reports", ["usage_from_report_id"], ["report_id"], ondelete="RESTRICT",
+            "billing_usage_reports",
+            ["usage_from_report_id"],
+            ["report_id"],
+            ondelete="RESTRICT",
         )
         batch.create_foreign_key(
             op.f("fk_billing_periods_usage_to_report_id_billing_usage_reports"),
-            "billing_usage_reports", ["usage_to_report_id"], ["report_id"], ondelete="RESTRICT",
+            "billing_usage_reports",
+            ["usage_to_report_id"],
+            ["report_id"],
+            ondelete="RESTRICT",
         )
         batch.create_check_constraint(
             op.f("ck_billing_periods_usage_order"),
@@ -88,8 +98,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
-        op.execute("DROP TRIGGER IF EXISTS trg_billing_usage_reports_no_truncate ON billing_usage_reports")
-        op.execute("DROP TRIGGER IF EXISTS trg_billing_usage_reports_immutable ON billing_usage_reports")
+        op.execute(
+            "DROP TRIGGER IF EXISTS trg_billing_usage_reports_no_truncate ON billing_usage_reports"
+        )
+        op.execute(
+            "DROP TRIGGER IF EXISTS trg_billing_usage_reports_immutable ON billing_usage_reports"
+        )
         op.execute("DROP FUNCTION IF EXISTS central_billing_usage_forbid()")
     with op.batch_alter_table("billing_periods") as batch:
         batch.drop_constraint(op.f("ck_billing_periods_usage_order"), type_="check")
@@ -97,7 +111,8 @@ def downgrade() -> None:
             op.f("fk_billing_periods_usage_to_report_id_billing_usage_reports"), type_="foreignkey"
         )
         batch.drop_constraint(
-            op.f("fk_billing_periods_usage_from_report_id_billing_usage_reports"), type_="foreignkey"
+            op.f("fk_billing_periods_usage_from_report_id_billing_usage_reports"),
+            type_="foreignkey",
         )
         batch.drop_column("usage_to_report_id")
         batch.drop_column("usage_from_report_id")

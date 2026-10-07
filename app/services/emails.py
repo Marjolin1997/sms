@@ -62,7 +62,9 @@ def _move(db: Session, e: Email, to: EmailStatus, detail: str | None = None) -> 
     e.status = to
     e.updated_at = datetime.now(UTC)
     if to.value in BILLABLE_STATUSES and previous.value not in BILLABLE_STATUSES:
-        record_first_billable(db, e, to, e.updated_at)  # M9-g2: prova e parë e faturueshmërisë (një INSERT, idempotent)
+        record_first_billable(
+            db, e, to, e.updated_at
+        )  # M9-g2: prova e parë e faturueshmërisë (një INSERT, idempotent)
     if to not in (
         EmailStatus.QUEUED,
         EmailStatus.SENDING,

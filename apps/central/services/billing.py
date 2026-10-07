@@ -351,15 +351,24 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
         plan = billing_plans.get_plan(db, pv.plan_id)
         specs.append({"line_type": L_MONTHLY_FEE, "description": f"{plan.name} - monthly fee", "quantity": Decimal(1),
                       "unit_price": pv.monthly_fee, "amount": fee_amount, "plan_version_id": pv.id})  # fmt: skip
-    ev = billing_overage.evaluate(db, sub, pv, start, end)  # M9-g2: vetëm lexim DB; kurrë rrjet/estimim
+    ev = billing_overage.evaluate(
+        db, sub, pv, start, end
+    )  # M9-g2: vetëm lexim DB; kurrë rrjet/estimim
     if ev.wait:
         return PeriodResult("waiting_usage", reason=ev.wait)
     if ev.postpone:
-        log.warning("email usage for enterprise %s period %s postponed: %s", sub.enterprise_id, k, ev.postpone)
+        log.warning(
+            "email usage for enterprise %s period %s postponed: %s",
+            sub.enterprise_id,
+            k,
+            ev.postpone,
+        )
         return PeriodResult("postponed", reason=ev.postpone)
     if ev.extra > 0:
         amount = billing_overage.overage_amount(ev.extra, ev.quote.unit_price)
-        if amount > 0:  # sasi nën-cent (p.sh. 3 × 0.000001) rrumbullakoset në 0.00: s'krijohet linjë me vlerë zero
+        if (
+            amount > 0
+        ):  # sasi nën-cent (p.sh. 3 × 0.000001) rrumbullakoset në 0.00: s'krijohet linjë me vlerë zero
             specs.append({"line_type": L_EMAIL_OVERAGE, "quantity": Decimal(ev.extra), "unit_price": ev.quote.unit_price,
                           "amount": amount, "plan_version_id": pv.id, "pricing_source": "central", "price_book_id": ev.quote.book_id,
                           "price_version_id": ev.quote.version_id, "price_rule_id": ev.quote.rule_id,
@@ -403,7 +412,10 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
         billed_at=now, created_at=now,
     )  # fmt: skip
     if ev.metered:
-        period.usage_from, period.usage_to = int(ev.base.cumulative_billable_count), int(ev.cut.cumulative_billable_count)
+        period.usage_from, period.usage_to = (
+            int(ev.base.cumulative_billable_count),
+            int(ev.cut.cumulative_billable_count),
+        )
         period.usage_from_report_id, period.usage_to_report_id = ev.base.report_id, ev.cut.report_id
     db.add(period)
     db.flush()
@@ -456,7 +468,9 @@ def run_due(engine, now: datetime | None = None, *, max_periods: int = MAX_CATCH
     with Session(engine) as db:
         q = select(BillingSubscription.id).where(BillingSubscription.status == SUB_ACTIVE)
         if subscription_id is not None:
-            q = q.where(BillingSubscription.id == money_common.uid(subscription_id, "subscription id"))
+            q = q.where(
+                BillingSubscription.id == money_common.uid(subscription_id, "subscription id")
+            )
         q = q.order_by(BillingSubscription.created_at, BillingSubscription.id)
         if limit is not None:
             q = q.limit(max(1, int(limit)))

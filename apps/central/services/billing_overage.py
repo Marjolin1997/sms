@@ -98,7 +98,8 @@ def evaluate(db: Session, sub, pv: PlanVersion, start: datetime, end: datetime) 
 def _baseline(db: Session, sub, product_id, start: datetime) -> BillingUsageReport | None:
     prev = db.scalar(
         select(BillingPeriod).where(
-            BillingPeriod.subscription_id == sub.id, BillingPeriod.period_index == sub.next_period_index - 1
+            BillingPeriod.subscription_id == sub.id,
+            BillingPeriod.period_index == sub.next_period_index - 1,
         )
     )
     if prev is not None and prev.usage_to_report_id is not None:
