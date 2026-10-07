@@ -351,7 +351,7 @@ def test_tool_aggregates_central_and_enterprise_checks_and_is_read_only(env, cap
         event.remove(env.eng, "before_cursor_execute", spy)
     assert writes == []
     sources = {c["source"] for c in out["checks"]}
-    assert sources == {"central", "queue", "money", "pricing", "ops"}
+    assert sources == {"central", "billing", "queue", "money", "pricing", "ops"}
     assert out["status"] in ("PASS", "WARN", "FAIL") and "strict" in out
     assert code in (0, 1)
 

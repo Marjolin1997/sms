@@ -68,6 +68,23 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.models.billing_usage.BillingEvidenceImmutableError": {
+   "name": "BillingEvidenceImmutableError",
+   "module": "app.models.billing_usage",
+   "code": null,
+   "app_mro": [
+    "BillingEvidenceImmutableError"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
   "app.models.contacts.ConsentImmutableError": {
    "app_mro": [
     "ConsentImmutableError"

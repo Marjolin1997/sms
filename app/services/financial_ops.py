@@ -289,7 +289,7 @@ def alerts(snap: dict) -> list[dict]:
             "outbox",
             f"oldest unsent usage report is {u['oldest_unsent_age_seconds']}s old",
         )
-    b = snap["billing_usage"]
+    b = snap.get("billing_usage") or {"outbox": {}, "oldest_unsent_age_seconds": None}
     if b["outbox"].get(R_FAILED):
         add(CRITICAL, "billing_usage_rejected", "outbox",
             f"{b['outbox'][R_FAILED]} billing usage report(s) rejected permanently by Central (billing is blocked until resolved)")  # fmt: skip

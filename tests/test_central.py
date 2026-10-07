@@ -130,6 +130,7 @@ def test_central_has_only_health_routes_and_no_docs():
         "/internal/sync/changes", "/internal/sync/snapshot",
         "/internal/money/changes", "/internal/money/state", "/internal/money/usage-reports",
         "/internal/money/reconciliation",
+        "/internal/billing/usage-reports",  # M9-g2
         # M8-d: regjistrimi (publik + admin)
         "/registration", "/registration/products", "/registration/{registration_id}/status",
         "/admin/registrations", "/admin/registrations/{registration_id}",
@@ -276,6 +277,7 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "invoices",
         "invoice_lines",
         "billing_periods",
+        "billing_usage_reports",
         "registration_products",
         "product_registration_policy",
     }
@@ -323,6 +325,7 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "invoices",
         "invoice_lines",
         "billing_periods",
+        "billing_usage_reports",
         "registration_products",
         "product_registration_policy",
     }
@@ -378,6 +381,7 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "invoices",
         "invoice_lines",
         "billing_periods",
+        "billing_usage_reports",
         "registration_products",
         "product_registration_policy",
     }
@@ -479,6 +483,10 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "usage_report_full_days",
         "usage_report_keep_last",
         "invoice_due_days",
+        "billing_usage_fresh_seconds",
+        "billing_usage_stale_seconds",
+        "billing_wait_warn_seconds",
+        "billing_wait_fail_seconds",
         "issuer_name",
         "issuer_address",
         "issuer_tax_id",

@@ -381,6 +381,7 @@ def test_report_routes_exist_only_under_internal_money(env):
     }
     assert paths == {
         "/internal/money/usage-reports": ["post"],
+        "/internal/billing/usage-reports": ["post"],  # M9-g2 (scope billing:report)
         "/internal/money/reconciliation": ["get"],
         # M9-f: pamje admin vetëm-lexim (RBAC admin/operator; asnjë shkrim)
         "/admin/money/reconciliation": ["get"],
