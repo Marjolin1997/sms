@@ -27,6 +27,7 @@ log = logging.getLogger("sms.cp.client")
 AUDIENCE = "sms-central-sync"
 SCOPE = "sync:read"
 REPORT_SCOPE = "money:report"  # M9-d: raportimi i përdorimit (scope i veçantë nga money:read)
+BILLING_REPORT_SCOPE = "billing:report"  # M9-g2: raportimi kumulativ i email-eve të faturueshme
 MONEY_SCOPE = "money:read"
 PRICING_SCOPE = "pricing:read"  # M9-e: snapshot-i i çmimeve  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
 LIFETIME_S = 120  # ≤ 300 (kufiri i Central); i shkurtër: mbrojtje ndaj rrjedhjes
@@ -281,6 +282,13 @@ class ControlPlaneClient:
         d = self._call("POST", "/internal/money/usage-reports", json_body=payload)
         if not isinstance(d, dict) or d.get("status") not in ("stored", "duplicate"):
             raise CpProtocolError("usage report response is malformed")
+        return d
+
+    def post_billing_usage(self, payload: dict) -> dict:
+        """M9-g2: POST idempotent (scope `billing:report`); 200/201 = pranuar. 409/413/422 ⇒ `CpReportRejected` (permanente)."""
+        d = self._call("POST", "/internal/billing/usage-reports", json_body=payload)
+        if not isinstance(d, dict) or d.get("status") not in ("stored", "duplicate"):
+            raise CpProtocolError("billing usage report response is malformed")
         return d
 
     def get_reconciliation(self, enterprise_id: uuid.UUID) -> dict:

@@ -52,7 +52,7 @@ def test_enterprise_0026_changes_no_schema_and_round_trips(make_db):
     before = {
         t: {c["name"] for c in inspect(eng).get_columns(t)} for t in inspect(eng).get_table_names()
     }
-    enterprise_alembic(url, "upgrade", "head")
+    enterprise_alembic(url, "upgrade", "0026")
     after = {
         t: {c["name"] for c in inspect(eng).get_columns(t)} for t in inspect(eng).get_table_names()
     }
@@ -87,7 +87,7 @@ def test_heads_are_the_expected_single_revisions():
 
     from tests.test_central import ROOT
 
-    for ini, head in (("alembic.ini", "0026"), ("apps/central/alembic.ini", "0022")):
+    for ini, head in (("alembic.ini", "0027"), ("apps/central/alembic.ini", "0023")):
         cfg = Config(str(ROOT / ini))
         cfg.set_main_option(
             "script_location",

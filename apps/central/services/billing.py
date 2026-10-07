@@ -26,6 +26,7 @@ from apps.central.core.timeutil import utcnow
 from apps.central.models.billing import (
     INV_OPEN,
     INV_VOID,
+    L_EMAIL_OVERAGE,
     L_MONTHLY_FEE,
     P_INVOICED,
     P_NO_CHARGE,
@@ -41,7 +42,7 @@ from apps.central.models.billing import (
     PlanVersion,
 )
 from apps.central.models.enterprise import Enterprise
-from apps.central.services import audit, billing_plans, money_common
+from apps.central.services import audit, billing_overage, billing_plans, money_common
 
 log = logging.getLogger("central.billing")
 CENT = Decimal("0.01")
@@ -298,7 +299,7 @@ def next_number(db: Session, year: int) -> str:
 
 @dataclass(slots=True)
 class PeriodResult:
-    kind: str  # invoiced | no_charge | not_due | inactive | postponed
+    kind: str  # invoiced | no_charge | not_due | inactive | postponed | waiting_usage
     period: BillingPeriod | None = None
     invoice: Invoice | None = None
     reason: str | None = None
@@ -350,6 +351,19 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
         plan = billing_plans.get_plan(db, pv.plan_id)
         specs.append({"line_type": L_MONTHLY_FEE, "description": f"{plan.name} - monthly fee", "quantity": Decimal(1),
                       "unit_price": pv.monthly_fee, "amount": fee_amount, "plan_version_id": pv.id})  # fmt: skip
+    ev = billing_overage.evaluate(db, sub, pv, start, end)  # M9-g2: vetëm lexim DB; kurrë rrjet/estimim
+    if ev.wait:
+        return PeriodResult("waiting_usage", reason=ev.wait)
+    if ev.postpone:
+        log.warning("email usage for enterprise %s period %s postponed: %s", sub.enterprise_id, k, ev.postpone)
+        return PeriodResult("postponed", reason=ev.postpone)
+    if ev.extra > 0:
+        amount = billing_overage.overage_amount(ev.extra, ev.quote.unit_price)
+        if amount > 0:  # sasi nën-cent (p.sh. 3 × 0.000001) rrumbullakoset në 0.00: s'krijohet linjë me vlerë zero
+            specs.append({"line_type": L_EMAIL_OVERAGE, "quantity": Decimal(ev.extra), "unit_price": ev.quote.unit_price,
+                          "amount": amount, "plan_version_id": pv.id, "pricing_source": "central", "price_book_id": ev.quote.book_id,
+                          "price_version_id": ev.quote.version_id, "price_rule_id": ev.quote.rule_id,
+                          "description": f"Email overage - {ev.extra} above {ev.included} included"})  # fmt: skip
     invoice = None
     issued = []
     if specs:
@@ -388,6 +402,9 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
         plan_version_id=pv.id, status=P_INVOICED if invoice else P_NO_CHARGE, invoice_id=invoice.id if invoice else None,
         billed_at=now, created_at=now,
     )  # fmt: skip
+    if ev.metered:
+        period.usage_from, period.usage_to = int(ev.base.cumulative_billable_count), int(ev.cut.cumulative_billable_count)
+        period.usage_from_report_id, period.usage_to_report_id = ev.base.report_id, ev.cut.report_id
     db.add(period)
     db.flush()
     sub.next_period_index = k + 1
@@ -399,7 +416,9 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
     db.flush()
     audit.record_system(db, label=SYSTEM, action="billing.period_processed", resource_type="billing_period", resource_id=period.id,
                         detail={"enterprise_id": str(sub.enterprise_id), "subscription_id": str(sub.id), "period_index": k,
-                                "status": period.status, "invoice": invoice.number if invoice else None}, now=now)  # fmt: skip
+                                "status": period.status, "invoice": invoice.number if invoice else None,
+                                **({"usage": {"from": period.usage_from, "to": period.usage_to, "included": ev.included, "extra": ev.extra,
+                                              "from_report": str(ev.base.report_id), "to_report": str(ev.cut.report_id)}} if ev.metered else {})}, now=now)  # fmt: skip
     if invoice is not None:
         audit.record_system(db, label=SYSTEM, action="invoice.issued", resource_type="invoice", resource_id=invoice.id,
                             detail={"number": invoice.number, "total": str(invoice.total), "currency": invoice.currency,
@@ -414,20 +433,36 @@ class RunSummary:
     postponed: int = 0
     errors: int = 0
     postponed_reasons: dict = field(default_factory=dict)
+    due: int = 0  # M9-g2: abonime me të paktën një periudhë të afatuar (e përpunuar, e pritur ose e shtyrë)
+    waiting_usage: int = 0  # periudha që presin raportin e përdorimit të email-it (kurrë estimim)
+    waiting_reasons: dict = field(default_factory=dict)
+
+    @property
+    def failed(self) -> int:
+        return self.errors
+
+    def as_dict(self) -> dict:
+        return {"due": self.due, "invoiced": self.invoiced, "no_charge": self.no_charge, "waiting_usage": self.waiting_usage,
+                "postponed": self.postponed, "failed": self.failed, "postponed_reasons": dict(self.postponed_reasons),
+                "waiting_reasons": dict(self.waiting_reasons)}  # fmt: skip
 
 
-def run_due(engine, now: datetime | None = None, *, max_periods: int = MAX_CATCH_UP) -> RunSummary:
+def run_due(engine, now: datetime | None = None, *, max_periods: int = MAX_CATCH_UP, limit: int | None = None,
+            subscription_id=None) -> RunSummary:  # fmt: skip
     """Punonjësi (jo HTTP): çdo periudhë në transaksionin e vet; rikuperim i kufizuar i periudhave të humbura; periudhë e shtyrë ⇒ ndalon
     (pa iteracione të kota). Idempotent: rinisja s'krijon periudhë/faturë të dytë."""
     now = utc(now or utcnow())
     out = RunSummary()
     with Session(engine) as db:
-        ids = list(
-            db.scalars(
-                select(BillingSubscription.id).where(BillingSubscription.status == SUB_ACTIVE)
-            )
-        )
+        q = select(BillingSubscription.id).where(BillingSubscription.status == SUB_ACTIVE)
+        if subscription_id is not None:
+            q = q.where(BillingSubscription.id == money_common.uid(subscription_id, "subscription id"))
+        q = q.order_by(BillingSubscription.created_at, BillingSubscription.id)
+        if limit is not None:
+            q = q.limit(max(1, int(limit)))
+        ids = list(db.scalars(q))
     for sid in ids:
+        counted = False
         for _ in range(max_periods):
             with Session(engine, expire_on_commit=False) as db:
                 try:
@@ -438,11 +473,17 @@ def run_due(engine, now: datetime | None = None, *, max_periods: int = MAX_CATCH
                     log.exception("billing failed for subscription %s", sid)
                     out.errors += 1
                     break
+            if r.kind not in ("not_due", "inactive") and not counted:
+                counted = True
+                out.due += 1
             if r.kind == P_INVOICED:
                 out.invoiced += 1
             elif r.kind == P_NO_CHARGE:
                 out.no_charge += 1
             else:
+                if r.kind == "waiting_usage":
+                    out.waiting_usage += 1
+                    out.waiting_reasons[r.reason] = out.waiting_reasons.get(r.reason, 0) + 1
                 if r.kind == "postponed":
                     out.postponed += 1
                     out.postponed_reasons[r.reason] = out.postponed_reasons.get(r.reason, 0) + 1

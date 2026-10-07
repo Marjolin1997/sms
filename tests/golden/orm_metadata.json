@@ -462,6 +462,182 @@
    "ix_sms_billing_profiles_enterprise_id:['enterprise_id']:False"
   ]
  },
+ "sms_billing_usage_reports": {
+  "columns": {
+   "attempts": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "INTEGER"
+   },
+   "content_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "cumulative_billable_count": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "generated_at": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "last_error": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "TEXT"
+   },
+   "leased_until": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "next_attempt_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "payload": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "JSON"
+   },
+   "payload_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "product_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "report_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "report_seq": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "sent_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "status": {
+    "default": "scalar:'pending'",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(12)"
+   },
+   "updated_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "watermark": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_billing_usage_reports_counts",
+   "CheckConstraint:ck_sms_billing_usage_reports_seq_positive",
+   "CheckConstraint:ck_sms_billing_usage_reports_status",
+   "PrimaryKeyConstraint:pk_sms_billing_usage_reports",
+   "UniqueConstraint:uq_sms_billing_usage_reports_seq"
+  ],
+  "indexes": [
+   "ix_sms_billing_usage_reports_status_next:['status', 'next_attempt_at']:False"
+  ]
+ },
  "sms_campaign_recipients": {
   "columns": {
    "address": {
@@ -1368,6 +1544,75 @@
   ],
   "indexes": [
    "ix_sms_dlr_receipts_pmid:['provider', 'provider_message_id']:False"
+  ]
+ },
+ "sms_email_billable_events": {
+  "columns": {
+   "billable_at": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "email_id": {
+    "default": null,
+    "fks": [
+     "sms_emails.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "first_status": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_email_billable_events_first_status",
+   "ForeignKeyConstraint:fk_sms_email_billable_events_email_id_sms_emails",
+   "PrimaryKeyConstraint:pk_sms_email_billable_events",
+   "UniqueConstraint:uq_sms_email_billable_events_email_id"
+  ],
+  "indexes": [
+   "ix_sms_email_billable_events_enterprise_id:['enterprise_id']:False"
   ]
  },
  "sms_email_domains": {

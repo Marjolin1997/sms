@@ -61,6 +61,8 @@ def test_package_is_leaf_and_stdlib_only():
     files = sorted(p.relative_to(PKG).as_posix() for p in PKG.rglob("*.py"))
     assert files == [
         "control_plane/__init__.py",
+        "control_plane/billing/__init__.py",
+        "control_plane/billing/usage_v1.py",
         "control_plane/money/__init__.py",
         "control_plane/money/usage_v1.py",
         "control_plane/money/v1.py",

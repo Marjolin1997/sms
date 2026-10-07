@@ -267,6 +267,58 @@ def run_money_usage_reporter(once: bool = False) -> int:
         client.close()
 
 
+def run_billing_usage_reporter(once: bool = False) -> int:
+    """Raportuesi i përdorimit të faturueshëm të email-it (M9-g2): rol i VEÇANTË. `SMS_BILLING_USAGE_REPORTING=false` ⇒ proces boshe.
+    Dështimi i tij nuk prek dërgimin e email-it (provë + outbox janë tashmë të commit-uara). Scope Ed25519: `billing:report`."""
+    from app.core.db import engine
+    from app.services import billing_usage
+    from app.services import control_plane_poller as poller
+    from app.services.control_plane_client import (
+        BILLING_REPORT_SCOPE,
+        ConfigError,
+        ControlPlaneClient,
+        config_from_settings,
+    )
+
+    stop = threading.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: stop.set())
+    if not settings.billing_usage_reporting:
+        log.info("SMS_BILLING_USAGE_REPORTING=false: billing usage reporter idle")
+        while not stop.is_set():
+            heartbeat()
+            stop.wait(30)
+        return 0
+    try:
+        client = ControlPlaneClient(config_from_settings(settings), scope=BILLING_REPORT_SCOPE)
+    except ConfigError as e:
+        log.critical("billing usage reporter misconfigured: %s", e)
+        return 2
+    lock = poller.PollerLock(engine, key=billing_usage.LOCK_KEY)
+
+    def tick(factory, cl, **_):
+        try:
+            return billing_usage.run_once(engine, factory, cl)
+        except Exception:  # noqa: BLE001  (një cikël i keq s'e vret procesin)
+            log.exception("billing usage report cycle failed")
+            return billing_usage.DeliveryOutcome(kind="protocol_error", detail="cycle failed")
+
+    try:
+        if once:
+            if not lock.acquire():
+                return 0
+            return 0 if tick(SessionLocal, client).ok else 1
+        poller.run_loop(
+            SessionLocal, client, poll_interval_s=settings.billing_usage_report_interval_seconds,
+            snapshot_interval_s=0, stop=stop, lock=lock, tick=heartbeat, poll=tick,
+            staleness=lambda *_: None,
+        )  # fmt: skip
+        return 0
+    finally:
+        lock.release()
+        client.close()
+
+
 def run_pricing_control_plane(once: bool = False) -> int:
     """Konsumatori i çmimeve `cp.pricing.v1` (M9-e): rol i VEÇANTË (shëndet i veçantë nga money/cp.v1). authority=local ⇒ proces boshe."""
     from app.core.db import engine
@@ -322,6 +374,7 @@ if __name__ == "__main__":
             "control_plane",
             "money_control_plane",
             "money_usage_reporter",
+            "billing_usage_reporter",
             "pricing_control_plane",
         ],
         default="sms",
@@ -334,6 +387,8 @@ if __name__ == "__main__":
         sys.exit(run_money_control_plane(args.once))
     if args.role == "pricing_control_plane":
         sys.exit(run_pricing_control_plane(args.once))
+    if args.role == "billing_usage_reporter":
+        sys.exit(run_billing_usage_reporter(args.once))
     if args.role == "money_usage_reporter":
         sys.exit(run_money_usage_reporter(args.once))
     run() if args.role == "sms" else run_webhooks()

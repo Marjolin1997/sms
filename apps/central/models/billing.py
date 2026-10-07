@@ -305,8 +305,15 @@ class BillingPeriod(Base):
         Uuid, ForeignKey("invoices.id", ondelete="RESTRICT")
     )
     billed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    usage_from: Mapped[int | None] = mapped_column(BigInteger)  # rezervuar g2
-    usage_to: Mapped[int | None] = mapped_column(BigInteger)  # rezervuar g2
+    # M9-g2: numëruesit kumulativë (baseline → prerje) dhe raportet që i provojnë; NULL kur periudha s'ka matje email
+    usage_from: Mapped[int | None] = mapped_column(BigInteger)
+    usage_to: Mapped[int | None] = mapped_column(BigInteger)
+    usage_from_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("billing_usage_reports.report_id", ondelete="RESTRICT")
+    )
+    usage_to_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("billing_usage_reports.report_id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
@@ -315,6 +322,10 @@ class BillingPeriod(Base):
         UniqueConstraint("invoice_id", name="uq_billing_periods_invoice"),
         CheckConstraint("status in ('invoiced', 'no_charge')", name="status"),
         CheckConstraint("period_end > period_start", name="period_order"),
+        CheckConstraint(
+            "usage_from IS NULL OR (usage_to IS NOT NULL AND usage_to >= usage_from AND usage_from >= 0)",
+            name="usage_order",
+        ),
         CheckConstraint(
             "(status = 'invoiced' AND invoice_id IS NOT NULL) OR "
             "(status = 'no_charge' AND invoice_id IS NULL)",

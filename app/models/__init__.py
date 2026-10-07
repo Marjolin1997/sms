@@ -9,6 +9,7 @@ from app.models.billing import (  # noqa: F401
     Plan,
     Subscription,
 )
+from app.models.billing_usage import BillingUsageReport, EmailBillableEvent  # noqa: F401
 from app.models.campaigns import Campaign, CampaignRecipient  # noqa: F401
 from app.models.contacts import (  # noqa: F401
     ConsentEvent,

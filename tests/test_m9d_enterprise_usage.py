@@ -407,6 +407,7 @@ def test_reporting_is_outside_the_send_path_and_has_its_own_worker_role():
         "app/models/money_usage.py",
         "app/core/config.py",
         "app/services/financial_ops.py",
+        "app/services/billing_usage.py",  # M9-g2: vetëm `snapshot_session`
     }, importers  # fmt: skip  (M9-f: pamje vetëm-lexim e outbox-it)
     src = Path(worker.__file__).read_text()
     assert '"money_usage_reporter"' in src and "run_money_usage_reporter" in src

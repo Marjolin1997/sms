@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     # Vetëm sent/superseded, kurrë pending/retry/failed; `keep_last` të fundit ruhen gjithmonë.
     usage_outbox_retention_days: int = Field(0, ge=0, le=3650)
     usage_outbox_keep_last: int = Field(50, ge=1, le=100000)
+    # M9-g2: raportimi kumulativ i email-eve të faturueshme drejt Central (roli `billing_usage_reporter`; jo në dërgim).
+    billing_usage_reporting: bool = False
+    billing_usage_report_interval_seconds: int = Field(300, ge=30, le=3600)
+    # Raport i ri edhe pa email të rinj çdo kaq sekonda: Central i duhet një raport me `generated_at` ≥ fundin e periudhës.
+    billing_usage_heartbeat_seconds: int = Field(600, ge=60, le=3600)
+    billing_usage_stale_seconds: int = Field(7200, ge=120, le=604800)
     # M9-f: pragjet e alarmit financiar (Enterprise): UNKNOWN i vjetër, kursor parash i ngecur.
     financial_unknown_warn_seconds: int = Field(3600, ge=60, le=2592000)
     financial_unknown_critical_seconds: int = Field(86400, ge=60, le=2592000)

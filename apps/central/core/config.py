@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     usage_report_keep_last: int = Field(default=20, ge=1, le=10000)
     # --- M9-g1: faturimi periodik (Central lëshon). Issuer-i ngrihet në çdo faturë në lëshim. ---
     invoice_due_days: int = Field(default=14, ge=0, le=365)
+    # --- M9-g2: përdorimi i email-it (raporte kumulative nga Enterprise) ---
+    # Mosha e raportit të fundit (enterprise i matur): ≤ fresh OK · ≤ stale WARN · më shumë FAIL.
+    billing_usage_fresh_seconds: int = Field(default=900, ge=60, le=86400)
+    billing_usage_stale_seconds: int = Field(default=7200, ge=60, le=2592000)
+    # Periudhë e mbyllur që pret raportin e prerjes: WARN pas warn, FAIL pas fail.
+    billing_wait_warn_seconds: int = Field(default=3600, ge=60, le=2592000)
+    billing_wait_fail_seconds: int = Field(default=86400, ge=60, le=2592000)
     issuer_name: str = Field(default="Your Company Ltd", max_length=120)
     issuer_address: str = Field(default="Street 1, City, Country", max_length=300)
     issuer_tax_id: str = Field(default="", max_length=40)

@@ -379,4 +379,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0020_pricing_authority.py",
         "0021_usage_report_retention_guard.py",
         "0022_billing_g1.py",
+        "0023_billing_usage_g2.py",
     ]

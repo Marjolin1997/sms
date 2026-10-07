@@ -25,6 +25,7 @@ from app.models.money_usage import R_FAILED, R_PENDING, R_RETRY, R_SENDING, Usag
 from app.models.pricing import PricingComparison, PricingState
 from app.models.sending import Message, MessageStatus
 from app.models.wallet import Hold, HoldStatus, LedgerEntry, Wallet
+from app.services import billing_usage
 
 CRITICAL, WARN = "CRITICAL", "WARN"
 log = logging.getLogger("sms.financial_ops")
@@ -197,6 +198,7 @@ def snapshot(db: Session, now: datetime | None = None) -> dict:
         "wallets": _wallets(db),
         "money": _money(db, now),
         "usage_reports": _usage_outbox(db, now),
+        "billing_usage": billing_usage.stats(db, now),
         "pricing": _pricing(db, now),
     }
 
@@ -287,6 +289,12 @@ def alerts(snap: dict) -> list[dict]:
             "outbox",
             f"oldest unsent usage report is {u['oldest_unsent_age_seconds']}s old",
         )
+    b = snap["billing_usage"]
+    if b["outbox"].get(R_FAILED):
+        add(CRITICAL, "billing_usage_rejected", "outbox",
+            f"{b['outbox'][R_FAILED]} billing usage report(s) rejected permanently by Central (billing is blocked until resolved)")  # fmt: skip
+    if s.billing_usage_reporting and (b["oldest_unsent_age_seconds"] or 0) > s.billing_usage_stale_seconds:
+        add(WARN, "billing_usage_stale", "outbox", f"oldest unsent billing usage report is {b['oldest_unsent_age_seconds']}s old")  # fmt: skip
     k = snap["unknown"]
     if (
         k["oldest_age_seconds"] is not None

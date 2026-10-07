@@ -17,6 +17,7 @@ from app.core.context import worker_owner
 from app.core.errors import Conflict, DomainError, NotFound
 from app.core.scope import Owner, owned, ref
 from app.core.timeutil import as_utc
+from app.models.billing_usage import BILLABLE_STATUSES
 from app.models.email import (
     EMAIL_TRANSITIONS,
     Email,
@@ -30,6 +31,7 @@ from app.queue.dispatch import DispatchSpec
 from app.queue.postgres import PostgresDispatchQueue
 from app.services import audit, consent, email_domains, email_mime, entitlements, events, switches
 from app.services import dispatch_outcome as outcome
+from app.services.billing_usage import record_first_billable
 
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30
@@ -56,8 +58,11 @@ def _move(db: Session, e: Email, to: EmailStatus, detail: str | None = None) -> 
     if to not in EMAIL_TRANSITIONS[e.status]:
         raise Conflict(f"illegal email status transition {e.status.value} -> {to.value}")
     db.add(EmailEvent(email_id=e.id, from_status=e.status.value, to_status=to.value, detail=detail))
+    previous = e.status
     e.status = to
     e.updated_at = datetime.now(UTC)
+    if to.value in BILLABLE_STATUSES and previous.value not in BILLABLE_STATUSES:
+        record_first_billable(db, e, to, e.updated_at)  # M9-g2: prova e parë e faturueshmërisë (një INSERT, idempotent)
     if to not in (
         EmailStatus.QUEUED,
         EmailStatus.SENDING,

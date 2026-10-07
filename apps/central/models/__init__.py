@@ -11,6 +11,7 @@ from apps.central.models.billing import (
     InvoiceNumberSequence,
     PlanVersion,
 )
+from apps.central.models.billing_usage import BillingUsageReport
 from apps.central.models.enterprise import Enterprise, EnterpriseStatus
 from apps.central.models.enterprise_product import AssignmentStatus, EnterpriseProduct
 from apps.central.models.money import (
@@ -47,6 +48,7 @@ from apps.central.models.user import CentralUser, Role, UserStatus
 
 __all__ = [
     "BillingPeriod",
+    "BillingUsageReport",
     "BillingProfile",
     "BillingSubscription",
     "CommercialPlan",

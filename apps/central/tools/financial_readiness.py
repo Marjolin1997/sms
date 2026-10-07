@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from apps.central.core.config import settings
 from apps.central.core.db import make_engine
 from apps.central.core.timeutil import utcnow
-from apps.central.services import financial_ops
+from apps.central.services import billing_readiness, financial_ops
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 log = logging.getLogger("central.financial_readiness")
@@ -121,6 +121,7 @@ def evaluate(db: Session, run: Runner | None) -> list[Item]:
     items = [
         Item("central", c.name, c.level, c.reason) for c in financial_ops.readiness_checks(db, now)
     ]
+    items.extend(Item("billing", c.name, c.level, c.reason) for c in billing_readiness.checks(db, now))  # M9-g2
     if run is None:
         items.append(
             Item("enterprise", "skipped", WARN, "NOT VERIFIED: Enterprise checks were skipped")
