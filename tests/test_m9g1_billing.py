@@ -743,11 +743,17 @@ def test_pg_paid_invoice_cannot_be_voided_and_status_transitions_are_final(ready
     if not ready.url.startswith("postgresql"):
         pytest.skip("needs PostgreSQL triggers")
     inv = process(ready, ready.sid).invoice
-    with ready.eng.begin() as c:  # g3 do ta bëjë paid; këtu provojmë vetëm kufijtë e DB-së
-        c.execute(
-            text("UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = :i"),
-            {"i": inv.id},
+    from apps.central.services import (
+        invoice_payments,
+    )  # M9-g3: paid vetëm përmes pagesës + alokimit (PG e refuzon ndryshe)
+
+    with ready.F() as s:
+        pay = invoice_payments.create(
+            s, inv.id, str(inv.total), actor=U(s, ready.a1), external_reference="g1-paid-ref"
         )
+        s.commit()
+        invoice_payments.approve(s, pay.id, U(s, ready.a2))
+        s.commit()
     with ready.F() as s, pytest.raises(errors.Conflict):
         billing.void_invoice(s, U(s, ready.a1), inv.id, "should not work")
     for sql in ("UPDATE invoices SET status = 'void', voided_at = now(), voided_reason = 'x' WHERE id = :i",
@@ -880,7 +886,15 @@ def test_billing_api_has_no_delete_no_run_endpoint_and_rbac_is_admin_write_opera
     ]  # pa ekzekutim faturimi/pagese në HTTP
     sample = {
         k: str(__import__("uuid").uuid4())
-        for k in ("plan_id", "version_id", "enterprise_id", "invoice_id")
+        for k in (
+            "plan_id",
+            "version_id",
+            "enterprise_id",
+            "invoice_id",
+            "payment_id",
+            "allocation_id",
+            "credit_note_id",
+        )
     }
     for method, path in rs:
         url = path.format(**sample)

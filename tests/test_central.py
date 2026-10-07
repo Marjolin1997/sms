@@ -193,6 +193,11 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/billing/invoices",
         "/admin/billing/invoices/{invoice_id}",
         "/admin/billing/invoices/{invoice_id}/void",
+        # M9-g3: shlyerja (pagesa fature, alokime vetëm-lexim, credit notes, përmbledhje)
+        "/admin/billing/invoice-payments", "/admin/billing/invoice-payments/{payment_id}",
+        "/admin/billing/invoice-payments/{payment_id}/approve", "/admin/billing/invoice-payments/{payment_id}/reject",
+        "/admin/billing/allocations", "/admin/billing/allocations/{allocation_id}",
+        "/admin/billing/credit-notes", "/admin/billing/credit-notes/{credit_note_id}", "/admin/billing/settlement",
     }  # fmt: skip
 
 
