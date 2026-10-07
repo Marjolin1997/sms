@@ -163,6 +163,7 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "invoices",
         "invoice_lines",
         "billing_periods",
+        "billing_usage_reports",
         "registration_products",
         "product_registration_policy",
     }

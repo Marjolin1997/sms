@@ -85,6 +85,8 @@ def test_central_0023_is_additive_reversible_and_matches_metadata(make_db):
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_triggers_exist_and_are_removed_on_downgrade(make_db):
     url = make_db("ent")
+    if not url.startswith("postgresql"):
+        pytest.skip("postgres parametrization only")
     enterprise_alembic(url, "upgrade", "head")
     eng = create_engine(url)
     q = text(
