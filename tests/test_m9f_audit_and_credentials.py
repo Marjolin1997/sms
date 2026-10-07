@@ -516,7 +516,13 @@ def call(c, method, url, token, body=None):
 def test_the_scope_set_is_exactly_the_five_known_scopes_and_each_endpoint_requires_exactly_its_own(
     kenv,
 ):
-    assert ALLOWED_SCOPES == {"sync:read", "money:read", "money:report", "pricing:read", "billing:report"}
+    assert ALLOWED_SCOPES == {
+        "sync:read",
+        "money:read",
+        "money:report",
+        "pricing:read",
+        "billing:report",
+    }
     eps = endpoints(kenv)
     for scope, routes in eps.items():
         for method, url, body in routes:
