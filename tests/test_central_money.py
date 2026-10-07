@@ -1145,7 +1145,9 @@ def test_money_modules_are_central_only_and_expose_no_http_routes(m):
     assert not [
         p
         for p in paths
-        if not p.startswith(("/internal/money/", "/admin/money/", "/admin/financial/"))
+        if not p.startswith(
+            ("/internal/money/", "/admin/money/", "/admin/financial/", "/admin/billing/")
+        )  # M9-g3: pagesa fature/credit notes = admin-only
         and any(w in p.lower() for w in ("payment", "grant", "credit", "money", "ledger"))
     ]
 

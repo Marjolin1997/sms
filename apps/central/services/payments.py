@@ -20,6 +20,7 @@ from apps.central.models.money import (
     APPROVED,
     PAYMENT_CREDIT,
     PENDING,
+    PURPOSE_CREDIT,
     REJECTED,
     Payment,
 )
@@ -49,7 +50,8 @@ def get(db: Session, payment_id, *, lock: bool = False) -> Payment:
 def list_payments(
     db: Session, *, account_id=None, status: str | None = None, limit: int = 100, offset: int = 0
 ) -> list[Payment]:
-    q = select(Payment)
+    """M9-g3: vetëm pagesat `purpose=credit` (pagesat e faturave shihen te `invoice_payments`)."""
+    q = select(Payment).where(Payment.purpose == PURPOSE_CREDIT)
     if account_id is not None:
         q = q.where(Payment.account_id == money_common.uid(account_id, "account id"))
     if status is not None:
@@ -135,6 +137,8 @@ def approve(db: Session, payment_id, actor, *, now: datetime | None = None) -> P
     actor = money_common.admin(actor)
     actor_id = actor.id  # lexo para ndryshimeve (actor i skaduar do shkaktonte autoflush)
     pre = get(db, payment_id)
+    if pre.purpose != PURPOSE_CREDIT:  # M9-g3: pagesat e faturave miratohen vetëm përmes `invoice_payments.approve`
+        raise NotFound("payment not found")
     money_sequence.lock(db)
     acct = credit_accounts.get(db, pre.account_id, lock=True)
     p = get(db, pre.id, lock=True)
@@ -158,12 +162,14 @@ def approve(db: Session, payment_id, actor, *, now: datetime | None = None) -> P
     return p
 
 
-def reject(db: Session, payment_id, actor, reason, *, now: datetime | None = None) -> Payment:
+def reject(db: Session, payment_id, actor, reason, *, now: datetime | None = None, purpose: str = PURPOSE_CREDIT) -> Payment:
     """pending → rejected (pa kredit). rejected ⇒ no-op; approved ⇒ Conflict (paraja s'fshihet)."""
     actor = money_common.admin(actor)
     actor_id = actor.id
     why = money_common.reason(reason)
     p = get(db, payment_id, lock=True)
+    if p.purpose != purpose:
+        raise NotFound("payment not found")
     if p.status == REJECTED:
         return p
     if p.status == APPROVED:

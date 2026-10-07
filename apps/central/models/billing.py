@@ -222,6 +222,7 @@ class Invoice(Base):
 
     __table_args__ = (
         UniqueConstraint("id", "currency", name="uq_invoices_id_currency"),
+        UniqueConstraint("id", "enterprise_id", "currency", name="uq_invoices_id_enterprise_currency"),
         UniqueConstraint("subscription_id", "period_index", name="uq_invoices_sub_period_index"),
         UniqueConstraint("subscription_id", "period_start", name="uq_invoices_sub_period_start"),
         Index("ix_invoices_enterprise", "enterprise_id", "issued_at"),

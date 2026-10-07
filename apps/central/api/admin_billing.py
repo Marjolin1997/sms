@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.central.api.admin_common import STRICT, Currency, Reason, iso, money_str, page
+from apps.central.api.admin_settlement import settlement_out
 from apps.central.api.deps import get_db, require_role
 from apps.central.core.errors import NotFound
 from apps.central.models.billing import (
@@ -389,7 +390,7 @@ def get_invoice(
     invoice_id: uuid.UUID, db: Session = Depends(get_db), _: CentralUser = Depends(READ)
 ):
     inv = billing.get_invoice(db, invoice_id)
-    return invoice_out(inv, billing.lines_of(db, inv.id))
+    return {**invoice_out(inv, billing.lines_of(db, inv.id)), "settlement": settlement_out(db, inv)}  # M9-g3
 
 
 @router.post("/invoices/{invoice_id}/void")

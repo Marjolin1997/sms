@@ -222,8 +222,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0024_next.py").write_text(
-        'revision = "0024"\ndown_revision = "0023"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0025_next.py").write_text(
+        'revision = "0025"\ndown_revision = "0024"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -278,6 +278,9 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "invoice_lines",
         "billing_periods",
         "billing_usage_reports",
+        "invoice_payment_allocations",
+        "credit_notes",
+        "credit_note_sequence",
         "registration_products",
         "product_registration_policy",
     }
@@ -326,6 +329,9 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "invoice_lines",
         "billing_periods",
         "billing_usage_reports",
+        "invoice_payment_allocations",
+        "credit_notes",
+        "credit_note_sequence",
         "registration_products",
         "product_registration_policy",
     }
@@ -382,6 +388,9 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "invoice_lines",
         "billing_periods",
         "billing_usage_reports",
+        "invoice_payment_allocations",
+        "credit_notes",
+        "credit_note_sequence",
         "registration_products",
         "product_registration_policy",
     }

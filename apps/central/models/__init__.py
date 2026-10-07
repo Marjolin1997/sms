@@ -42,12 +42,16 @@ from apps.central.models.service_auth import (
     ServiceClientEnterprise,
     ServiceKey,
 )
+from apps.central.models.settlement import CreditNote, CreditNoteSequence, InvoicePaymentAllocation
 from apps.central.models.sync import SyncOutbox, SyncSequence
 from apps.central.models.usage import UsageReport
 from apps.central.models.user import CentralUser, Role, UserStatus
 
 __all__ = [
     "BillingPeriod",
+    "CreditNote",
+    "CreditNoteSequence",
+    "InvoicePaymentAllocation",
     "BillingUsageReport",
     "BillingProfile",
     "BillingSubscription",

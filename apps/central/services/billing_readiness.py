@@ -20,7 +20,7 @@ from apps.central.models.billing import (
     InvoiceLine,
 )
 from apps.central.models.billing_usage import BillingUsageReport
-from apps.central.services import billing, billing_overage
+from apps.central.services import billing, billing_overage, settlement_reports
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 INVOICE_SAMPLE = 500
@@ -141,6 +141,24 @@ def checks(db: Session, now: datetime | None = None) -> list[Check]:
         else (WARN if omax > settings.billing_wait_warn_seconds else PASS)
     )
     out.append(Check("billing_run_not_stalled", ol, f"{len(s['due_unprocessed'])} due period(s) not processed, oldest {omax}s" if s["due_unprocessed"] else "none"))  # fmt: skip
+    out.extend(settlement_checks(db, now))
+    return out
+
+
+def settlement_checks(db: Session, now: datetime) -> list[Check]:
+    """M9-g3: FAIL për invariantë të thyer të shlyerjes; WARN për pagesa pending të vjetra, fatura të vonuara, pagesa të refuzuara mbi faturë të vonuar."""
+    st = settlement_reports.summary(db, now, settings.payment_pending_stale_seconds)
+    bad = {k: v for k, v in st["anomalies"].items() if v}
+    out = [Check("billing_settlement_integrity", FAIL if bad else PASS,
+                 "; ".join(f"{k}={len(v)}" for k, v in sorted(bad.items())) if bad else "paid invoices, allocations and credit notes are consistent")]  # fmt: skip
+    ip = st["invoice_payments"]
+    out.append(Check("billing_invoice_payments_not_stale", WARN if ip["stale_pending"] else PASS,
+                     f"{ip['stale_pending']} invoice payment(s) pending > {ip['stale_after_seconds']}s" if ip["stale_pending"] else "none"))  # fmt: skip
+    ov = st["invoices"]["overdue_open"]
+    out.append(Check("billing_invoices_not_overdue", WARN if ov else PASS, f"{ov} open invoice(s) past due" if ov else "none"))
+    rj = st["rejected_on_overdue_open_invoice"]
+    out.append(Check("billing_rejected_payments_reconciled", WARN if rj else PASS,
+                     f"{len(rj)} rejected invoice payment(s) on an overdue unpaid invoice (manual reconciliation)" if rj else "none"))  # fmt: skip
     return out
 
 

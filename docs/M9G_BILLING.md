@@ -103,3 +103,46 @@ i poshtëm sipas seq, ose më i madh se fqinji i sipërm) · 422 i pavlefshëm (
 2. Ndarja e mbulimit të pagesës per linjë (tarifë/overage) dhe rregullat e pagesës së pjesshme/mbipagesës — pa auto-pay nga wallet SMS.
 3. Rakordim fature↔pagesë dhe readiness i arkëtimit (aging) — `billing_run_not_stalled`/`waiting` nuk mjaftojnë për arkëtimin.
 4. Numërimi/farëtimi legacy dhe baseline-i i përdorimit të email-it para authority switch (g4): periudha e parë pa raport para ankorës ⇒ `usage_baseline_missing` derisa të ketë opening balance të importuar.
+
+---
+
+# M9-g3 — Shlyerja e faturave: pagesa fature, alokim, paid, credit notes
+
+Vetëm Central. Enterprise legacy NUK migrohet (g4). Wallet-i SMS dhe ledger-i tregtar i kredisë NUK preken kurrë nga faturat.
+
+## 1. Pagesat (`payments`, një tabelë) — `purpose = credit | invoice`
+Shtuar `purpose` (default `credit`) dhe `invoice_id`; `account_id` bëhet nullable. CHECK në DB: `credit ⇒ account_id NOT NULL, invoice_id NULL`; `invoice ⇒ account_id NULL, invoice_id NOT NULL`
+(kombinim i paqartë refuzohet). FK e përbërë `(invoice_id, enterprise_id, currency) → invoices` (e njëjta monedhë/enterprise). `purpose`/`invoice_id` të ngrira (ORM + trigger PG).
+Rrjedha `credit` (M9-b: llogari, ledger, maker-checker) është e pandryshuar; `payments.approve/list` janë vetëm për `credit`, pagesat e faturave shihen/miratohen vetëm te `invoice_payments`.
+
+## 2. Alokimi (`invoice_payment_allocations`, i pandryshueshëm)
+Një pagesë = një alokim i plotë: `UNIQUE(payment_id)`, `UNIQUE(invoice_id)`; FK e përbërë `(payment_id, invoice_id, currency, amount) → payments` e detyron shumën/monedhën të përputhen me pagesën. Prova historike e shlyerjes (s'nxirret vetëm nga `invoice.status`).
+
+## 3. Transaksioni i shlyerjes (`invoice_payments.approve`, një transaksion, pa rrjet)
+kyç pagesën → (idempotent nëse approved) → pending + maker-checker → kyç faturën (rend i fiksuar: pagesë → faturë; `void_invoice` kyç vetëm faturën) → OPEN → shuma = `invoice.total` dhe monedha → pa alokim paraprak →
+alokim + pagesë `approved` + faturë `paid` (`paid_at`) → audit `payment.approve` dhe `invoice.settle`. Çdo dështim rikthen gjithçka. **V1: pa pjesëtime, pa mbipagesë/nënpagesë, pa konvertim në kredi** (mospërputhje ⇒ 409, pagesa mbetet pending dhe refuzohet nga stafi).
+PG (constraint trigger-a të shtyrë): fatura `paid` kërkon alokim me shumë/monedhë të njëjtë; alokimi kërkon faturë `paid` + pagesë `approved` fature; pagesë fature e miratuar kërkon alokim.
+
+## 4. Gjendjet
+Faturë: `open → paid | void` (terminale). `paid` s'anulohet; `void` s'paguhet; pa rihapje. Korrigjimi i `paid` = credit note. Pagesë: `pending → approved | rejected` (si M9-b; krijuesi njeri ≠ miratuesi).
+
+## 5. Credit notes (`credit_notes`, `credit_note_sequence`)
+Të pandryshueshme (ORM + trigger PG, pa fshirje, pa gjendje). Vetëm për fatura `paid`; `amount > 0`; monedha = ajo e faturës; arsye e detyrueshme (≤ 500); **Σ credit notes ≤ `invoice.total`** (kyç faturën `FOR UPDATE` + constraint trigger i shtyrë në PG).
+Numërim `CN-{year}-{n:06d}` me rresht të kyçur (sekuencë e ndarë nga faturat; rollback e kthen numrin). Idempotent me `(invoice_id, idempotency_key)`. Foto e issuer/bill-to të faturës. Pa rifund automatik, pa pagesë, pa kredi wallet; pa linja (V1: shumë + arsye + referencë fature mjafton — s'ka ende nevojë për atribuim për linjë). Faturë `open` korrigjohet me void.
+
+## 6. Rakordim, aging, readiness
+`GET /admin/billing/settlement`: numërues fature/pagesash, aging i faturave OPEN (`current, 1-30, 31-60, 61-90, 90+` sipas `due_at`; pa interes/penalitet) dhe anomali (pa korrigjim automatik): paid pa alokim, pagesë e miratuar pa alokim, alokim i papërputhshëm, alokim i dyfishtë, credit notes mbi total/mbi faturë jo-paid.
+`billing_readiness`: FAIL `billing_settlement_integrity`; WARN `billing_invoice_payments_not_stale`, `billing_invoices_not_overdue`, `billing_rejected_payments_reconciled`. Faturë e vonuar NUK bllokon dërgimin SMS/email.
+
+## 7. API admin (`/admin/billing`; admin shkrim, operator lexim; asnjë DELETE/PUT/PATCH; asnjë API klienti)
+`/invoice-payments` (GET lista/detaj, POST krijim — `external_reference` i detyrueshëm = çelës idempotence, `/{id}/approve`, `/{id}/reject`), `/allocations` (vetëm lexim), `/credit-notes` (GET, POST — `idempotency_key` i detyrueshëm), `/settlement`;
+detaji i faturës (`/invoices/{id}`) shton `settlement` (alokim, pagesa, credit notes, `credited_total`, `net_amount`). Hyrje strikte: `extra=forbid`, shuma si string dhjetor (kurrë float), monedhë/UUID strikte, arsye/referencë të kufizuara.
+
+## 8. Audit
+`payment.create|approve|reject` (detail me `purpose=invoice`), `invoice.settle`, `credit_note.issue` (arsye e detyrueshme). Pa PII (vetëm UUID/numra/shuma/monedhë).
+
+## 9. Bllokuesit për g4
+1. Import i pagesave/faturave legacy të Enterprise (mapping drejt `purpose=invoice` + alokim; numërim: farëtimi i `invoice_number_sequence` dhe `credit_note_sequence` mbi maksimumin legacy).
+2. Pagesa të pjesshme/mbipagesa të legacy (V1 i refuzon; kërkon vendim biznesi ose rrugë manuale).
+3. Faturë `open` legacy me credit note (V1: vetëm `paid`).
+4. Opening balance i përdorimit të email-it dhe authority switch/shadow (nga g2).

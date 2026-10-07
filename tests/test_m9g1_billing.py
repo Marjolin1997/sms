@@ -872,7 +872,11 @@ def test_billing_api_has_no_delete_no_run_endpoint_and_rbac_is_admin_write_opera
     rs = routes(api.app)
     assert rs and {m for m, _ in rs} <= {"GET", "POST"}
     assert not [
-        p for _, p in rs if "run" in p or "customer" in p or "pay" in p
+        p
+        for _, p in rs
+        if "run" in p
+        or "customer" in p
+        or ("pay" in p and "invoice-payments" not in p)  # M9-g3 shton pagesat e faturave (admin)
     ]  # pa ekzekutim faturimi/pagese në HTTP
     sample = {
         k: str(__import__("uuid").uuid4())
@@ -1081,7 +1085,7 @@ def test_migration_0022_up_down_up_and_metadata_matches(make_db):
             c, opts={"compare_type": True, "version_table": "central_alembic_version"}
         )
         assert compare_metadata(ctx, Base.metadata) == []
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0023"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0024"
     uq = {u["name"] for u in inspect(eng).get_unique_constraints("billing_periods")}
     assert {"uq_billing_periods_index", "uq_billing_periods_start"} <= uq
     eng.dispose()

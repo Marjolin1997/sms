@@ -63,6 +63,7 @@ GRANTED_DOWN = (GRANT_REVERSAL,)  # ulin të alokuarat
 
 # --- pagesat -----------------------------------------------------------------------------------------------
 PENDING, APPROVED, REJECTED = "pending", "approved", "rejected"
+PURPOSE_CREDIT, PURPOSE_INVOICE = "credit", "invoice"  # M9-g3
 
 # --- grant-et ----------------------------------------------------------------------------------------------
 GRANT_ACTIVE, GRANT_REVERSED = "active", "reversed"
@@ -183,7 +184,10 @@ class Payment(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     enterprise_id: Mapped[uuid.UUID] = mapped_column(Uuid)
-    account_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    # M9-g3: purpose=credit ⇒ account_id i detyrueshëm; purpose=invoice ⇒ account_id NULL dhe invoice_id i detyrueshëm
+    account_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    purpose: Mapped[str] = mapped_column(String(8), default="credit", server_default="credit")
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     currency: Mapped[str] = mapped_column(String(3))
     amount: Mapped[Decimal] = mapped_column(MONEY)
     # burimi i pagesës (jo vendor): `manual` | `import` | ...; (source, external_reference) i skopuar
@@ -222,9 +226,23 @@ class Payment(Base):
             postgresql_where=text("external_reference IS NOT NULL"),
             sqlite_where=text("external_reference IS NOT NULL"),
         ),
+        ForeignKeyConstraint(
+            ["invoice_id", "enterprise_id", "currency"],
+            ["invoices.id", "invoices.enterprise_id", "invoices.currency"],
+            name="fk_payments_invoice_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "invoice_id", "currency", "amount", name="uq_payments_allocation_ref"),
         Index("ix_payments_account_status", "account_id", "status"),
+        Index("ix_payments_invoice_status", "invoice_id", "status"),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint("status in ('pending', 'approved', 'rejected')", name="status"),
+        CheckConstraint("purpose in ('credit', 'invoice')", name="purpose"),
+        CheckConstraint(
+            "(purpose = 'credit' AND account_id IS NOT NULL AND invoice_id IS NULL) OR "
+            "(purpose = 'invoice' AND account_id IS NULL AND invoice_id IS NOT NULL)",
+            name="purpose_shape",
+        ),
         CheckConstraint(
             "(created_by_id IS NOT NULL AND created_by_label IS NULL) OR "
             "(created_by_id IS NULL AND created_by_label IS NOT NULL)",
@@ -388,7 +406,7 @@ def _account_frozen(_m, _c, target) -> None:
     _frozen(target, ("id", "enterprise_id", "product_id", "currency", "created_at"), "account")
 
 
-PAYMENT_FROZEN = ("id", "enterprise_id", "account_id", "currency", "amount", "source",
+PAYMENT_FROZEN = ("id", "enterprise_id", "account_id", "purpose", "invoice_id", "currency", "amount", "source",
                   "external_reference", "note", "created_by_id", "created_by_label",
                   "created_at")  # fmt: skip
 GRANT_FROZEN = ("id", "account_id", "enterprise_id", "product_id", "currency", "amount",

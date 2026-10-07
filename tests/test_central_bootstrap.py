@@ -304,6 +304,9 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "invoice_lines",
         "billing_periods",
         "billing_usage_reports",
+        "invoice_payment_allocations",
+        "credit_notes",
+        "credit_note_sequence",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -381,4 +384,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0021_usage_report_retention_guard.py",
         "0022_billing_g1.py",
         "0023_billing_usage_g2.py",
+        "0024_settlement_g3.py",
     ]
