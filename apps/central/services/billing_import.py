@@ -577,18 +577,25 @@ def _invoices(db, doc, items, d_subs, d_plans, authority, plan) -> None:
             )
         plan.decisions.append(d)
         for p in pays:
-            pd = Decision(
-                "payments",
-                str(p["source_id"]),
-                "already_imported"
-                if d.classification == "already_imported"
-                else ("importable" if not d.blocked else d.classification),
-                reason=d.reason,
-            )
             if p["status"] != "succeeded":
-                pd.classification, pd.reason = (
+                pd = Decision(
+                    "payments",
+                    str(p["source_id"]),
                     "exact",
-                    "non-succeeded legacy checkout session is not imported (expired/failed/pending)",
+                    reason="non-succeeded legacy checkout session is not imported (expired/failed/pending)",
+                )
+            elif d.blocked:
+                pd = Decision(
+                    "payments",
+                    str(p["source_id"]),
+                    "exact",
+                    reason="follows its blocked invoice (see the invoice issue)",
+                )
+            else:
+                pd = Decision(
+                    "payments",
+                    str(p["source_id"]),
+                    "already_imported" if d.classification == "already_imported" else "importable",
                 )
             plan.decisions.append(pd)
 
@@ -820,7 +827,7 @@ def apply(
         )
     now = billing.utc(now or utcnow())
     batch = BillingImportBatch(export_id=uuid.UUID(doc["export_id"]), content_hash=doc["content_hash"], generated_at=T(doc["generated_at"]),
-                               attestation=doc["authority"], summary={}, applied_by_id=actor_id, applied_at=now)  # fmt: skip
+                               attestation=doc["authority"], summary={"classification": plan.summary(), "sequence_seeds": {str(y): n for y, n in sorted(plan.seeds.items())}, "blocking": len(plan.blocking())}, applied_by_id=actor_id, applied_at=now)  # fmt: skip
     db.add(batch)
     db.flush()
     plan_ver: dict[int, uuid.UUID] = {}
@@ -836,7 +843,7 @@ def apply(
         _apply_baseline(db, d, actor, batch, now, counts)
     for d in plan.by("invoices"):
         _apply_invoice(db, d, actor, batch, now, counts)
-    seeded = _apply_seeds(db, plan.seeds, actor, now)
+    _apply_seeds(db, plan.seeds, actor, now)
     for d in plan.decisions + plan.baselines:
         if d.blocked:
             db.add(
@@ -850,17 +857,9 @@ def apply(
                 )
             )
     db.flush()
-    batch_summary = {
-        "classification": plan.summary(),
-        "applied": counts,
-        "sequence_seeds": {str(y): n for y, n in sorted(seeded.items())},
-        "blocking": len(plan.blocking()),
-    }
-    db.execute(
-        BillingImportBatch.__table__.update()
-        .where(BillingImportBatch.id == batch.id)
-        .values(summary=batch_summary)
-    )  # çasti i vetëm i lejuar (batch i sapokrijuar)
+    batch_summary = (
+        batch.summary
+    )  # i pandryshueshëm: llogaritet para INSERT (sekuenca/klasifikimi njihen nga plani)
     audit.record(db, actor, "billing.import_apply", "billing_import_batch", batch.id,
                  {"export_id": doc["export_id"], "content_hash": doc["content_hash"], "applied": counts, "blocking": len(plan.blocking()), "sequence_seeds": batch_summary["sequence_seeds"],
                   "attestation": doc["authority"]}, now=now)  # fmt: skip
@@ -936,7 +935,7 @@ def _apply_profile(db, d: Decision, actor, batch, now, counts) -> None:
         p["country"],
         p["email"],
         p["tax_id"],
-        p["vat_rate"],
+        D(p["vat_rate"]).quantize(Q4),
         now=now,
     )
     _record_item(db, d, "profiles", "billing_profile", prof.id, batch, now)
@@ -1003,7 +1002,7 @@ def _apply_invoice(db, d: Decision, actor, batch, now, counts) -> None:
     inv = d.data
     if d.action == "advance":
         row = db.get(Invoice, _target(db, "invoices", d.source_id))
-        _settle_or_void(db, row, inv, actor, now)
+        _settle_or_void(db, row, inv, actor, now, batch)
         _record_item(db, d, "invoices", "invoice", row.id, batch, now)
         counts["advanced"] += 1
         return
@@ -1041,7 +1040,8 @@ def _apply_invoice(db, d: Decision, actor, batch, now, counts) -> None:
                            price_version_id=pvr if known else None))  # fmt: skip
     db.flush()
     if inv["status"] == "paid":
-        _allocate(db, row, inv["settlement"], actor, now)
+        pay = _allocate(db, row, inv["settlement"], actor, now)
+        _record_payment(db, inv, pay, batch, now)
     if 0 <= inv["period_index"] < sub.next_period_index:
         db.add(BillingPeriod(subscription_id=sub.id, enterprise_id=sub.enterprise_id, period_index=inv["period_index"], period_start=row.period_start, period_end=row.period_end,
                              plan_version_id=None, provenance=PROV_LEGACY, status=P_INVOICED, invoice_id=row.id, billed_at=row.issued_at, created_at=now))  # fmt: skip
@@ -1074,13 +1074,16 @@ def _allocate(db, row: Invoice, st: dict, actor, now) -> None:
         )
     )
     db.flush()
+    return pay
 
 
-def _settle_or_void(db, row: Invoice, inv: dict, actor, now) -> None:
+def _settle_or_void(db, row: Invoice, inv: dict, actor, now, batch=None) -> None:
     if inv["status"] == "paid":
         row.status, row.paid_at = INV_PAID, T(inv["paid_at"])
         db.flush()
-        _allocate(db, row, inv["settlement"], actor, now)
+        pay = _allocate(db, row, inv["settlement"], actor, now)
+        if batch is not None:
+            _record_payment(db, inv, pay, batch, now)
     else:
         row.status, row.voided_at, row.voided_by_id = INV_VOID, now, actor.id
         row.voided_reason = (inv["voided_reason"] or VOID_DEFAULT_REASON)[:500]
@@ -1145,3 +1148,15 @@ def unresolved_issues(db: Session) -> list[BillingImportIssue]:
             .order_by(BillingImportIssue.created_at)
         )
     )
+
+
+def _record_payment(db, inv: dict, pay: Payment, batch, now) -> None:
+    """Origjina e pagesës së importuar: `payments` (id i pagesës online legacy) ose `wallet_settlements` (id i faturës; dëshmi e debitit wallet, pa rilozje)."""
+    st = inv["settlement"]
+    table, sid = (
+        ("payments", str(st["payment_source_id"]))
+        if st["kind"] == "online"
+        else ("wallet_settlements", str(inv["source_id"]))
+    )
+    d = Decision(table, sid, "importable", core_hash=h(st), state_hash=h(st))
+    _record_item(db, d, table, "payment", pay.id, batch, now, {"settlement_kind": st["kind"]})

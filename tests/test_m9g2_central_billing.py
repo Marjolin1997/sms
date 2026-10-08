@@ -426,6 +426,14 @@ def test_rerun_and_billing_run_never_double_bill_and_report_stats(env, capsys):
     )  # tool-i përdor orën reale: periudha 0 e mbyllur prej kohësh
     sid, _ = setup_billing(env, fee="5", included=0, price="1.00", anchor=old)
     ingest(env, 0, old - timedelta(hours=1))
+    assert (
+        cli_run.main(["--json"], engine=env.eng) == 3
+    )  # M9-g4: autoriteti i faturimit është ende `local` ⇒ billing_run refuzon
+    with env.F() as s:
+        from apps.central.models.billing_import import BillingAuthorityState
+
+        s.add(BillingAuthorityState(id=1, mode="central", ack=True))
+        s.commit()
     assert cli_run.main(["--json"], engine=env.eng) == 0
     first = json.loads(capsys.readouterr().out)
     assert (

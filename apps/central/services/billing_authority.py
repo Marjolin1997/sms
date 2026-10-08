@@ -250,15 +250,18 @@ def readiness(
     )
     metered = billing_readiness._metered_subscriptions(db, now)
     no_base, post, pricing_gap = [], [], []
-    for sub, _pid in metered:
+    for sub, pid in metered:
         if sub.id not in imported_subs or sub.status != SUB_ACTIVE:
             continue
         start, end = billing.period_bounds(sub, sub.next_period_index)
         pv = db.get(billing.PlanVersion, sub.plan_version_id)
-        ev = billing_overage.evaluate(db, sub, pv, start, end)
-        if ev.postpone in (billing_overage.BASELINE_MISSING,):
+        rep, opening = billing_overage._baseline(db, sub, pid, start, sub.next_period_index)
+        if (
+            rep is None and opening is None
+        ):  # baseline-i kontrollohet pavarësisht nga raporti i prerjes
             no_base.append(str(sub.enterprise_id))
-        elif ev.postpone:
+        ev = billing_overage.evaluate(db, sub, pv, start, end)
+        if ev.postpone and ev.postpone != billing_overage.BASELINE_MISSING:
             post.append(f"{ev.postpone}:{sub.enterprise_id}")
     out.append(
         Check(

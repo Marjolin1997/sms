@@ -515,6 +515,7 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "usage_report_full_days",
         "usage_report_keep_last",
         "invoice_due_days",
+        "billing_worker_configured",
         "billing_usage_fresh_seconds",
         "billing_usage_stale_seconds",
         "billing_wait_warn_seconds",

@@ -123,7 +123,9 @@ def complete(
         p.status, p.failure_reason, p.completed_at = (
             PaymentStatus.FAILED, "billing_authority_central", now,
         )  # fmt: skip
-        raise Conflict("invoice settlement is owned by Central; needs manual reconciliation") from None
+        raise Conflict(
+            "invoice settlement is owned by Central; needs manual reconciliation"
+        ) from None
     except wallets.MoneyAuthorityFrozen:
         # M9-c: kredia lokale është e ngrirë; paraja s'humbet në heshtje — kërkon rakordim manual.
         p.status, p.failure_reason, p.completed_at = (
@@ -141,7 +143,9 @@ def complete(
 
 def _apply(db: Session, p: Payment, now: datetime) -> None:
     if p.purpose == PaymentPurpose.INVOICE:
-        billing_authority.require_issuer("settle_invoice_payment")  # M9-g4: Central zotëron shlyerjen; pagesa s'preket (rakordim manual)
+        billing_authority.require_issuer(
+            "settle_invoice_payment"
+        )  # M9-g4: Central zotëron shlyerjen; pagesa s'preket (rakordim manual)
         inv = db.scalar(select(Invoice).where(Invoice.id == p.invoice_id).with_for_update())
         if inv is not None and inv.status == InvoiceStatus.OPEN:
             billing.mark_paid_online(db, inv, now)

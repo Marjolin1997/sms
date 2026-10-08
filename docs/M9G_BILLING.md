@@ -146,3 +146,71 @@ detaji i faturës (`/invoices/{id}`) shton `settlement` (alokim, pagesa, credit 
 2. Pagesa të pjesshme/mbipagesa të legacy (V1 i refuzon; kërkon vendim biznesi ose rrugë manuale).
 3. Faturë `open` legacy me credit note (V1: vetëm `paid`).
 4. Opening balance i përdorimit të email-it dhe authority switch/shadow (nga g2).
+
+---
+
+# M9-g4 — Import legacy, shadow dhe cutover i autoritetit të faturimit
+
+Nuk ka asnjë fshirje/drop të të dhënave legacy (M13 pronar i pastrimit). Central NUK lexon DB-në e Enterprise dhe anasjelltas: transporti është një **artifact offline** me hash.
+
+## 1. Auditimi i formës legacy (skema aktuale `app/models/billing.py`)
+| Objekt | Fakte që drejtojnë importin |
+|---|---|
+| `sms_plans` | kod unik, **i pandryshueshëm** (çmim i ri = kod i ri), `email_overage_price` BRENDA planit (në Central është çmimi M9-e, jo fushë plani), `status active\|retired` |
+| `sms_subscriptions` | `started_at` (ankorë), `periods_billed`, `cancel_at_period_end`, `pending_plan_id`; **rifillimi pas anulimit RIVENDOS `started_at` dhe `periods_billed=0`** (Central e vazhdon indeksin) |
+| `sms_invoices` | `INV-{year}-{n:06d}`; `bill_to` JSON text; **pa issuer snapshot, pa version plani, pa indeks periudhe**; `paid_via wallet\|online`, `voided_reason`; **pa `voided_at`/`cancelled_at`** |
+| `sms_invoice_lines` | vetëm përshkrim/sasi/çmim/shumë; pa `line_type`; `pricing_source legacy_plan\|central`, `pricing_version_ref` |
+| `sms_payments` (purpose=invoice) | seanca online; `succeeded` = e plotë ose jo (shuma/monedha krahasohen me totalin) |
+| wallet | pagesa wallet = hyrje ledger `invoice` (`ref_id = numri i faturës`) |
+| `sms_invoice_counters` | maksimumi i numrit për vit; **s'ka dokumente credit-note** (numërimi CN fillon nga Central) |
+| periudha pa faturë | plan falas ⇒ `periods_billed` avancon pa asnjë rresht ⇒ **s'ka provë** për `no_charge` |
+Klasat e rreshtave: `exact · importable · already_imported · conflict · invalid · unsupported · requires_manual_review`. Numrat konkretë gjenden me `billing_import` në dry-run mbi eksportin real (auditi është i parametrizuar nga të dhënat, jo i supozuar).
+
+## 2. Eksport / import
+- `python -m scripts.billing_export --out export.json` (Enterprise, vetëm lexim, snapshot REPEATABLE READ, 0600, pa mbishkrim): plane, profile, abonime, fatura+linja, pagesa fature, dëshmi wallet, maksimumet e numërimit, gjendja e hapjes së përdorimit, atestimi i autoritetit. Kontrata `cp.billing.legacy_export.v1` (strikte; `counts` kundër shkurtimit; `content_hash`).
+- `python -m apps.central.tools.billing_import --artifact export.json` → **dry-run** (zero shkrime; klasifikim, seed-e sekuencash, bllokues; kodi 1 nëse ka bllokues). `--apply --evidence-hash <hash> --actor-email <admin>` (atomik; `--require-clean` refuzon me bllokues). Rirunim i të njëjtit artifact = no-op; i njëjti `export_id` me hash tjetër = refuzim; hash i gabuar = refuzim.
+- Evidenca: `billing_import_batches/items/issues` (source_system/table/id, `source_hash` i pjesës së ngurtë + `state_hash`, batch, koha). Rreshtat e bllokuar → `billing_import_issues` (zgjidhje manuale `--resolve ISSUE --reason`, një herë, e audituar).
+- Deltat: eksport i ri (`export_id` i ri) → objektet e importuara kalojnë përpara vetëm kur është e ligjshme (plan active→retired, faturë open→paid|void me shlyerje të vlefshme, abonim me `periods_billed` që rritet); gjithçka tjetër = `conflict`.
+
+## 3. Hartëzimi
+- **Plan**: një `CommercialPlan` + një version `active` (ose `retired`) me `monthly_fee/included_emails/currency` të ngrira; i njëjti kod nuk dyfishon version. Çmimi i overage mbetet autoriteti Central (M9-e); çmimi legacy ruhet vetëm si dëshmi.
+- **Abonim**: `anchor_started_at = started_at`, `anchor_period_index = 0`, `next_period_index = periods_billed` (pa mbivendosje/anashkalim); rifillim pas importit ⇒ `requires_manual_review`.
+- **Periudha historike**: rresht `billing_periods` (`provenance=legacy_import`, `plan_version_id` NULL) vetëm për fatura të provuara; periudha pa faturë mbeten **të panjohura** (s'fabrikohet `no_charge`); fatura nga segmenti i një ankore të mëparshme marrin `period_index = −source_id` (pa periudhë).
+- **Faturë/linja**: aritmetika rikontrollohet (kurrë coercion; shkelje ⇒ `invalid`); `provenance=legacy_import`, issuer `{"provenance":"unknown"}`, `plan_version_id` NULL; `line_type`: `monthly_fee` / `email_overage` vetëm me rregullin eksplicit të teksteve të gjeneruesit legacy, përndryshe `legacy` (shuma ruhet). `price_version_id` vetëm nëse ekziston në Central.
+- **Shlyerja**: fatura `paid` kërkon provë: një pagesë online e plotë (`provider:external_id` real) ose dëshmi wallet me shumë të barabartë; pjesëtim/mbipagesë/shumë pagesa ⇒ `unsupported` (bllokon); pa provë ⇒ `requires_manual_review`. Importohet **pagesë `purpose=invoice` e miratuar (`source=legacy_import`) + alokim**; për wallet `external_reference=wallet-ledger:<id>` dhe shënim "debiti NUK rilozet" — pa ledger tregtar, pa grant, pa wallet. `void` ruan arsyen (ose default të shënuar); `voided_at` = koha e importit (e shënuar në evidencë). `open` importohet `open`.
+
+## 4. Sekuencat
+`invoice_number_sequence` ngrihet në maksimumin e **të gjithë** numrave legacy (edhe të bllokuarve) dhe të numëruesit; kurrë nuk ulet; audit `billing.sequence_seed`; dry-run tregon vlerat. Credit notes legacy = 0 (auditim skemë); `credit_note_like>0` bllokon.
+
+## 5. Gjendja e hapjes së përdorimit të email-it
+`billing_usage_baselines` (e pandryshueshme): `cumulative_count`/`watermark` = numri i provave me `billable_at < boundary` (boundary = fillimi i periudhës së parë të faturuar nga Central), + `capture_active_since`. Kushti i detyrueshëm: `capture_active_since ≤ boundary` (përndryshe `requires_manual_review`: prova e përdorimit s'është e plotë — pritet kufiri i periudhës së radhës dhe ri-eksport). Delta e Central e nis nga baseline (renditja: `usage_to` i periudhës së mëparshme › baseline hapjeje › raporti ≤ fillimi).
+**Email i vonuar para-cutover:** një email i krijuar para cutover-it por që bëhet i faturueshëm PAS kufirit kap provë normale (vlen momenti i tranzicionit, jo `created_at`) dhe faturohet saktësisht një herë në deltën e Central; kurrë nuk groposet në baseline.
+
+## 6. Autoriteti (`local | shadow | central`)
+Enterprise `SMS_BILLING_AUTHORITY` (+ `SMS_BILLING_AUTHORITY_ACK` në prodhim; jo-local kërkon `SMS_BILLING_USAGE_REPORTING`); Central tabela `billing_authority_state` (singleton, parazgjedhje `local`). `central` në Enterprise = **freeze fail-closed** (`BillingAuthorityFrozen`, API 409): run/generate, plane, profil, abonim, anulim, pagesë wallet, void, shlyerje online (pagesa e vonuar legacy shënohet `failed/billing_authority_central`, s'kreditohet wallet-i); worker-i i faturimit nuk bën asgjë; leximi i historisë mbetet. Central: `billing_run` autoritar refuzon (kodi 3) derisa modaliteti të jetë `central`; `process_period` mbetet shërbim i brendshëm.
+Kalimi: `local→shadow→central` (jo drejtpërdrejt); `central` kërkon `--ack` + readiness pa FAIL.
+
+## 7. Shadow
+`python -m apps.central.tools.billing_shadow`: projekton periudhat e fundit legacy dhe i krahason me faturat e importuara; `billing_shadow_comparisons` (append-only). Kategori: `exact, period_mismatch, currency_mismatch, plan_mismatch, tax_mismatch, insufficient_usage, pricing_mismatch, usage_mismatch, amount_mismatch, legacy_only, central_only`. **Nuk** konsumon numër fature, s'krijon faturë/periudhë autoritare, s'shlyen, s'përparon kursorin. Readiness: FAIL për period/currency/plan/tax/amount/central_only; WARN për usage/pricing/insufficient_usage/legacy_only (të shpjeguara, kërkojnë shqyrtim).
+
+## 8. Protokolli i cutover (rend i detyrueshëm; asnjë çast me dy lëshues)
+1. Enterprise: `scripts.billing_authority_readiness` · Central: `shadow` aktiv me import + `billing_shadow` të pranueshëm.
+2. Enterprise: ndalo workerin e faturimit; `SMS_BILLING_AUTHORITY=central` (+ACK) dhe rinis ⇒ **freeze** (Enterprise nuk lëshon më).
+3. Enterprise: eksport FINAL (`authority.mode=central` atestuar).
+4. Central: dry-run → `--apply` (deltat e fundit, baseline-et, seed-et e sekuencave).
+5. Central: `billing_authority_readiness` (të gjitha FAIL = 0) · `CENTRAL_BILLING_WORKER_CONFIGURED=true`.
+6. Central: `billing_authority set --mode central --ack --reason ...` · 7. `billing_run` (periudhat e afatuara faturohen nga Central).
+Boshllëku mes hapit 2 dhe 6 është i sigurt (askush s'lëshon; periudhat e afatuara presin).
+
+## 9. Rollback
+- **Para faturës së parë autoritare Central** (`provenance=central` = 0): `billing_authority set --mode shadow|local --ack --reason` + Enterprise `SMS_BILLING_AUTHORITY=local` (hiq ACK) dhe rinis; kursori Enterprise (`periods_billed`) verifikohet me eksportin e fundit para rihapjes.
+- **Pas saj**: rollback i bllokuar (`Conflict`). Procedurë: forward-fix në Central (credit note/void/korrigjim sipas g3) ose rakordim manual i dokumentuar; asnjë rikthim i verbër te Enterprise (do të rilëshonte periudha dhe numra).
+
+## 10. Gate-t e readiness (`billing_authority_readiness`)
+import i plotë · konflikte të pazgjidhura = 0 · pa pjesëtim/mbipagesë të pazgjidhur · abonimet aktive të hartëzuara · seed-et e sekuencave të sigurta · baseline hapjeje për çdo abonim të matur · çmim Central për çdo plan legacy me overage · raport përdorimi i freskët · shadow i pranueshëm · Enterprise i ngrirë (atestuar) · pa lëshues të dyfishtë · worker Central i konfiguruar · ACK.
+
+## 11. Bllokuesit për g5
+1. Dërgimi i faturave/PDF te klienti (email/portal) dhe API klienti — ende vetëm admin.
+2. Pagesa online Central (gateway) dhe pjesëtime/mbipagesa me rregull biznesi (V1 i refuzon).
+3. Retention/arkivim i artifact-eve të importit dhe i `billing_import_*` pas stabilizimit; pastrimi i tabelave legacy (M13).
+4. Re-anchor i abonimit të importuar (rifillim pas importit) pa shqyrtim manual.

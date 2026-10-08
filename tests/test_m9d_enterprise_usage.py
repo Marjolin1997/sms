@@ -400,15 +400,19 @@ def test_reporting_is_outside_the_send_path_and_has_its_own_worker_role():
         assert "money_usage" not in src and "usage_report" not in src, rel
     importers = {p.relative_to(ROOT).as_posix() for p in (ROOT / "app").rglob("*.py")
                  if "money_usage" in p.read_text() and p.name != "money_usage.py"}  # fmt: skip
-    assert importers <= {
-        "app/worker.py",
-        "app/services/money_readiness.py",
-        "app/models/__init__.py",
-        "app/models/money_usage.py",
-        "app/core/config.py",
-        "app/services/financial_ops.py",
-        "app/services/billing_usage.py",  # M9-g2: vetëm `snapshot_session`
-    }, importers  # fmt: skip  (M9-f: pamje vetëm-lexim e outbox-it)
+    assert (
+        importers
+        <= {
+            "app/worker.py",
+            "app/services/money_readiness.py",
+            "app/models/__init__.py",
+            "app/models/money_usage.py",
+            "app/core/config.py",
+            "app/services/financial_ops.py",
+            "app/services/billing_usage.py",  # M9-g2: vetëm `snapshot_session`
+            "app/services/billing_export.py",  # M9-g4: eksport në një snapshot (vetëm `snapshot_session`)
+        }
+    ), importers  # fmt: skip  (M9-f: pamje vetëm-lexim e outbox-it)
     src = Path(worker.__file__).read_text()
     assert '"money_usage_reporter"' in src and "run_money_usage_reporter" in src
     mode_src = (ROOT / "app/services/money_usage.py").read_text()

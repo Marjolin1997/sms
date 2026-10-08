@@ -306,6 +306,24 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.services.billing_authority.BillingAuthorityFrozen": {
+   "name": "BillingAuthorityFrozen",
+   "module": "app.services.billing_authority",
+   "code": "billing_authority_frozen",
+   "app_mro": [
+    "BillingAuthorityFrozen",
+    "DomainError"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
   "app.services.campaigns.InvalidCampaign": {
    "app_mro": [
     "InvalidCampaign",
@@ -1344,6 +1362,7 @@
    "not_found": 404
   },
   "app.api.billing": {
+   "billing_authority_frozen": 409,
    "conflict": 409,
    "gateway_error": 502,
    "insufficient_funds": 402,

@@ -52,7 +52,9 @@ def sweep() -> None:
 
 
 def billing_tick() -> None:
-    if billing_authority.frozen():  # M9-g4: Central lëshon; ky worker s'bën asgjë (historia legacy mbetet vetëm-lexim)
+    if (
+        billing_authority.frozen()
+    ):  # M9-g4: Central lëshon; ky worker s'bën asgjë (historia legacy mbetet vetëm-lexim)
         return
     with SessionLocal() as db:
         try:

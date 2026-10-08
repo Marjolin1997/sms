@@ -352,7 +352,7 @@ def admin_profile(
 
 @router.post("/admin/billing/run")
 def run_now(db: Session = Depends(get_db), p: Principal = Depends(require("billing:admin"))):
-    n = svc.run_billing(db)
+    n = _run(db, lambda: svc.run_billing(db))  # M9-g4: central ⇒ 409
     audit(db, p, "billing.run", "billing", "manual", {"issued": n})
     db.commit()
     return {"issued": n}

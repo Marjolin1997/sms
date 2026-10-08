@@ -208,9 +208,13 @@ class Settings(BaseSettings):
         if self.pricing_authority == "central" and not self.pricing_authority_ack:
             bad.append("SMS_PRICING_AUTHORITY=central requires SMS_PRICING_AUTHORITY_ACK=true")
         if self.billing_authority == "central" and not self.billing_authority_ack:
-            bad.append("SMS_BILLING_AUTHORITY=central requires SMS_BILLING_AUTHORITY_ACK=true (billing cutover readiness passed)")
+            bad.append(
+                "SMS_BILLING_AUTHORITY=central requires SMS_BILLING_AUTHORITY_ACK=true (billing cutover readiness passed)"
+            )
         if self.billing_authority != "local" and not self.billing_usage_reporting:
-            bad.append("SMS_BILLING_AUTHORITY≠local requires SMS_BILLING_USAGE_REPORTING=true (Central needs email usage reports)")
+            bad.append(
+                "SMS_BILLING_AUTHORITY≠local requires SMS_BILLING_USAGE_REPORTING=true (Central needs email usage reports)"
+            )
         if self.money_authority == "central" and not self.money_reporting:
             bad.append("SMS_MONEY_AUTHORITY=central requires SMS_MONEY_REPORTING=true")
         return bad
