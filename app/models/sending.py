@@ -118,6 +118,11 @@ class Message(TenantOwned, Base):
     pricing_book_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     pricing_version_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     pricing_rule_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # M10-S0: provenienca e autorizimit të sender-it, e ngrirë në submit nga i njëjti rresht i autorizimit (NULL = para M10 ose pa rresht).
+    # Tregues pa FK (tabelë e nxehtë); rreshtat e sender-it/vendimit nuk fshihen kurrë.
+    sender_ref: Mapped[int | None] = mapped_column(PK)
+    sender_decision_ref: Mapped[int | None] = mapped_column(PK)
+    sender_policy_revision: Mapped[int | None] = mapped_column(Integer)
     provider: Mapped[str] = mapped_column(String(32))
     provider_message_id: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[MessageStatus] = mapped_column(

@@ -39,7 +39,7 @@ from app.services import (
     events,
     pricing,
     rates,
-    sender_ids,
+    sender_authorization,
     switches,
     templates,
 )
@@ -186,7 +186,7 @@ def submit(
         raise rates.InvalidNumber("destination must be E.164")
     destination = destination.lstrip("+")
     route = find_route(db, destination)
-    sender_ids.assert_usable(db, owner, route.country, sender)
+    auth = sender_authorization.assert_outbound(db, owner, route.country, sender)
     consent.assert_may_send(db, owner, "sms", destination, category)
 
     template_version_id = None
@@ -219,6 +219,8 @@ def submit(
                 country=route.country, text=text,
                 template_version_id=template_version_id, **pricing.message_fields(q),
                 provider=route.provider, next_attempt_at=now,
+                sender_ref=auth.sender_ref, sender_decision_ref=auth.decision_ref,
+                sender_policy_revision=auth.policy_revision,
             )  # fmt: skip
             queue.publish(db, m)
             pricing.record_comparison(

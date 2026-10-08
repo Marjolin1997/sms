@@ -29,7 +29,6 @@ from app.models.campaigns import (
 )
 from app.models.contacts import Contact
 from app.models.email import Email
-from app.models.messaging import ApprovalStatus, SenderId
 from app.models.sending import AccountPlan, Message, MessageStatus
 from app.services import (
     consent,
@@ -38,6 +37,7 @@ from app.services import (
     emails,
     events,
     pricing,
+    sender_authorization,
     switches,
     templates,
 )
@@ -175,16 +175,7 @@ def schedule(
         if email_domains.verified_domain_for(db, owner, c.from_email) is None:
             raise InvalidCampaign("from_email is not on a verified domain of this account")
     else:
-        approved = db.scalar(
-            select(func.count())
-            .select_from(SenderId)
-            .where(
-                owned(SenderId, owner),
-                SenderId.value
-                == (c.sender.lstrip("+") if c.sender.lstrip("+").isdigit() else c.sender),
-                SenderId.status == ApprovalStatus.APPROVED,
-            )
-        )
+        approved = sender_authorization.has_approved_sender(db, owner, c.sender)
         if not approved:
             raise InvalidCampaign("sender id is not approved for this account")
     now = as_utc(now or datetime.now(UTC))

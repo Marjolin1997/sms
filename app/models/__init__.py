@@ -23,7 +23,7 @@ from app.models.email import Email, EmailDomain, EmailEvent  # noqa: F401
 from app.models.enterprise import Enterprise  # noqa: F401
 from app.models.events import Event, WebhookDelivery, WebhookEndpoint  # noqa: F401
 from app.models.inbound import InboundMessage, Keyword  # noqa: F401
-from app.models.messaging import SenderId, Template, TemplateVersion  # noqa: F401
+from app.models.messaging import SenderDecision, SenderId, Template, TemplateVersion  # noqa: F401
 from app.models.money_authority import MoneyBaseline, MoneyCursor, MoneyGrant  # noqa: F401
 from app.models.money_usage import UsageReport  # noqa: F401
 from app.models.pricing import (  # noqa: F401

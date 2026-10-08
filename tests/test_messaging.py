@@ -115,12 +115,12 @@ def test_body_frozen(db):
 def test_api_flow(client):
     s = client.post("/v1/sender-ids", json={"owner_ref": "c1", "country": "AL", "value": "ACME"})
     assert s.status_code == 201 and s.json()["status"] == "pending"
-    r = client.post(f"/v1/sender-ids/{s.json()['id']}/approve", json={"actor": "root"})
+    # M10-S0: skemat janë `extra=forbid`; aktori vjen nga principali, jo nga trupi
+    url = f"/v1/sender-ids/{s.json()['id']}"
+    assert client.post(f"{url}/approve", json={"actor": "root"}).status_code == 422
+    r = client.post(f"{url}/approve", json={})
     assert r.json()["status"] == "approved"
-    assert (
-        client.post(f"/v1/sender-ids/{s.json()['id']}/reject", json={"actor": "r"}).status_code
-        == 409
-    )
+    assert client.post(f"{url}/reject", json={"reason": "r"}).status_code == 409
     assert (
         client.post(
             "/v1/sender-ids", json={"owner_ref": "c", "country": "AL", "value": "x"}

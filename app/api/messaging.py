@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.tenant import access_or_404, tenant
@@ -27,8 +27,9 @@ def _run(db: Session, fn):
 
 
 class SenderIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     owner_ref: str = Field(min_length=1, max_length=64)
-    country: str = Field(min_length=2, max_length=2)
+    country: str = Field(pattern=r"^[A-Za-z]{2}$")
     value: str = Field(min_length=1, max_length=16)
 
 
@@ -44,6 +45,14 @@ class SenderOut(BaseModel):
 
 class ReviewIn(BaseModel):
     reason: str | None = Field(default=None, max_length=255)
+
+
+class SenderReviewIn(BaseModel):
+    """M10-S0: vendim mbi sender (strikt: asnjë fushë e panjohur; aktori vjen nga principali)."""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: str | None = Field(default=None, max_length=255)
+    evidence_ref: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class TemplateIn(BaseModel):
@@ -106,7 +115,7 @@ def request_sender(
     owner = tenant(db, p, body.owner_ref, write=True)
 
     def go():
-        s = sid.request(db, owner, body.country, body.value)
+        s = sid.request(db, owner, body.country, body.value, actor=p.actor)
         audit(db, p, "sender.request", "sender_id", s.id, body.model_dump())
         return s
 
@@ -116,17 +125,20 @@ def request_sender(
 def _sender_review(action: str, fn):
     def endpoint(
         sender_id: int,
-        body: ReviewIn,
+        body: SenderReviewIn,
         db: Session = Depends(get_db),
         p: Principal = Depends(require("sender:review")),
     ):
         def go():
             s = (
-                fn(db, sender_id, p.actor, body.reason or "")
+                fn(db, sender_id, p.actor, body.reason or "", evidence_ref=body.evidence_ref)
                 if action != "approve"
-                else fn(db, sender_id, p.actor)
+                else fn(db, sender_id, p.actor, evidence_ref=body.evidence_ref)
             )
-            audit(db, p, f"sender.{action}", "sender_id", sender_id, {"reason": body.reason})
+            audit(
+                db, p, f"sender.{action}", "sender_id", sender_id,
+                {"reason": body.reason, "evidence_ref": body.evidence_ref},
+            )  # fmt: skip
             return s
 
         return _sender(_run(db, go))

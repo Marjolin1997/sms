@@ -1,58 +1,88 @@
-import re
+"""Ciklin e jetës së sender-ave (kërkesë → miratim/refuzim/revokim → ridërgim) mbi `SenderId` + historinë append-only `SenderDecision` (M10-S0).
+
+Autorizimi/leximi është te `sender_authorization` (kanonik). Çdo tranzicion shkruan, në të njëjtin transaksion të thirrësit: gjendjen aktuale,
+rreshtin e vendimit dhe (nga API) auditin. Gjendjet nuk ndryshojnë: pending → approved|rejected · approved → revoked · rejected|revoked → pending."""
+
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.context import worker_owner
-from app.core.errors import Conflict, DomainError, NotFound
+from app.core.errors import Conflict, NotFound
 from app.core.scope import Owner, owned, ref
-from app.models.messaging import ApprovalStatus, SenderId, SenderKind
+from app.models.messaging import ApprovalStatus, SenderDecision, SenderId
 from app.services import approvals
-
-ALNUM = re.compile(r"^(?=.*[A-Za-z])[A-Za-z0-9 ]{3,11}$")
-NUMERIC = re.compile(r"^\+?[1-9]\d{2,14}$")
-COUNTRY = re.compile(r"^[A-Za-z]{2}$")
-
-
-class SenderNotAllowed(DomainError):
-    code = "sender_not_allowed"
-
-
-class InvalidSender(DomainError):
-    code = "invalid_sender"
-
-
-def classify(value: str) -> tuple[str, SenderKind]:
-    if NUMERIC.match(value):
-        return value.lstrip("+"), SenderKind.NUMERIC
-    if ALNUM.match(value) and value == value.strip():
-        return value, SenderKind.ALPHANUMERIC
-    raise InvalidSender("sender must be 3-11 alphanumerics (with a letter) or a phone number")
+from app.services import sender_authorization as sa
+from app.services.sender_authorization import (  # noqa: F401  (ri-eksport për përputhshmëri)
+    ALNUM,
+    COUNTRY,
+    NUMERIC,
+    InvalidSender,
+    SenderNotAllowed,
+    classify,
+)
 
 
 def _key(country: str, value: str) -> str:
-    return f"{country}:{value.lower()}"
+    return sa.canonical_key(country, sa.norm_of(value))
 
 
-def request(db: Session, owner: Owner, country: str, value: str) -> SenderId:
+def _record(
+    db: Session,
+    s: SenderId,
+    decision: str,
+    actor: str,
+    reason: str | None,
+    from_status: str | None,
+    evidence_ref: str | None = None,
+) -> SenderDecision:
+    d = SenderDecision(
+        sender_id=s.id, decision=decision, from_status=from_status, to_status=s.status.value,
+        decided_at=s.reviewed_at or datetime.now(UTC), decided_by=actor, reason=reason,
+        policy_revision=None, evidence_ref=evidence_ref, source="local",
+    )  # fmt: skip
+    db.add(d)
+    db.flush()
+    s.current_decision_id = d.id
+    db.flush()
+    return d
+
+
+def request(
+    db: Session, owner: Owner, country: str, value: str, actor: str | None = None
+) -> SenderId:
+    """Kërkesë e re ose idempotente (rreshti ekzistues kthehet; i refuzuar/revokuar → ridërgim). Kërkesë paralele identike: humbësi merr `Conflict`."""
     if not COUNTRY.match(country):
         raise InvalidSender("country must be ISO alpha-2")
     country = country.upper()
-    norm, kind = classify(value)
-    existing = db.scalar(
-        select(SenderId).where(
-            owned(SenderId, owner), SenderId.country == country, SenderId.value == norm
-        )
+    n = sa.normalize(value)
+    who = actor or ref(owner)
+    existing = sa.pick(
+        db.scalars(
+            select(SenderId).where(
+                owned(SenderId, owner), SenderId.country == country, SenderId.norm_value == n.norm
+            )
+        ).all(),
+        n.display,
     )
     if existing:
         if existing.status in (ApprovalStatus.REJECTED, ApprovalStatus.REVOKED):
-            approvals.transition(existing, "resubmit", ref(owner))
+            before = existing.status.value
+            approvals.transition(existing, "resubmit", who)
             db.flush()
+            _record(db, existing, "resubmitted", who, None, before)
         return existing
-    s = SenderId(owner_ref=ref(owner), country=country, value=norm, kind=kind)
-    db.add(s)
-    db.flush()
+    s = SenderId(
+        owner_ref=ref(owner), country=country, value=n.display, kind=n.kind, norm_value=n.norm
+    )
+    try:
+        with db.begin_nested():
+            db.add(s)
+            db.flush()
+    except IntegrityError as e:
+        raise Conflict("a request for this sender id and country is already in progress") from e
+    _record(db, s, "requested", who, None, None)
     return s
 
 
@@ -63,58 +93,48 @@ def _get(db: Session, sender_id: int) -> SenderId:
     return s
 
 
-def approve(db: Session, sender_id: int, actor: str) -> SenderId:
+def approve(db: Session, sender_id: int, actor: str, evidence_ref: str | None = None) -> SenderId:
     s = _get(db, sender_id)
+    before = s.status.value
     approvals.transition(s, "approve", actor)
-    s.approved_key = _key(s.country, s.value)
+    s.approved_key = sa.canonical_key(s.country, s.norm_value or sa.norm_of(s.value))
     try:
         db.flush()
     except IntegrityError as e:
         db.rollback()
         raise Conflict("sender id already approved for another account") from e
+    _record(db, s, "approved", actor, None, before, evidence_ref)
     return s
 
 
-def reject(db: Session, sender_id: int, actor: str, reason: str) -> SenderId:
+def reject(
+    db: Session, sender_id: int, actor: str, reason: str, evidence_ref: str | None = None
+) -> SenderId:
     s = _get(db, sender_id)
+    before = s.status.value
     approvals.transition(s, "reject", actor, reason)
     db.flush()
+    _record(db, s, "rejected", actor, reason, before, evidence_ref)
     return s
 
 
-def revoke(db: Session, sender_id: int, actor: str, reason: str) -> SenderId:
+def revoke(
+    db: Session, sender_id: int, actor: str, reason: str, evidence_ref: str | None = None
+) -> SenderId:
     s = _get(db, sender_id)
+    before = s.status.value
     approvals.transition(s, "revoke", actor, reason)
     s.approved_key = None
     db.flush()
+    _record(db, s, "revoked", actor, reason, before, evidence_ref)
     return s
 
 
 def assert_usable(db: Session, owner: Owner, country: str, value: str) -> SenderId:
-    """Thirret nga pipeline para dërgimit: sender i miratuar për këtë klient dhe shtet."""
-    norm = value.lstrip("+") if NUMERIC.match(value) else value
-    s = db.scalar(
-        select(SenderId).where(
-            owned(SenderId, owner),
-            SenderId.country == country.upper(),
-            SenderId.value == norm,
-            SenderId.status == ApprovalStatus.APPROVED,
-        )
-    )
-    if s is None:
-        raise SenderNotAllowed("sender id is not approved for this account and country")
-    return s
+    """Përputhshmëri: ruan nënshkrimin e vjetër. Rruga e re është `sender_authorization.assert_outbound` (rezultat i strukturuar)."""
+    auth = sa.assert_outbound(db, owner, country, value)
+    return db.get(SenderId, auth.sender_ref)
 
 
 def owners_of_number(db: Session, number: str) -> list:
-    """Kush ka miratuar këtë numër si sender (SMS hyrës → STOP/START). WORKER/webhook: identiteti
-    i tenant-it vjen nga rreshti SenderId i numrit, jo nga kërkesa. Një pronar për `owner_ref`."""
-    norm = number.lstrip("+")
-    rows = db.scalars(
-        select(SenderId).where(
-            SenderId.value == norm,
-            SenderId.kind == SenderKind.NUMERIC,
-            SenderId.status == ApprovalStatus.APPROVED,
-        )
-    )
-    return list({r.owner_ref: worker_owner(db, r) for r in rows}.values())
+    return sa.owners_of_numeric(db, number)
