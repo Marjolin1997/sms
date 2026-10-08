@@ -371,3 +371,7 @@ një periudhë për (abonim, indeks) · total faturë = linja + tatim (aritmetik
 
 ## 28. Defekt i gjetur dhe i korrigjuar në g5
 Çështja manuale për baseline (`usage_baselines`) përdorte `source_id = <uuid>:<boundary ISO>` (69 shenja) në kolonë `varchar(64)`: në PostgreSQL `apply` me baseline të pamjaftueshëm dështonte me `StringDataRightTruncation` (SQLite nuk e imponon gjatësinë). Çelësi tani është `<uuid hex>:<epoch>` (43 shenja); i mbuluar nga `test_baseline_issue_is_never_waivable[postgres]`. Asnjë të dhënë prodhimi s'ishte importuar me çelësin e vjetër.
+
+## 29. Shënime testimi — M9-g5 (final)
+Rev. `c5884a1`, rerun i plotë nga zero: SQLite 2440 passed / 1127 skipped / 0 failed; PG (3 shard, bashkim = koleksioni i plotë 3571 teste, `diff` bosh, 0 dublikata): 1268 + 1122 + 1095 passed, 0 failed; 0 restart të PG-së (uptime_since i pandryshuar). Gate-t: migrime 0022–0025 up/down/up + `compare_metadata=0` (PG dhe SQLite), trigger-at PG, konkurrenca PG (lock advisory, dy ekzekutime paralele, 8 teste parash), goldens/kontrata, `ruff check`, performancë (`performance_budget` veçmas 2 passed), `app/` dhe `scripts/` pa ndryshim që nga g4 (SQL i SMS/email submit dhe kapja e parë billable të pandryshuara). Batch: 120 abonime të faturuara në 1.0s (SQLite) / 2.0s (PG).
+**Përjashtim mjedisi (i pranuar):** 4 error `socket.gaierror` në `tests/test_tenant_isolation.py` (DNS i prishur në VM), identik me rev. `35e6a62`/`8e93270`. `ruff format --check`: vetëm `docs/API.md` dhe `docs/M3D_CONTRACTS_AUDIT.md` (borxh formati para g2, të pandryshuar).
