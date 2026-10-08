@@ -44,7 +44,7 @@ def test_central_0025_is_additive_reversible_and_matches_metadata(make_db):
         not NEW & set(inspect(eng).get_table_names())
         and inv_cols["plan_version_id"]["nullable"] is False
     )
-    central_alembic(url, "upgrade", "head")
+    central_alembic(url, "upgrade", "0025")
     assert NEW <= set(inspect(eng).get_table_names())
     inv2 = {c["name"]: c for c in inspect(eng).get_columns("invoices")}
     assert (
