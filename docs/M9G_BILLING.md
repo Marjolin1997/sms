@@ -214,3 +214,7 @@ import i plotë · konflikte të pazgjidhura = 0 · pa pjesëtim/mbipagesë të 
 2. Pagesa online Central (gateway) dhe pjesëtime/mbipagesa me rregull biznesi (V1 i refuzon).
 3. Retention/arkivim i artifact-eve të importit dhe i `billing_import_*` pas stabilizimit; pastrimi i tabelave legacy (M13).
 4. Re-anchor i abonimit të importuar (rifillim pas importit) pa shqyrtim manual.
+
+## 12. Shënime testimi — M9-g4 (final)
+Rerun i plotë mbi `f6e1e3f`: SQLite 2404 passed / 1088 skipped / 0 failed; PG (3 shard, bashkim = 3496 teste = koleksioni i plotë, pa dublikime): 1268+1055+1093 passed, 0 failed. Gate-t: migrimi 0025 up/down/up, `compare_metadata=0`, trigger-at PG, `ruff check` — të gjelbra.
+**Përjashtim i pranuar (mjedis, jo regresion):** 4 error në `tests/test_tenant_isolation.py` (`socket.gaierror`) — DNS nuk funksionon në VM-në e testimit (`getent hosts example.com` bosh). Riprodhohen identikisht në rev. g3 të miratuar `35e6a62`; sjellja e prodhimit të g4 nuk preket. Çdo dështim tjetër i ri NUK klasifikohet "mjedis" pa provë.
