@@ -148,7 +148,9 @@ def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
     ta përditësojë këtë skedar me qëllim (dhe me migrim); zhvendosjet strukturore s'duhet ta prekin."""
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
-    assert len(golden) == 58 and sum(len(v["columns"]) for v in golden.values()) == 601  # M10-S0: +1 tabelë, +16 kolona
+    assert (
+        len(golden) == 58 and sum(len(v["columns"]) for v in golden.values()) == 601
+    )  # M10-S0: +1 tabelë, +16 kolona
 
 
 @pytest.mark.skipif(

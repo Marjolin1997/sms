@@ -26,8 +26,14 @@ MOVED = {
     "app.services.wallet.NotFound": ("app.core.errors.NotFound", "NotFound"),
     "app.services.wallet.Conflict": ("app.core.errors.Conflict", "Conflict"),
     # M10-S0: autorizimi kanonik i sender-it mban gabimet e domenit (sender_ids i ri-eksporton)
-    "app.services.sender_ids.InvalidSender": ("app.services.sender_authorization.InvalidSender", "InvalidSender"),
-    "app.services.sender_ids.SenderNotAllowed": ("app.services.sender_authorization.SenderNotAllowed", "SenderNotAllowed"),
+    "app.services.sender_ids.InvalidSender": (
+        "app.services.sender_authorization.InvalidSender",
+        "InvalidSender",
+    ),
+    "app.services.sender_ids.SenderNotAllowed": (
+        "app.services.sender_authorization.SenderNotAllowed",
+        "SenderNotAllowed",
+    ),
 }
 
 
@@ -108,7 +114,12 @@ def test_exactly_the_documented_classes_changed_module():
         v["name"] for v in now_classes.values()
         if before_modules.get(v["name"], v["module"]) != v["module"] and v["name"] != "DomainError"
     }  # fmt: skip
-    assert moved == {"NotFound", "Conflict", "InvalidSender", "SenderNotAllowed"}  # + WalletError→DomainError (alias); M10-S0: sender_authorization
+    assert moved == {
+        "NotFound",
+        "Conflict",
+        "InvalidSender",
+        "SenderNotAllowed",
+    }  # + WalletError→DomainError (alias); M10-S0: sender_authorization
 
 
 # --- Aliase dhe sjellje -----------------------------------------------------------------------------------------
