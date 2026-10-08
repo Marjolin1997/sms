@@ -729,7 +729,8 @@ def _baselines(db, doc, items, enterprises, d_subs, plan) -> None:
     }
     by_ent_ok = {d.data["enterprise_id"] for d in d_subs.values() if not d.blocked}
     for u in doc["usage"]:
-        key = f"{u['enterprise_id']}:{u['boundary']}"
+        # ≤ 64 shenja (kolona source_id): UUID pa viza + epoch i kufirit (g5: çelësi i vjetër 69 shenja thyente çështjet në PG)
+        key = f"{uuid.UUID(u['enterprise_id']).hex}:{int(T(u['boundary']).timestamp())}"
         d = Decision("usage_baselines", key, "importable", core_hash=h(u), data=u)
         eid = u["enterprise_id"]
         if eid not in active:
