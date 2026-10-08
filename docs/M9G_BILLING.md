@@ -218,3 +218,153 @@ import i plotë · konflikte të pazgjidhura = 0 · pa pjesëtim/mbipagesë të 
 ## 12. Shënime testimi — M9-g4 (final)
 Rerun i plotë mbi `f6e1e3f`: SQLite 2404 passed / 1088 skipped / 0 failed; PG (3 shard, bashkim = 3496 teste = koleksioni i plotë, pa dublikime): 1268+1055+1093 passed, 0 failed. Gate-t: migrimi 0025 up/down/up, `compare_metadata=0`, trigger-at PG, `ruff check` — të gjelbra.
 **Përjashtim i pranuar (mjedis, jo regresion):** 4 error në `tests/test_tenant_isolation.py` (`socket.gaierror`) — DNS nuk funksionon në VM-në e testimit (`getent hosts example.com` bosh). Riprodhohen identikisht në rev. g3 të miratuar `35e6a62`; sjellja e prodhimit të g4 nuk preket. Çdo dështim tjetër i ri NUK klasifikohet "mjedis" pa provë.
+
+---
+
+# M9-g5 — Hardening final dhe mbyllja e prodhimit (V1)
+
+Nuk shton funksion faturimi (pa proporcion, pagesa të pjesshme/mbipagesa, gateway, dunning, UI, tatime, FX, pastrim legacy). Shton: readiness final, invariante të verifikueshme, observability/alarme, hardening të workerit, workflow formal të çështjeve manuale, politikë shadow, runbook/rollback, retention, backup/DR, rishikim sigurie.
+
+## 13. Arkitektura V1 (përmbledhje) dhe makina e autoritetit
+Enterprise mbetet pronar i dërgimit/trafikut; **Central** është autoriteti i faturimit periodik pas cutover-it: plane/versione (g1) → abonime → periudha (arrears, pa proporcion) → fatura/linja të pandryshueshme me aritmetikë të imponuar nga DB → përdorim email nga raportet kumulative (g2) → shlyerje: pagesë fature (maker-checker) + alokim 1:1 + credit notes mbi fatura të paguara (g3) → import/shadow/cutover (g4) → hardening (g5). Asnjë thirrje rrjeti brenda transaksionit financiar; asnjë lidhje DB mes dy sistemeve.
+
+```
+ local ──(set shadow)──▶ shadow ──(set central + ACK + readiness pa FAIL)──▶ central
+   ▲                        ▲                                                  │
+   └──────(ACK, para faturës së parë Central)───────────────────────────────────┘   (central → shadow|local)
+ central → * pas faturës së parë (provenance=central): BLLOKUAR (forward-fix / rakordim manual)
+```
+Enterprise: `SMS_BILLING_AUTHORITY=local|shadow|central`; `central` = freeze fail-closed (nuk lëshon, nuk shlyen). Central: tabela `billing_authority_state`; `billing_run` autoritar del me kod 3 jashtë `central`.
+
+## 14. Runbook cutover (operatori) — rend i detyrueshëm
+`ENT$` = host Enterprise · `CEN$` = host Central. Çdo hap: **komanda → pritja → kushti i dështimit → vendimi (stop/rollback)**. Asnjë hap nuk kalon pa pritjen e treguar.
+
+| # | Komanda | Pritja | Dështim ⇒ vendim |
+|---|---|---|---|
+| 1 | `ENT$ python -m scripts.billing_export --out /secure/rehearsal.json` (Enterprise ende aktiv: provë e përgatitjes) · `CEN$ python -m apps.central.tools.billing_import --artifact /secure/rehearsal.json --json` | dry-run: `blocking_total`, `blocking_by_category`, `sequence_seeds`, `proposed_baselines`; NUK shkruan asgjë | kod 2 (artifact i pavlefshëm) ⇒ STOP, korrigjo eksportuesin. Bllokues ⇒ shko te hapi 5 para çdo gjëje tjetër |
+| 2 | `ENT$ python -m scripts.billing_authority_readiness --target shadow` pastaj `--target central` | `shadow`: PASS; `central`: shfaq çfarë mbetet (pending checkouts, periudha të afatuara) | FAIL ⇒ STOP; mos vazhdo me çekout-e online pending |
+| 3 | (artifact FINAL merret në hapin 14–16; këtu vetëm verifiko hash-in e provës) `CEN$ python -m apps.central.tools.billing_import --artifact /secure/rehearsal.json` | `content hash …` i njëjtë me `content_hash` të printuar nga eksporti | `invalid artifact` / hash i ndryshëm ⇒ STOP; transferim i dëmtuar, eksporto sërish |
+| 4 | `CEN$ python -m apps.central.tools.billing_authority set --mode shadow --reason "<arsye>" --actor-email <admin>` | `status` ⇒ `shadow`; Enterprise ende lëshon | `Conflict` ⇒ lexo mesazhin; mos kalo `local→central` |
+| 5 | `CEN$ python -m apps.central.tools.billing_import --issues` | çdo çështje ka `category`, `allowed`, `forbidden`, `waivable` | çështje `unsupported/invalid/conflict` ⇒ korrigjo në burim + ri-eksport (shih §16); mos përdor waiver |
+| 6 | `CEN$ python -m apps.central.tools.billing_import --artifact /secure/final.json --apply --evidence-hash <hash nga ENT> --actor-email <admin> --require-clean` | JSON `batch_id`, `summary`; rirunim = no-op | `conflict:` hash i gabuar/bllokues ⇒ STOP, nuk është shkruar asgjë (atomik) |
+| 7 | `CEN$ python -m apps.central.tools.billing_import --artifact /secure/final.json --json` | të gjitha rreshtat `already_imported`/`exact`, `blocking_total=0` | çdo `importable` i mbetur ⇒ import jo i plotë ⇒ STOP |
+| 8 | `CEN$ python -m apps.central.tools.billing_final_readiness --json` (kërko `usage_opening_baseline`) | `PASS` për çdo abonim të matur (baseline krijohet nga hapi 6) | FAIL ⇒ pritet kufiri i periudhës së radhës + ri-eksport (kurrë baseline zero i shpikur) |
+| 9 | (e njëjta komandë) kërko `sequence_seeds_safe` | `PASS`: `invoice_number_sequence` ≥ maksimumi i çdo numri legacy/Central | FAIL ⇒ STOP; mos e ul kurrë sekuencën |
+| 10 | (e njëjta) kërko `inv_credit_note_sequence_not_behind` | `PASS` (legacy s'ka credit notes; `credit_note_sequence` nuk seed-ohet) | FAIL ⇒ STOP, hetim |
+| 11 | `CEN$ python -m apps.central.tools.billing_shadow --recent 3` (disa ditë/cikle) | krahasime të reja; `--summary --json` për gjendjen e fundit | shih §17 |
+| 12 | `CEN$ python -m apps.central.tools.billing_shadow --summary --json` | `by_category` vetëm `exact` (+ WARN të dokumentuar) | çdo kategori HARD ⇒ STOP (mos normalizo) |
+| 13 | `CEN$ python -m apps.central.tools.billing_final_readiness --json` (kërko `latest_usage_report_healthy`) | `PASS`: raport i freskët për çdo enterprise të matur | stale ⇒ prit/rindiz reporterin Enterprise; mos kalo |
+| 14 | `ENT$` ndalo workerin e faturimit; `SMS_BILLING_AUTHORITY=central`, `SMS_BILLING_AUTHORITY_ACK=true`, rinis web+worker | API faturimi Enterprise kthen 409 `billing_authority_frozen`; worker nuk bën asgjë | s'ngrin ⇒ STOP, rikthe `SMS_BILLING_AUTHORITY=shadow` |
+| 15 | `ENT$ python -m scripts.billing_authority_readiness --target central` | `no_pending_online_checkouts` PASS, asnjë transaksion në ecje | pending ⇒ prit skadimin/refuzimin ose trajtoje manualisht; mos vazhdo |
+| 15b | `ENT$ python -m scripts.billing_export --out /secure/final.json` **tani** (i ngrirë) | `authority.mode=central` i atestuar; printon `export_id`, `content_hash` | atestim ≠ central ⇒ readiness `enterprise_billing_frozen` FAIL ⇒ STOP |
+| 16 | **ACK prodhimi** (vendim njerëzor i regjistruar në tiketë): `CENTRAL_BILLING_WORKER_CONFIGURED=true` në mjedisin Central dhe `--ack` në hapin 17 | ACK shfaqet te `production_ack` | pa ACK ⇒ `Conflict`, asgjë nuk ndryshon |
+| 17 | `CEN$ python -m apps.central.tools.billing_authority set --mode central --ack --reason "<tiketë>" --actor-email <admin>` | `status` ⇒ `central`; readiness pa FAIL kontrollohet brenda komandës | `Conflict` me emrat e FAIL ⇒ rregulloji, mos detyro |
+| 18 | `CEN$ python -m apps.central.tools.billing_final_readiness --strict --json --observability` | `PASS` (ose WARN të shpjeguar), `alerts` pa CRITICAL | CRITICAL ⇒ STOP para batch-it të parë; vendos rollback sipas §15 Case A |
+| 19 | `CEN$ python -m apps.central.tools.billing_run --limit 50 --json` | `invoiced/no_charge/waiting_usage/postponed/failed`, `failed=0`; kod 0; një ekzekutim i dytë njëkohësisht jep kod 4 | `failed>0` ⇒ STOP, shih log pa PII; kod 3 ⇒ mode ≠ central |
+| 20 | `CEN$ GET /admin/billing/invoices?status=open` + `GET /admin/billing/ops` | numri i faturave = `invoiced`; numrat vazhdojnë pas seed-it (p.sh. `INV-2030-000004`), pa boshllëk/dublikat; shuma = projeksioni i shadow | numër/total i papritur ⇒ STOP; VOID i faturës OPEN me arsye (jo ri-lëshim) dhe hap incident |
+| 21 | monitoro ciklin e parë: `billing_final_readiness --json` çdo orë (cron i jashtëm) + `GET /admin/billing/ops` | heartbeat i freskët, `periods.due_unprocessed=0`, `settlement.anomalies` bosh | alarm CRITICAL ⇒ Case B nëse ka fatura autoritare |
+
+Pas hapit 17 çdo korrigjim bëhet me mjetet e g3 (void faturë OPEN / credit note për të paguar), kurrë me ndryshim të drejtpërdrejtë në DB.
+
+## 15. Rollback — dy raste të qarta
+**Case A — Central `central` por ZERO fatura autoritare (`provenance=central` = 0):**
+1. Ndalo `billing_run` (cron/worker Central). Verifiko: `billing_authority status` dhe `GET /admin/billing/ops → authority.central_invoices = 0`.
+2. Verifiko kursorin: `GET /admin/billing/periods` pa periudha `provenance=central`; `next_period_index` i çdo abonimi = `periods_billed` i eksportit të fundit (asnjë periudhë e ndryshuar); `invoice_number_sequence` nuk ka kaluar maksimumin e eksportit (asnjë numër Central i konsumuar).
+3. ACK eksplicit i operatorit: `billing_authority set --mode shadow|local --ack --reason "<tiketë>" --actor-email <admin>` (pa `--ack` refuzohet).
+4. Enterprise: `SMS_BILLING_AUTHORITY=local`, heq ACK, rinis. Para rihapjes krahaso `periods_billed`/maksimumet e numrave me eksportin e fundit.
+5. Nëse ka çfarëdo mospërputhje kursori/sekuence ⇒ MOS rihap Enterprise; trajtoje si Case B.
+
+**Case B — Central ka lëshuar të paktën një faturë autoritare:** NUK ka rollback automatik (`Conflict` nga `set_mode`; kurrë override). Procedurë:
+1. Ngrij të dy lëshuesit nëse duhet: ndalo `billing_run`; Enterprise mbetet `central` (i ngrirë). Mos e kthe Enterprise në `local` (do të rilëshonte periudha/numra).
+2. Rakordim: `billing_final_readiness --json`, `GET /admin/billing/settlement`, `GET /admin/billing/invoices`; liston faturat e gabuara.
+3. Forward-fix: faturë OPEN e gabuar ⇒ **void** me arsye; e paguar ⇒ **credit note**; periudha e munguar ⇒ korrigjim i konfigurimit dhe ri-ekzekutim `billing_run` (idempotent). Çdo ndërhyrje manuale dokumentohet me tiketë; asnjë ndryshim i drejtpërdrejtë në DB, asnjë reset i heshtur i kursorit.
+4. Kthim në shadow/local nuk është opsion; nëse biznesi kërkon rikthim te Enterprise ⇒ projekt i veçantë migrimi (jashtë V1).
+
+## 16. Workflow i çështjeve manuale të importit
+`billing_import --issues` (JSON, pa PII) liston: `category`, `classification`, burimin, arsyen, `allowed`, `forbidden`, `waivable`. Një çështje mbyllet VETËM me një nga dy rrugët reale:
+- **`superseded`** — një batch i mëvonshëm (ri-eksport pas korrigjimit në burim) ka importuar objektin ose e mban si çështje më të re. Zgjidhja e vërtetë ndodh në Enterprise.
+- **`operator_waiver`** — vetëm `requires_manual_review`, jo `usage_baseline_insufficient`, me `--evidence-ref` (tiketë/dokument, 8–200 shenja, pa `;`). Objekti MBETET jashtë Central; readiness raporton WARN `import_waivers_documented`; audit `billing.import_issue_resolve` me `kind`+`evidence_ref`.
+`unsupported | invalid | conflict` nuk fshihen kurrë me fjalë: `resolve` pa dëshmi kthen `Conflict` që shpjegon çfarë duhet bërë.
+
+| Kategoria | Operatori sheh | Veprimi i lejuar | Shkurtorja e ndaluar |
+|---|---|---|---|
+| `partial_payment` | "online payment/wallet debit is lower than (partial payment of) the invoice total" | korrigjo shlyerjen në burim (një pagesë e plotë) dhe ri-eksporto | importo si e paguar; mbyll me tekst |
+| `overpayment` | "...is higher than (overpayment of)..." | rimburso/korrigjo në burim, ri-eksporto | importo tepricën; waiver |
+| `missing_external_reference` | paid pa `paid_via`/ledger/`paid_at`/referencë | jep referencën reale në burim dhe ri-eksporto; ose waiver me `evidence_ref` | shpik referencë; shëno paguar pa dëshmi |
+| `usage_baseline_insufficient` | "usage evidence is incomplete" / produkt email i paqartë | prit kufirin e periudhës së radhës dhe ri-eksporto (capture duhet të paraprijë periudhën e parë Central) | waiver; baseline zero; ndrysho `capture_active_since` |
+| `unsupported_line` | rresht që s'përputhet me rregullat e tekstit | korrigjo tekstin/aritmetikën në burim (rreshtat e panjohur me aritmetikë të saktë importohen si `legacy`) | ndrysho shumat në Central |
+| `plan_conflict` | plani ndryshoi në burim pas importit / kod tjetër ekziston | rikthe planin në burim (kod i ri = çmim i ri), ri-eksporto | ndrysho version plani në Central |
+| `subscription_conflict` | `periods_billed` prapa / abonim ri-ankoruar / abonim ekziston | rreshto `periods_billed`/ankorën në burim; rishikim manual i hartëzimit | reset `next_period_index` në Central |
+| `sequence_conflict` | numër jashtë `INV-YYYY-NNNNNN` ose numër ekzistues | rregullo numrin në burim; fatura Central e përplasur kalon nga void normal | ul `invoice_number_sequence` |
+| `invoice_arithmetic_mismatch` | subtotal/tatim/total nuk rrjedhin | korrigjo faturën në burim, ri-eksporto | rillogaritje gjatë importit |
+| `currency_mismatch` | monedha e faturës/pagesës/planit ndryshon | rreshto monedhën në burim (pa FX në V1) | konverto monedhën |
+
+## 17. Politika e pranimit të shadow (cutover lejohet vetëm kur…)
+Çdo (abonim, periudhë) merr krahasimin e FUNDIT. Pragjet:
+- **HARD FAIL** (blloku): `currency_mismatch`, `period_mismatch`, `plan_mismatch`, `tax_mismatch`, `central_only`, `legacy_only` (të pashpjeguara), `amount_mismatch` mbi tolerancën; si dhe kontrollet e veçanta `usage_opening_baseline` (baseline mungon), `currency_pricing_mapping_valid`/`legacy_overage_has_central_price` (çmim mungon), `sequence_seeds_safe` (përplasje sekuence), krahasim që s'është ekzekutuar për një abonim të importuar.
+- **Tolerancë shume:** `CENTRAL_BILLING_SHADOW_AMOUNT_TOLERANCE` (parazgjedhje `0` = asnjë). Brenda tolerancës ⇒ WARN; mbi të ⇒ FAIL. Nuk normalizon: vetëm vendos nivelin e raportimit; kategoria e ruajtur mbetet `amount_mismatch`.
+- **WARN i lejuar vetëm kur është i dokumentuar:** `usage_mismatch` (përdorimi ndryshon sepse legacy s'kishte baseline të plotë), `pricing_mismatch` (çmimi M9-e ≠ çmimi legacy i overage — pritet kur çmimet u migruan), `insufficient_usage` (periudha pret raportin), amount brenda tolerancës. Çdo WARN regjistrohet në tiketën e cutover-it me shpjegim.
+- Asnjë ndryshim i dukshëm nuk "pastrohet": korrigjohet shkaku, `billing_shadow` rilëshohet (krahasimi i ri zëvendëson të vjetrin në pamje; i vjetri mbetet si evidencë).
+
+## 18. Retention (konservator; asgjë financiare nuk fshihet)
+| Të dhëna | Politika |
+|---|---|
+| fatura, linja, alokime, pagesa, credit notes, audit financiar, rreshta të importuar (provenance) | **PA fshirje kurrë** (trigger-a DB + ORM `before_delete`) |
+| `billing_import_batches/items/issues`, `billing_usage_baselines`, `billing_shadow_comparisons` | ruhen (evidencë ligjore); nuk ka rrugë fshirjeje; arkivimi është vendim i ardhshëm (M13) pas afatit ligjor |
+| `billing_usage_reports` | `CENTRAL_USAGE_REPORT_RETENTION_DAYS` (parazgjedhje 0 = ruaj gjithçka); fshin vetëm pas vendimit ligjor, dry-run i parë (`apps.central.tools.retention`); zinxhiri i baseline/kufijve ruhet (`full_days`, `keep_last`) |
+| logje operacionale (stdout i `billing_run`, heartbeat audit `billing.run`) | `billing.run` është audit (vetëm-shtim, ruhet); logjet e proceseve sipas politikës së platformës (rekomandim ≥ 90 ditë) |
+| metadata retry | Central s'ka retry financiar jashtë idempotencës së `process_period`; asgjë për pastrim |
+Afati ligjor i ruajtjes së faturave është i panjohur ⇒ **ruhet gjithçka si parazgjedhje**; çdo afat është konfigurim eksplicit i operatorit, kurrë parazgjedhje.
+
+## 19. Observability dhe alarme
+`GET /admin/billing/ops` (admin|operator, vetëm lexim, pa PII) dhe `billing_final_readiness --observability`: autoriteti aktiv + ACK + `central_invoices` + freeze i atestuar; batch-i i fundit i importit; çështje të pazgjidhura sipas kategorisë + waiver-a; krahasimi i fundit shadow + numërim sipas kategorisë; mosha e raportit më të vjetër/më të ri të përdorimit; periudha që presin përdorim/të shtyra/të afatuara; fatura të lëshuara në ekzekutimin e fundit; periudha `no_charge`; pagesa fature pending/stale; anomali shlyerjeje; ekzekutimi i fundit i workerit (heartbeat) dhe mosha.
+**Alarme** (`alerts` në `GET /admin/billing/final-readiness` dhe në mjet; asnjë integrim i rremë me PagerDuty/Prometheus — kodi i daljes ≠ 0 dhe JSON për monitorimin e jashtëm):
+| Niveli | Kodi | Kur |
+|---|---|---|
+| CRITICAL | `dual_issuer_possible` | faturë `provenance=central` ndërsa mode ≠ central |
+| CRITICAL | `sequence_collision_risk` | sekuenca (INV/CN) pas numrave ekzistues, ose numër i dyfishtë |
+| CRITICAL | `central_authority_with_enterprise_not_frozen` | mode=central pa atestim freeze |
+| CRITICAL | `missing_usage_baseline_in_central` / `missing_pricing_in_central` | mode=central dhe kontrolli përkatës FAIL |
+| CRITICAL | `invoice_arithmetic_invariant_failure` / `settlement_invariant_failure` | invariant i thyer (çdo mode) |
+| CRITICAL | `import_conflict_unresolved_at_cutover` | mode=central me çështje të pazgjidhura |
+| WARN | `stale_usage_report`, `shadow_mismatch`, `old_due_period`, `old_pending_invoice_payment`, `unresolved_manual_review_item`, `stale_worker_heartbeat`, `import_waivers_present`, `invoices_overdue` | pragjet e `CENTRAL_BILLING_*` / `CENTRAL_PAYMENT_PENDING_STALE_SECONDS` / `CENTRAL_BILLING_RUN_STALE_SECONDS` |
+
+## 20. Hardening i workerit
+- **I kufizuar:** `billing_run --limit N` (default 500 abonime) × `--max-periods` (default 12 per abonim); periudha e shtyrë/në pritje ndalon iterimin e abonimit.
+- **Pa mbivendosje të pasigurt:** (1) çdo periudhë në transaksionin e vet me abonimin `FOR UPDATE` + UNIQUE (abonim, indeks) ⇒ dy ekzekutime paralele nuk dyfishojnë fatura/periudha (testuar në PG); (2) `run_exclusive` mban **advisory lock** në nivel sesioni (PostgreSQL) ⇒ ekzekutimi i dytë del me kod 4 `busy` pa bërë punë; SQLite = proces i vetëm (mjedis testimi).
+- **Retry idempotent:** rinisja pas dështimit nuk krijon dublikatë. **Crash para commit** ⇒ asnjë fatura, asnjë numër i konsumuar (numri jeton në të njëjtin transaksion) ⇒ pa boshllëk; **crash pas commit** ⇒ fatura ekziston, periudha është `invoiced`, rishikimi e kalon si `not_due`; humbja e heartbeat-it nuk e prish rezultatin.
+- **Stale worker:** audit `billing.run` (system, `system:billing_run`, vetëm numërues) ⇒ `billing_worker_heartbeat` WARN pas `CENTRAL_BILLING_RUN_STALE_SECONDS` (26h). Zhdukja e heartbeat-it nuk ndalon faturimin; vetëm alarmon.
+- **Rifillim i sigurt:** thjesht rinis `billing_run` (nuk ka gjendje në kujtesë). **Asnjë thirrje rrjeti** brenda transaksionit financiar; as email/SMTP (shih §21).
+
+## 21. Kufiri i dërgimit të faturave
+Central **nuk** dërgon fatura (as email, as PDF, as portal): lëshimi i faturës nuk varet nga SMTP/rrjeti. Dërgimi është shqetësim i veçantë (milestone i ardhshëm: M11 klienti/portali); nuk ka outbox faturash në Central për të audituar. Operatori i shpërndan faturat manualisht nga `GET /admin/billing/invoices/{id}` deri atëherë.
+
+## 22. Backup / restore
+**Central** (të gjitha në të njëjtin dump/PITR; konsistencë e vetme): `commercial_plans, plan_versions, billing_profiles, billing_subscriptions, billing_periods, invoices, invoice_lines, invoice_number_sequence, payments, invoice_payment_allocations, credit_notes, credit_note_sequence, billing_usage_reports, billing_usage_baselines, billing_import_batches/items/issues, billing_authority_state, billing_shadow_comparisons, audit_log` (+ tabelat e parave M9). **Enterprise:** `sms_plans/sms_subscriptions/sms_invoices/sms_invoice_lines/sms_payments/sms_invoice_counters` (legacy deri në M13), eventet billable të email-it, outbox-i i raporteve të përdorimit, gjendja e autoritetit/freeze (`SMS_BILLING_AUTHORITY*` në mjedis — rruaj `.env`).
+`scripts/backup.sh` për secilën bazë + **PITR/WAL për Central** (bllokues prodhimi, shih `M9_MONEY_AUDIT.md` §11). Restore (`scripts/restore.sh`) vetëm në bazë të re; **rendi:** (1) Central, (2) Enterprise, (3) mjedisi/autoriteti (`SMS_BILLING_AUTHORITY`, Central mode lexohet nga DB), (4) verifikim: `alembic current` në të dyja, `billing_final_readiness --json`, `python -m scripts.verify_ledger`, krahaso `invoice_number_sequence` me numrat, (5) vetëm pastaj rinis workerat (`billing_run` i fundit).
+
+## 23. Skenarë DR (asnjë reset i heshtur i kursorit)
+| Skenari | Pasoja | Veprimi |
+|---|---|---|
+| Central i rikthyer MBRAPA gjendjes së eksportit të Enterprise (para importit/cutover-it) | Central s'ka importin/sekuencën | mbaj `shadow`/`local`; ri-importo artifact-in e fundit (idempotent); `billing_final_readiness` duhet PASS para çdo hapi |
+| Central i rikthyer pas lëshimit të faturave (humbje e faturave të fundit) | numra/periudha të humbura; klientët mund t'i kenë parë | **freeze** `billing_run`; krahaso me kopje të faturave të dërguara/audit; ri-krijo vetëm me forward-fix të audituar; sekuenca të mos ulet; rakordim manual — asnjë ri-lëshim i verbër |
+| Enterprise i rikthyer para baseline-it të cutover-it | Enterprise mund të rilëshonte | MBAJ `SMS_BILLING_AUTHORITY=central` (freeze) para se të hapet trafiku; verifiko `periods_billed` kundrejt Central (Central autoritet) |
+| Enterprise i rikthyer pas cutover-it | gjendje legacy e vjetër, pa ndikim në faturim | freeze mbetet; kërkon rishikim vetëm për përdorimin (outbox-i i raporteve ridërgohet idempotent) |
+| Sekuenca e humbur | rrezik përplasjeje numrash | `inv_invoice_sequence_not_behind` FAIL ⇒ CRITICAL; ngre sekuencën mbi maksimumin real VETËM përmes seed-it të importit/procedurës së audituar; kurrë ulje |
+| Baseline përdorimi i humbur | faturim overage i pasaktë | `usage_opening_baseline` FAIL ⇒ periudha shtyhet (`postponed`); ri-importo artifact-in (baseline është idempotent) |
+| Artifact i dyfishuar | ri-import | `export_id` UNIQUE ⇒ no-op; i njëjti id me hash tjetër ⇒ refuzim |
+| Kursor periudhe i prapambetur (`next_period_index` < periudhat e faturuara) | rrezik rifaturimi | UNIQUE (abonim, indeks) + `invoices` unike bllokojnë dublikimin; çdo korrigjim kërkon vendim të audituar, jo UPDATE manual |
+
+## 24. Rishikimi i sigurisë (admin APIs faturimi)
+Verifikuar (testuar në `test_m9g5_closure.py`): (a) metoda vetëm GET/POST — **asnjë DELETE/PUT/PATCH**; (b) çdo trup POST është model Pydantic `extra="forbid"` (≥10 kontrolluar); (c) shumat janë string dhjetorë (kurrë float), UUID-të në shteg si `uuid.UUID`, `Reason` 1..500, `idempotency_key` i detyrueshëm për pagesa/credit notes, arsye ≥3 për void; (d) admin = shkrim, operator = lexim (operatori merr 403 në POST); (e) çdo mutacion shkruan audit; (f) `final-readiness` dhe `ops` janë GET, pa PII dhe pa mutacion; (g) asnjë qasje ndër-enterprise pa filtër të shprehur (listat marrin `enterprise_id` si filtër admin; s'ka API klienti deri në M11); (h) kredencialet e shërbimit: skopi minimal `billing:report` për ingest-in e përdorimit, asnjë skop faturimi tjetër. Gjetje: abonimi `assign/cancel/resume` nuk ka çelës idempotence por janë të gjendjes (idempotente nga natyra); pranohet.
+
+## 25. Invariantet (verifikim i vazhdueshëm: `inv_*` në readiness)
+një periudhë për (abonim, indeks) · total faturë = linja + tatim (aritmetikë DB + `verify_invoice`) · faturë e lëshuar e pandryshueshme (trigger) · paid/void terminale · një alokim për faturë, pagesa e miratuar = totali dhe monedha · credit notes kumulativ ≤ total i faturës së paguar · asnjë mutacion wallet SMS / ledger komercial nga pagesa fature · asnjë dublim lëshuesi (`inv_no_central_invoice_outside_central_mode`) · asnjë numër i dyfishtë dokumenti · sekuencat ≥ numrat · çdo faturë/pagesë e importuar ka rresht evidence (provenance).
+
+## 26. Mjetet e provës së prodhimit (pa prekur të dhëna reale automatikisht)
+`billing_import --artifact … --json` (numra, konflikte, `blocking_by_category`, seed-e, `proposed_baselines`) · `billing_import --issues` · `billing_shadow --summary --json` (read-only) · `billing_final_readiness --json [--strict] [--observability]` (cutover readiness JSON). Të gjitha janë vetëm-lexim (përveç `--apply`/`--resolve`/`billing_shadow` pa `--summary` që shkruan krahasime).
+
+## 27. Kufizime të njohura dhe bllokues të prodhimit
+- Kufizime V1: pa proporcion, pa pagesa të pjesshme/mbipagesa, pa gateway, pa dunning, pa tatim/FX, pa dërgim faturash, pa UI klienti; faturat Central janë vetëm admin.
+- **Bllokues operativ (jashtë kodit):** (1) PITR/WAL ose replikë sinkrone për Central; (2) `billing_run` i planifikuar (cron/systemd) + `CENTRAL_BILLING_WORKER_CONFIGURED=true` dhe monitorim i jashtëm i `billing_final_readiness`; (3) provë e numrave të vërtetë: dry-run i eksportit real, zgjidhje e çështjeve manuale, shadow ≥ 1 cikël i plotë; (4) ACK prodhimi njerëzor; (5) vendim ligjor për afatin e ruajtjes së faturave; (6) procedurë dërgimi manual i faturave deri në M11; (7) mjedisi i testimit pa DNS ka 4 teste izolimi tenant që duhen rikontrolluar në mjedis të shëndetshëm.
+- Testim: DNS i prishur në VM ⇒ `tests/test_tenant_isolation.py` (4 error `socket.gaierror`) raportohet veçmas; riprodhohet identikisht në rev. të miratuar para g4.

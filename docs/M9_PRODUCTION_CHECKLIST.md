@@ -67,3 +67,32 @@ Asnjë mjet nuk i vendos vetë.
 
 ## 12. Pas hapjes (ditën 1)
 Çdo 5 min `financial_readiness` në monitorim të jashtëm (kodi ≠ 0 ⇒ njoftim); rishikim ditor i `GET /admin/financial/overview`; `financial_ops` pas çdo incidenti UNKNOWN.
+
+---
+
+# Faturimi periodik Central (M9-g) — lista e prodhimit
+Detajet dhe pritjet për çdo hap: `docs/M9G_BILLING.md` §14 (runbook 21 hapa), §15 (rollback A/B), §16 (çështjet manuale), §17 (shadow), §19 (alarme).
+
+## 13. Parakushte të faturimit
+- [ ] Migrime: Central `0025` (`python -m alembic -c apps/central/alembic.ini upgrade head`), Enterprise `0027`. **Rikthim:** `downgrade -1` vetëm në bazë të re/restore (shih §22 e M9G).
+- [ ] **PITR/WAL ose replikë sinkrone për Central** (bllokues; shih §1 më lart).
+- [ ] `billing_run` i planifikuar në Central (cron/systemd, p.sh. çdo orë) dhe `CENTRAL_BILLING_WORKER_CONFIGURED=true`; `CENTRAL_BILLING_RUN_STALE_SECONDS` sipas frekuencës.
+- [ ] Monitorim i jashtëm: `python -m apps.central.tools.billing_final_readiness --json` (kodi ≠ 0 ⇒ njoftim; `alerts[].severity=CRITICAL` ⇒ thirrje).
+- [ ] Vendim ligjor për afatin e ruajtjes së faturave (parazgjedhje: ruaj gjithçka; asnjë retention i faturave).
+- [ ] Procedurë manuale e dërgimit të faturave deri në M11.
+
+## 14. Cutover (përmbledhje; hapat e plotë te M9G §14)
+- [ ] Provë: eksport + `billing_import --artifact … --json` (0 bllokues; `--issues` bosh ose me waiver të dokumentuar).
+- [ ] Shadow: `billing_shadow` ≥ 1 cikël i plotë; `billing_shadow --summary --json` vetëm `exact` (+ WARN të shpjeguar). Çdo kategori HARD = STOP.
+- [ ] Freeze Enterprise (`SMS_BILLING_AUTHORITY=central`, ACK) → eksport FINAL → `--apply --evidence-hash --require-clean`.
+- [ ] `billing_final_readiness --strict` → PASS, pa CRITICAL; ACK njerëzor i regjistruar në tiketë.
+- [ ] `billing_authority set --mode central --ack` → `billing_run --limit 50` → verifiko numra/shuma → monitoro ciklin e parë.
+
+## 15. Rikthimi
+| Rasti | Veprimi |
+|---|---|
+| Central `central`, 0 fatura autoritare | Case A (M9G §15): ndalo worker, verifiko kursor/sekuencë, `set --mode shadow\|local --ack`, Enterprise `local` |
+| Të paktën 1 faturë autoritare Central | **Pa rollback automatik.** Case B: freeze, rakordim, void/credit note, forward-fix të audituar |
+
+## 16. Pas hapjes
+Çdo orë: `billing_final_readiness`; ditor: `GET /admin/billing/ops` (heartbeat, periudha të afatuara, anomali shlyerjeje, pagesa pending); pas çdo incidenti: `GET /admin/billing/settlement`.
