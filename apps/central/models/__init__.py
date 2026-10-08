@@ -44,6 +44,11 @@ from apps.central.models.registration import (
     RegistrationRequest,
 )
 from apps.central.models.registration_policy import ProductRegistrationPolicy
+from apps.central.models.sender import (  # noqa: F401
+    CountrySenderPolicy,
+    SenderDecision,
+    SenderRegistry,
+)
 from apps.central.models.service_auth import (
     ServiceAssertionJti,
     ServiceClient,

@@ -529,6 +529,9 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "billing_usage_baselines",
         "billing_authority_state",
         "billing_shadow_comparisons",
+        "country_sender_policies",
+        "sender_registry",
+        "sender_decisions",
         "registration_products",
         "product_registration_policy",
     }

@@ -173,6 +173,9 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "billing_usage_baselines",
         "billing_authority_state",
         "billing_shadow_comparisons",
+        "country_sender_policies",
+        "sender_registry",
+        "sender_decisions",
         "registration_products",
         "product_registration_policy",
     }

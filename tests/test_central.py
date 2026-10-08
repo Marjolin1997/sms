@@ -200,6 +200,11 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/billing/credit-notes", "/admin/billing/credit-notes/{credit_note_id}", "/admin/billing/settlement",
         # M9-g5: gatishmëria finale + pamja operacionale (vetëm lexim)
         "/admin/billing/final-readiness", "/admin/billing/ops",
+        # M10-S1: politika e sender-ave + regjistri global (admin shkrim / operator lexim)
+        "/admin/sender-policies", "/admin/sender-policies/effective", "/admin/sender-policies/{policy_id}",
+        "/admin/senders", "/admin/senders/{sender_id}", "/admin/senders/{sender_id}/history",
+        "/admin/senders/{sender_id}/approve", "/admin/senders/{sender_id}/reject",
+        "/admin/senders/{sender_id}/revoke", "/admin/senders/{sender_id}/resubmit",
     }  # fmt: skip
 
 
@@ -229,8 +234,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0026_next.py").write_text(
-        'revision = "0026"\ndown_revision = "0025"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0027_next.py").write_text(
+        'revision = "0027"\ndown_revision = "0026"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -294,6 +299,9 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "billing_usage_baselines",
         "billing_authority_state",
         "billing_shadow_comparisons",
+        "country_sender_policies",
+        "sender_registry",
+        "sender_decisions",
         "registration_products",
         "product_registration_policy",
     }
@@ -351,6 +359,9 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "billing_usage_baselines",
         "billing_authority_state",
         "billing_shadow_comparisons",
+        "country_sender_policies",
+        "sender_registry",
+        "sender_decisions",
         "registration_products",
         "product_registration_policy",
     }
@@ -416,6 +427,9 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "billing_usage_baselines",
         "billing_authority_state",
         "billing_shadow_comparisons",
+        "country_sender_policies",
+        "sender_registry",
+        "sender_decisions",
         "registration_products",
         "product_registration_policy",
     }

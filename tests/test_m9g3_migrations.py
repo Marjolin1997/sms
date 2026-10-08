@@ -52,7 +52,7 @@ def test_central_0024_is_additive_reversible_and_matches_metadata(make_db):
     )
     with eng.connect() as c:
         assert _diff(c) == []
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0025"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0026"
     uq = {u["name"] for u in inspect(eng).get_unique_constraints("invoice_payment_allocations")}
     assert {"uq_allocations_payment", "uq_allocations_invoice"} <= uq
     central_alembic(url, "downgrade", "0023")
