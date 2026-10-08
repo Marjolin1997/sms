@@ -2,7 +2,7 @@
 
     python -m apps.central.tools.billing_import --artifact export.json                       # dry-run: klasifikim, seed-e, bllokues
     python -m apps.central.tools.billing_import --artifact export.json --apply --evidence-hash <content_hash> --actor-email admin@example.com [--require-clean]
-    python -m apps.central.tools.billing_import --resolve <issue_id> --reason "..." --actor-email admin@example.com
+    python -m apps.central.tools.billing_import --issues   |   --resolve <issue_id> --reason "..." [--evidence-ref TICKET-123] --actor-email admin@example.com
 
 Dry-run: kodi 0 pa rreshta bllokues · 1 me bllokues · 2 gabim argumenti/artifact i pavlefshëm. Apply: 0 ok (ose no-op idempotent) · 1 konflikt/hash i gabuar · 2 gabim.
 Central s'lidhet kurrë me DB-në e Enterprise: vetëm lexon skedarin."""
@@ -38,6 +38,15 @@ def main(argv: list[str] | None = None, engine=None) -> int:
     ap.add_argument("--require-clean", action="store_true")
     ap.add_argument("--resolve")
     ap.add_argument("--reason")
+    ap.add_argument(
+        "--evidence-ref",
+        help="ticket/document reference for a documented waiver (requires_manual_review only)",
+    )
+    ap.add_argument(
+        "--issues",
+        action="store_true",
+        help="list unresolved issues with category/allowed/forbidden (read-only)",
+    )
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
     try:
@@ -45,10 +54,20 @@ def main(argv: list[str] | None = None, engine=None) -> int:
         if args.resolve:
             with Session(engine) as db:
                 row = billing_import.resolve_issue(
-                    db, _actor(db, args.actor_email), args.resolve, args.reason
+                    db,
+                    _actor(db, args.actor_email),
+                    args.resolve,
+                    args.reason,
+                    evidence_ref=args.evidence_ref,
                 )
                 db.commit()
                 print(json.dumps({"issue_id": str(row.id), "resolved": True}))  # noqa: T201
+            return 0
+        if args.issues:
+            with Session(engine) as db:
+                rows = [billing_import.issue_view(i) for i in billing_import.unresolved_issues(db)]
+                db.rollback()
+            print(json.dumps({"unresolved": rows}, sort_keys=True))  # noqa: T201
             return 0
         if not args.artifact:
             print("--artifact is required", file=sys.stderr)  # noqa: T201

@@ -8,6 +8,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -38,6 +39,8 @@ from apps.central.services import (
 )
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
+# M9-g5 (politika e pranimit të shadow): FAIL = çdo mospërputhje e pashpjeguar që ndryshon fakturën; WARN = e shpjegueshme/e dokumentuar.
+# `amount_mismatch` është FAIL mbi tolerancën `CENTRAL_BILLING_SHADOW_AMOUNT_TOLERANCE` (parazgjedhje 0), WARN brenda saj; asgjë nuk normalizohet.
 HARD_CATEGORIES = (
     "period_mismatch",
     "currency_mismatch",
@@ -45,8 +48,17 @@ HARD_CATEGORIES = (
     "tax_mismatch",
     "amount_mismatch",
     "central_only",
+    "legacy_only",
 )
-SOFT_CATEGORIES = ("usage_mismatch", "pricing_mismatch", "insufficient_usage", "legacy_only")
+SOFT_CATEGORIES = ("usage_mismatch", "pricing_mismatch", "insufficient_usage")
+
+
+def _within_tolerance(r) -> bool:
+    tol = Decimal(str(settings.billing_shadow_amount_tolerance))
+    try:
+        return tol > 0 and abs(Decimal(r.legacy["total"]) - Decimal(r.central["total"])) <= tol
+    except Exception:  # noqa: BLE001
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,8 +329,18 @@ def readiness(
     legacy_periods = {(s.id) for s in active if s.id in imported_subs and s.next_period_index > 0}
     compared = {k[0] for k in latest}
     cats = [r.category for r in latest.values()]
-    hard = [c for c in cats if c in HARD_CATEGORIES]
-    soft = [c for c in cats if c in SOFT_CATEGORIES]
+    hard = [
+        r.category
+        for r in latest.values()
+        if r.category in HARD_CATEGORIES
+        and not (r.category == "amount_mismatch" and _within_tolerance(r))
+    ]
+    soft = [
+        r.category
+        for r in latest.values()
+        if r.category in SOFT_CATEGORIES
+        or (r.category == "amount_mismatch" and _within_tolerance(r))
+    ]
     if legacy_periods - compared:
         out.append(
             Check(

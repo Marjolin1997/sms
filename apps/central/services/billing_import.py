@@ -125,7 +125,17 @@ class ImportPlan:
             "blocking": [{"table": d.table, "source_id": d.source_id, "classification": d.classification, "reason": d.reason} for d in self.blocking()][:200],
             "blocking_total": len(self.blocking()), "sequence_seeds": {str(y): n for y, n in sorted(self.seeds.items())},
             "authority": self.doc["authority"], "notes": self.notes,
+            "blocking_by_category": self.blocking_by_category(),
+            "proposed_baselines": [{"enterprise_id": d.data["enterprise_id"], "boundary": d.data["boundary"], "cumulative": d.data["cumulative_before_boundary"],
+                                    "watermark": d.data["watermark_before_boundary"], "classification": d.classification} for d in self.baselines],
         }  # fmt: skip
+
+    def blocking_by_category(self) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for d in self.blocking():
+            c = categorize(d.reason)
+            out[c] = out.get(c, 0) + 1
+        return dict(sorted(out.items()))
 
 
 # --- klasifikimi (vetëm lexim) ------------------------------------------------------------------------------------------------------------------
@@ -600,6 +610,15 @@ def _invoices(db, doc, items, d_subs, d_plans, authority, plan) -> None:
             plan.decisions.append(pd)
 
 
+def _gap(paid: Decimal, paid_cur: str, total: Decimal, cur: str) -> str:
+    """Fjali e qartë për operatorin: monedhë ndryshe / pjesore / mbipagesë (kategoritë e workflow-t manual)."""
+    if paid_cur != cur:
+        return "has another currency than"
+    return (
+        "is lower than (partial payment of)" if paid < total else "is higher than (overpayment of)"
+    )
+
+
 def _settle(d: Decision, inv: dict, pays: list[dict], wallet: dict | None) -> None:
     """Prova e shlyerjes për fatura `paid`; pagesa të sukseshme mbi fatura jo-të-paguara bllokohen (nuk shpikim kurrë)."""
     succ = [p for p in pays if p["status"] == "succeeded"]
@@ -631,7 +650,7 @@ def _settle(d: Decision, inv: dict, pays: list[dict], wallet: dict | None) -> No
         elif D(wallet["amount"]) != total or wallet["currency"] != cur:
             d.classification, d.reason = (
                 "unsupported",
-                "wallet debit does not equal the invoice total (partial/over settlement)",
+                f"wallet debit {_gap(D(wallet['amount']), wallet['currency'], total, cur)} the invoice total",
             )
         else:
             d.data["settlement"] = {
@@ -649,7 +668,7 @@ def _settle(d: Decision, inv: dict, pays: list[dict], wallet: dict | None) -> No
         elif D(succ[0]["amount"]) != total or succ[0]["currency"] != cur:
             d.classification, d.reason = (
                 "unsupported",
-                "online payment does not equal the invoice total (partial/overpayment)",
+                f"online payment {_gap(D(succ[0]['amount']), succ[0]['currency'], total, cur)} the invoice total",
             )
         else:
             p = succ[0]
@@ -1121,10 +1140,116 @@ def _apply_seeds(db, seeds: dict[int, int], actor, now) -> dict[int, int]:
     return done
 
 
+# --- workflow i çështjeve manuale (M9-g5) -------------------------------------------------------------------------------------------------------
+# Kategori → çfarë shikon operatori / veprimi i lejuar / shkurtorja e ndaluar. Një çështje NUK mbyllet me "u zgjidh" pa veprim real:
+# (1) `superseded`: një batch i mëvonshëm e ka importuar objektin ose e mban si çështje më të re (zgjidhja e vërtetë ndodh në burim + ri-eksport);
+# (2) `operator_waiver`: vetëm `requires_manual_review` (jo baseline), me `evidence_ref` (tiketë/dokument) — objekti MBETET jashtë Central dhe numërohet WARN.
+# `unsupported | invalid | conflict` nuk heqen kurrë me fjalë: shërbejnë vetëm si `superseded`.
+ISSUE_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("partial_payment", r"partial payment"),
+    ("overpayment", r"overpayment"),
+    ("currency_mismatch", r"another currency|currency differs"),
+    (
+        "usage_baseline_insufficient",
+        r"usage evidence is incomplete|email product|entitlement|baseline",
+    ),
+    ("sequence_conflict", r"INV-YYYY|number already exists|sequence"),
+    ("invoice_arithmetic_mismatch", r"arithmetic|subtotal|tax/total|period_end <= period_start"),
+    (
+        "missing_external_reference",
+        r"paid_via|without wallet|without paid_at|payment reference|succeeded online payments|succeeded payment",
+    ),
+    ("unsupported_line", r"line"),
+    ("plan_conflict", r"plan"),
+    ("subscription_conflict", r"subscription|periods_billed|re-anchored"),
+)
+ISSUE_POLICY: dict[str, dict[str, str]] = {
+    "partial_payment": {
+        "allowed": "fix the settlement at the source (one full payment) and re-export; or void/credit it in Enterprise before cutover",
+        "forbidden": "importing a partial payment as paid; resolving by text",
+    },
+    "overpayment": {
+        "allowed": "refund/correct at the source and re-export",
+        "forbidden": "importing the surplus; resolving by text",
+    },
+    "missing_external_reference": {
+        "allowed": "supply the real payment reference at the source and re-export; or waive WITH evidence_ref (invoice stays outside Central)",
+        "forbidden": "inventing a reference; marking paid without evidence",
+    },
+    "usage_baseline_insufficient": {
+        "allowed": "wait for the next period boundary and re-export (capture must predate the first Central period)",
+        "forbidden": "waiver; zero baseline; backdating capture_active_since",
+    },
+    "unsupported_line": {
+        "allowed": "correct the source line text/arithmetic and re-export (unknown lines import as `legacy` only when arithmetic is exact)",
+        "forbidden": "editing amounts in Central",
+    },
+    "plan_conflict": {
+        "allowed": "restore the source plan (plans are immutable; new price = new code) and re-export",
+        "forbidden": "editing Central plan versions to match",
+    },
+    "subscription_conflict": {
+        "allowed": "align periods_billed/anchor at the source and re-export; re-anchored subscriptions need a reviewed manual mapping",
+        "forbidden": "resetting next_period_index in Central",
+    },
+    "sequence_conflict": {
+        "allowed": "fix the number at the source or remove the colliding Central invoice through the normal void flow, then re-export",
+        "forbidden": "lowering invoice_number_sequence",
+    },
+    "invoice_arithmetic_mismatch": {
+        "allowed": "correct the source invoice (credit note flow) and re-export",
+        "forbidden": "recomputing totals during import",
+    },
+    "currency_mismatch": {
+        "allowed": "align the plan/invoice currency at the source (no FX in V1) and re-export",
+        "forbidden": "converting currency",
+    },
+    "other": {
+        "allowed": "investigate; fix at the source and re-export",
+        "forbidden": "waiver of invalid/unsupported/conflict rows",
+    },
+}
+_CAT_RX = tuple((c, re.compile(rx, re.I)) for c, rx in ISSUE_CATEGORIES)
+WAIVER_REF_MIN, WAIVER_REF_MAX = 8, 200
+_KIND = re.compile(r"^kind=(superseded|operator_waiver)(?:; ref=([^;]{8,200}))?; (.+)$", re.S)
+
+
+def categorize(reason: str) -> str:
+    for cat, rx in _CAT_RX:
+        if rx.search(reason or ""):
+            return cat
+    return "other"
+
+
+def issue_view(row: BillingImportIssue) -> dict:
+    """Ç'shikon operatori (pa PII): kategori, klasë, burim, arsye, veprim i lejuar/i ndaluar, a mund të heqet me waiver."""
+    cat = categorize(row.reason)
+    pol = ISSUE_POLICY.get(cat, ISSUE_POLICY["other"])
+    return {"id": str(row.id), "category": cat, "classification": row.classification, "source_table": row.source_table, "source_id": row.source_id,
+            "reason": row.reason, "allowed": pol["allowed"], "forbidden": pol["forbidden"], "waivable": _waivable(row, cat), "resolved": row.resolved_at is not None}  # fmt: skip
+
+
+def _waivable(row: BillingImportIssue, cat: str) -> bool:
+    return row.classification == "requires_manual_review" and cat != "usage_baseline_insufficient"
+
+
+def _superseded(db: Session, row: BillingImportIssue) -> bool:
+    """Batch i mëvonshëm ekziston DHE (objekti është importuar prej tij ose një çështje më e re e mban të njëjtin objekt)."""
+    cur = db.get(BillingImportBatch, row.batch_id)
+    later = db.scalars(select(BillingImportBatch.id).where(BillingImportBatch.applied_at > cur.applied_at, BillingImportBatch.id != cur.id)).all()  # fmt: skip
+    if not later:
+        return False
+    item = db.scalar(select(BillingImportItem).where(BillingImportItem.source_system == SOURCE, BillingImportItem.source_table == row.source_table,
+                                                     BillingImportItem.source_id == row.source_id, BillingImportItem.last_batch_id.in_(later)))  # fmt: skip
+    newer = db.scalar(select(BillingImportIssue.id).where(BillingImportIssue.batch_id.in_(later), BillingImportIssue.source_table == row.source_table,
+                                                          BillingImportIssue.source_id == row.source_id))  # fmt: skip
+    return item is not None or newer is not None
+
+
 def resolve_issue(
-    db: Session, actor, issue_id, resolution, *, now: datetime | None = None
+    db: Session, actor, issue_id, resolution, *, evidence_ref=None, now: datetime | None = None
 ) -> BillingImportIssue:
-    """Zgjidhje manuale e dokumentuar (arsye e detyrueshme): shënon çështjen si të zgjidhur pa ndryshuar të dhëna financiare; një herë."""
+    """Mbyll një çështje VETËM me veprim/evidencë reale (shih blloqun lart). Pa ndryshim të dhënash financiare; një herë; e audituar."""
     actor = money_common.admin(actor)
     why = money_common.reason(resolution)
     row = db.get(BillingImportIssue, money_common.uid(issue_id, "issue id"))
@@ -1132,12 +1257,42 @@ def resolve_issue(
         raise NotFound("import issue not found")
     if row.resolved_at is not None:
         raise Conflict("issue is already resolved")
+    cat = categorize(row.reason)
+    if _superseded(db, row):
+        kind, ref = "superseded", None
+    elif evidence_ref is not None:
+        if not _waivable(row, cat):
+            raise Conflict(
+                f"a {row.classification}/{cat} issue cannot be waived: fix it at the source and re-export ({ISSUE_POLICY.get(cat, ISSUE_POLICY['other'])['allowed']})"
+            )
+        ref = evidence_ref.strip() if isinstance(evidence_ref, str) else ""
+        if (
+            not (WAIVER_REF_MIN <= len(ref) <= WAIVER_REF_MAX)
+            or ";" in ref
+            or any(ord(c) < 32 for c in ref)
+        ):
+            raise Invalid(
+                f"evidence_ref must be {WAIVER_REF_MIN}..{WAIVER_REF_MAX} printable characters without ';' (ticket/document reference)"
+            )
+        kind = "operator_waiver"
+    else:
+        raise Conflict(
+            "no evidence of a real resolution: re-export after fixing the source (a later batch must import or re-flag this object), "
+            "or — only for requires_manual_review rows — pass evidence_ref for a documented waiver"
+        )
+    text = f"kind={kind}; " + (f"ref={ref}; " if ref else "") + why
+    if len(text) > 500:
+        raise Invalid("reason too long for the evidence record")
     now = billing.utc(now or utcnow())
-    row.resolved_at, row.resolved_by_id, row.resolution = now, actor.id, why
+    row.resolved_at, row.resolved_by_id, row.resolution = now, actor.id, text
     db.flush()
     audit.record(db, actor, "billing.import_issue_resolve", "billing_import_issue", row.id,
-                 {"source_table": row.source_table, "source_id": row.source_id, "classification": row.classification, "resolution": why}, now=now)  # fmt: skip
+                 {"source_table": row.source_table, "source_id": row.source_id, "classification": row.classification, "category": cat, "kind": kind, "evidence_ref": ref, "resolution": why}, now=now)  # fmt: skip
     return row
+
+
+def waivers(db: Session) -> list[BillingImportIssue]:
+    return [r for r in db.scalars(select(BillingImportIssue).where(BillingImportIssue.resolved_at.is_not(None))) if (r.resolution or "").startswith("kind=operator_waiver")]  # fmt: skip
 
 
 def unresolved_issues(db: Session) -> list[BillingImportIssue]:

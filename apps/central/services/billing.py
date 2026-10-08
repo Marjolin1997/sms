@@ -12,11 +12,12 @@ linja + totale të derivuara + faturë → rresht `billing_periods` (invoiced | 
 import calendar
 import logging
 import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -501,6 +502,47 @@ def run_due(engine, now: datetime | None = None, *, max_periods: int = MAX_CATCH
                     out.postponed += 1
                     out.postponed_reasons[r.reason] = out.postponed_reasons.get(r.reason, 0) + 1
                 break
+    return out
+
+
+class RunInProgress(Conflict):
+    """Një `billing_run` tjetër po ekzekutohet (kyç advisory): ky ekzekutim nuk niset (M9-g5)."""
+
+
+RUN_LOCK_KEY = 0x4D394752  # "M9GR": advisory lock në nivel sesioni (vetëm PostgreSQL)
+RUN_AUDIT_ACTION = "billing.run"
+RUN_AUDIT_LABEL = "system:billing_run"
+
+
+def run_exclusive(engine, now: datetime | None = None, *, record: bool = True, **kw) -> RunSummary:
+    """`run_due` me (1) kyç advisory që nuk lejon dy ekzekutime të njëkohshme (PostgreSQL; SQLite = proces i vetëm, pa kyç) dhe
+    (2) heartbeat: një rresht audit `billing.run` (pa PII, vetëm numërues) pas përfundimit — burimi i "last billing worker run".
+    Sigurinë financiare e mban kyçi `FOR UPDATE` i abonimit + idempotenca e `process_period` (kyçi i ekzekutimit vetëm shmang punë të dyfishtë)."""
+    conn = None
+    if engine.dialect.name == "postgresql":
+        conn = engine.connect()
+        got = conn.execute(text("select pg_try_advisory_lock(:k)"), {"k": RUN_LOCK_KEY}).scalar()
+        conn.commit()  # asnjë transaksion i hapur gjatë ekzekutimit; kyçi i sesionit mbetet
+        if not got:
+            conn.close()
+            raise RunInProgress("another billing run is in progress")
+    try:
+        out = run_due(engine, now, **kw)
+    finally:
+        if conn is not None:
+            try:
+                conn.execute(text("select pg_advisory_unlock(:k)"), {"k": RUN_LOCK_KEY})
+                conn.commit()
+            finally:
+                conn.close()
+    if record:
+        try:
+            with Session(engine) as db:
+                audit.record_system(db, label=RUN_AUDIT_LABEL, action=RUN_AUDIT_ACTION, resource_type="billing_run",
+                                    resource_id=uuid.uuid4(), detail=out.as_dict(), now=utc(now or utcnow()))  # fmt: skip
+                db.commit()
+        except Exception:  # noqa: BLE001
+            log.exception("could not record the billing run heartbeat")
     return out
 
 

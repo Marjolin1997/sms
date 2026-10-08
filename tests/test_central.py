@@ -198,6 +198,8 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/billing/invoice-payments/{payment_id}/approve", "/admin/billing/invoice-payments/{payment_id}/reject",
         "/admin/billing/allocations", "/admin/billing/allocations/{allocation_id}",
         "/admin/billing/credit-notes", "/admin/billing/credit-notes/{credit_note_id}", "/admin/billing/settlement",
+        # M9-g5: gatishmëria finale + pamja operacionale (vetëm lexim)
+        "/admin/billing/final-readiness", "/admin/billing/ops",
     }  # fmt: skip
 
 
@@ -516,6 +518,8 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "usage_report_keep_last",
         "invoice_due_days",
         "billing_worker_configured",
+        "billing_run_stale_seconds",
+        "billing_shadow_amount_tolerance",
         "billing_usage_fresh_seconds",
         "billing_usage_stale_seconds",
         "billing_wait_warn_seconds",

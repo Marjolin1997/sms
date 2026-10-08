@@ -5,7 +5,7 @@
 Çdo periudhë ka transaksionin e vet (shih `billing.process_period`): kyç abonimin `FOR UPDATE`, rirunimi/ekzekutimi paralel s'krijon
 periudhë/faturë të dytë. Periudhë që pret raportin e përdorimit të email-it NUK vlerësohet kurrë: raportohet `waiting_usage` dhe
 rishikohet në ekzekutimin e radhës. Asnjë thirrje rrjeti drejt Enterprise.
-Dalja: due / invoiced / no_charge / waiting_usage / postponed / failed. Kodi: 0 (failed = 0) · 1 (failed > 0) · 2 gabim i brendshëm · 3 refuzuar (autoriteti i faturimit nuk është `central`)."""
+Dalja: due / invoiced / no_charge / waiting_usage / postponed / failed. Kodi: 0 (failed = 0) · 1 (failed > 0) · 2 gabim i brendshëm · 3 refuzuar (autoriteti i faturimit nuk është `central`) · 4 një ekzekutim tjetër është në vazhdim (advisory lock)."""
 
 import argparse
 import json
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None, engine=None) -> int:
             Session(engine) as db
         ):  # M9-g4: vetëm autoriteti `central` lëshon (local/shadow ⇒ Enterprise është lëshuesi)
             billing_authority.require_central(db)
-        out = billing.run_due(
+        out = billing.run_exclusive(
             engine,
             max_periods=args.max_periods,
             limit=args.limit,
@@ -51,6 +51,9 @@ def main(argv: list[str] | None = None, engine=None) -> int:
     except ValueError as e:
         print(f"invalid argument: {e}", file=sys.stderr)  # noqa: T201
         return 2
+    except billing.RunInProgress as e:
+        print(f"busy: {e}", file=sys.stderr)  # noqa: T201
+        return 4
     except Conflict as e:
         print(f"refused: {e}", file=sys.stderr)  # noqa: T201
         return 3

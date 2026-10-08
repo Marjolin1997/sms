@@ -23,7 +23,7 @@ from apps.central.models.billing import (
     PlanVersion,
 )
 from apps.central.models.user import CentralUser, Role
-from apps.central.services import billing, billing_plans
+from apps.central.services import billing, billing_closure, billing_plans
 
 router = APIRouter(prefix="/admin/billing")
 READ = require_role(Role.ADMIN, Role.OPERATOR)
@@ -406,3 +406,21 @@ def void_invoice(
     inv = billing.void_invoice(db, actor, invoice_id, body.reason)
     db.commit()
     return invoice_out(inv, billing.lines_of(db, inv.id))
+
+
+# --- M9-g5: gatishmëria finale dhe pamja operacionale (VETËM LEXIM, pa PII, admin|operator) ----------------------------------------------------
+
+
+@router.get("/final-readiness")
+def final_readiness(db: Session = Depends(get_db), _: CentralUser = Depends(READ)):
+    doc = billing_closure.final_readiness(db)
+    doc["alerts"] = billing_closure.alerts(doc["checks"], doc["mode"])
+    db.rollback()
+    return doc
+
+
+@router.get("/ops")
+def ops_overview(db: Session = Depends(get_db), _: CentralUser = Depends(READ)):
+    doc = billing_closure.observability(db)
+    db.rollback()
+    return doc

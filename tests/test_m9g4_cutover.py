@@ -1148,8 +1148,17 @@ def test_audit_covers_import_seed_baseline_authority_and_issue_resolution(w):
             billing_import.resolve_issue(s, U(s, w.a1), issue.id, "   ")
         s.rollback()
         issue = billing_import.unresolved_issues(s)[0]
+        with pytest.raises(errors.Conflict):  # g5: fjalët vetëm nuk mjaftojnë
+            billing_import.resolve_issue(s, U(s, w.a1), issue.id, "settled manually", now=NOW)
+        s.rollback()
+        issue = billing_import.unresolved_issues(s)[0]
         billing_import.resolve_issue(
-            s, U(s, w.a1), issue.id, "settled manually off-system, evidence in ticket", now=NOW
+            s,
+            U(s, w.a1),
+            issue.id,
+            "settled manually off-system",
+            evidence_ref="TICKET-1234",
+            now=NOW,
         )
         s.commit()
         with pytest.raises(errors.Conflict):

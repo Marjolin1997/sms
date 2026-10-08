@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import Field
@@ -79,6 +80,10 @@ class Settings(BaseSettings):
     invoice_due_days: int = Field(default=14, ge=0, le=365)
     # M9-g4: konfirmim operativ që `billing_run` është planifikuar në Central (gate i readiness-it)
     billing_worker_configured: bool = False
+    # M9-g5: tolerancë absolute e `amount_mismatch` (shadow); 0 = asnjë; vetëm FAIL→WARN.
+    billing_shadow_amount_tolerance: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("1"))
+    # M9-g5: heartbeat i workerit (audit `billing.run`) më i vjetër se kjo ⇒ WARN. Parazgjedhje 26h.
+    billing_run_stale_seconds: int = Field(default=93600, ge=300, le=2592000)
     # --- M9-g2: përdorimi i email-it (raporte kumulative nga Enterprise) ---
     # Mosha e raportit të fundit (enterprise i matur): ≤ fresh OK · ≤ stale WARN · më shumë FAIL.
     billing_usage_fresh_seconds: int = Field(default=900, ge=60, le=86400)
