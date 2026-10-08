@@ -350,9 +350,9 @@ def readiness(
         Check(
             "enterprise_billing_frozen",
             PASS if attested else FAIL,
-            "latest export attests SMS_BILLING_AUTHORITY=central"
+            "latest export attests the Enterprise billing authority = central"
             if attested
-            else "the latest export was not taken with Enterprise frozen (SMS_BILLING_AUTHORITY=central)",
+            else "the latest export was not taken with Enterprise frozen (billing authority = central)",
         )
     )
     out.append(
