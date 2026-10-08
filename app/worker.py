@@ -16,7 +16,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.providers import register_configured
-from app.services import billing, emails, events, messages, payments, webhooks
+from app.services import billing, billing_authority, emails, events, messages, payments, webhooks
 from app.services.campaigns import run_due
 from app.services.messages import expire_stale, process_one
 
@@ -52,6 +52,8 @@ def sweep() -> None:
 
 
 def billing_tick() -> None:
+    if billing_authority.frozen():  # M9-g4: Central lëshon; ky worker s'bën asgjë (historia legacy mbetet vetëm-lexim)
+        return
     with SessionLocal() as db:
         try:
             issued = billing.run_billing(db)

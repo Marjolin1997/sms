@@ -167,6 +167,12 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "invoice_payment_allocations",
         "credit_notes",
         "credit_note_sequence",
+        "billing_import_batches",
+        "billing_import_items",
+        "billing_import_issues",
+        "billing_usage_baselines",
+        "billing_authority_state",
+        "billing_shadow_comparisons",
         "registration_products",
         "product_registration_policy",
     }

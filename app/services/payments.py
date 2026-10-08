@@ -22,7 +22,7 @@ from app.models.billing import (
 from app.models.wallet import TopupMethod, Wallet
 from app.providers import ProviderError
 from app.providers.payments import get_gateway
-from app.services import billing, events
+from app.services import billing, billing_authority, events
 from app.services import wallet as wallets
 from app.services.wallet import InvalidAmount
 
@@ -118,6 +118,12 @@ def complete(
         raise Conflict("amount or currency does not match the payment; needs manual reconciliation")
     try:
         _apply(db, p, now)
+    except billing_authority.BillingAuthorityFrozen:
+        # M9-g4: fatura është e Central; pagesa e vonuar legacy s'preket dhe s'kalon në wallet — rakordim manual.
+        p.status, p.failure_reason, p.completed_at = (
+            PaymentStatus.FAILED, "billing_authority_central", now,
+        )  # fmt: skip
+        raise Conflict("invoice settlement is owned by Central; needs manual reconciliation") from None
     except wallets.MoneyAuthorityFrozen:
         # M9-c: kredia lokale është e ngrirë; paraja s'humbet në heshtje — kërkon rakordim manual.
         p.status, p.failure_reason, p.completed_at = (
@@ -135,6 +141,7 @@ def complete(
 
 def _apply(db: Session, p: Payment, now: datetime) -> None:
     if p.purpose == PaymentPurpose.INVOICE:
+        billing_authority.require_issuer("settle_invoice_payment")  # M9-g4: Central zotëron shlyerjen; pagesa s'preket (rakordim manual)
         inv = db.scalar(select(Invoice).where(Invoice.id == p.invoice_id).with_for_update())
         if inv is not None and inv.status == InvoiceStatus.OPEN:
             billing.mark_paid_online(db, inv, now)

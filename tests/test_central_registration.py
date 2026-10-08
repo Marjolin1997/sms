@@ -662,7 +662,7 @@ def test_migration_0013_up_down_up_and_schema_matches_metadata(make_db):
         )
         assert compare_metadata(ctx, Base.metadata) == []
         ver = c.execute(text("select version_num from central_alembic_version")).scalar()
-    assert ver == "0024"
+    assert ver == "0025"
     fks = {
         fk["referred_table"]: fk for fk in inspect(eng).get_foreign_keys("registration_requests")
     }

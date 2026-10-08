@@ -108,6 +108,11 @@ class Settings(BaseSettings):
     # Në prodhim `central` kërkon konfirmim eksplicit pasi `money_authority_readiness` kaloi.
     money_authority_ack: bool = False
     money_poll_interval_seconds: int = Field(30, ge=5, le=3600)
+    # M9-g4: autoriteti i FATURIMIT periodik. local = Enterprise lëshon (sjellja e sotme) · shadow = Enterprise lëshon ende; Central krahason pa lëshuar ·
+    # central = Central lëshon; faturimi/shlyerja/planet legacy refuzohen fail-closed (historia mbetet vetëm-lexim). Në prodhim `central` kërkon ACK
+    # (pas `scripts.billing_authority_readiness` + `apps.central.tools.billing_authority_readiness`).
+    billing_authority: Literal["local", "shadow", "central"] = "local"
+    billing_authority_ack: bool = False
     # M9-d: raportimi i përdorimit drejt Central (roli `money_usage_reporter`; jo në dërgim).
     # Opsional në local; `central` në prodhim e kërkon (readiness + production_problems).
     money_reporting: bool = False
@@ -202,6 +207,10 @@ class Settings(BaseSettings):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_PRICING_AUTHORITY is not local")
         if self.pricing_authority == "central" and not self.pricing_authority_ack:
             bad.append("SMS_PRICING_AUTHORITY=central requires SMS_PRICING_AUTHORITY_ACK=true")
+        if self.billing_authority == "central" and not self.billing_authority_ack:
+            bad.append("SMS_BILLING_AUTHORITY=central requires SMS_BILLING_AUTHORITY_ACK=true (billing cutover readiness passed)")
+        if self.billing_authority != "local" and not self.billing_usage_reporting:
+            bad.append("SMS_BILLING_AUTHORITY≠local requires SMS_BILLING_USAGE_REPORTING=true (Central needs email usage reports)")
         if self.money_authority == "central" and not self.money_reporting:
             bad.append("SMS_MONEY_AUTHORITY=central requires SMS_MONEY_REPORTING=true")
         return bad

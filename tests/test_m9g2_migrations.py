@@ -63,7 +63,7 @@ def test_central_0023_is_additive_reversible_and_matches_metadata(make_db):
     central_alembic(url, "upgrade", "head")
     assert "billing_usage_reports" in inspect(eng).get_table_names()
     cols = {c["name"] for c in inspect(eng).get_columns("billing_periods")}
-    assert cols - cols_before == {"usage_from_report_id", "usage_to_report_id"}
+    assert cols - cols_before - {"usage_from_baseline_id"} == {"usage_from_report_id", "usage_to_report_id"}  # M9-g4 shton usage_from_baseline_id
     with eng.connect() as c:
         assert (
             _diff_for(
@@ -74,7 +74,7 @@ def test_central_0023_is_additive_reversible_and_matches_metadata(make_db):
             )
             == []
         )
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0024"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0025"
     central_alembic(url, "downgrade", "0022")
     assert "billing_usage_reports" not in inspect(eng).get_table_names()
     assert {c["name"] for c in inspect(eng).get_columns("billing_periods")} == cols_before

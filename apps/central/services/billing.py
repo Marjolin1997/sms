@@ -412,11 +412,10 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
         billed_at=now, created_at=now,
     )  # fmt: skip
     if ev.metered:
-        period.usage_from, period.usage_to = (
-            int(ev.base.cumulative_billable_count),
-            int(ev.cut.cumulative_billable_count),
-        )
-        period.usage_from_report_id, period.usage_to_report_id = ev.base.report_id, ev.cut.report_id
+        period.usage_from, period.usage_to = ev.base_count, int(ev.cut.cumulative_billable_count)
+        period.usage_from_report_id = None if ev.base is None else ev.base.report_id
+        period.usage_from_baseline_id = None if ev.opening is None else ev.opening.id
+        period.usage_to_report_id = ev.cut.report_id
     db.add(period)
     db.flush()
     sub.next_period_index = k + 1
@@ -430,7 +429,7 @@ def process_period(db: Session, subscription_id, now: datetime | None = None) ->
                         detail={"enterprise_id": str(sub.enterprise_id), "subscription_id": str(sub.id), "period_index": k,
                                 "status": period.status, "invoice": invoice.number if invoice else None,
                                 **({"usage": {"from": period.usage_from, "to": period.usage_to, "included": ev.included, "extra": ev.extra,
-                                              "from_report": str(ev.base.report_id), "to_report": str(ev.cut.report_id)}} if ev.metered else {})}, now=now)  # fmt: skip
+                                              "from_report": None if ev.base is None else str(ev.base.report_id), "from_baseline": None if ev.opening is None else str(ev.opening.id), "to_report": str(ev.cut.report_id)}} if ev.metered else {})}, now=now)  # fmt: skip
     if invoice is not None:
         audit.record_system(db, label=SYSTEM, action="invoice.issued", resource_type="invoice", resource_id=invoice.id,
                             detail={"number": invoice.number, "total": str(invoice.total), "currency": invoice.currency,

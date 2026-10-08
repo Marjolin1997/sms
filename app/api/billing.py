@@ -28,6 +28,7 @@ _STATUS = {
     "insufficient_funds": 402,
     "gateway_error": 502,
     "payments_disabled": 503,
+    "billing_authority_frozen": 409,
 }
 
 

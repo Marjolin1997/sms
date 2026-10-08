@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.central.models.billing import BillingPeriod, PlanVersion
+from apps.central.models.billing_import import BillingUsageBaseline
 from apps.central.models.billing_usage import BillingUsageReport
 from apps.central.models.enterprise_product import EnterpriseProduct
 from apps.central.models.product import Product
@@ -37,11 +38,22 @@ class Evaluation:
     postpone: str | None = None  # kërkon ndërhyrje (konfigurim/të dhëna)
     product_id: object = None
     base: BillingUsageReport | None = None
+    opening: BillingUsageBaseline | None = (
+        None  # M9-g4: baseline-i i hapjes kur s'ka raport-baseline (periudha e parë pas importit)
+    )
     cut: BillingUsageReport | None = None
     delta: int = 0
     included: int = 0
     extra: int = 0
     quote: pricing.PriceQuote | None = None
+
+    @property
+    def base_count(self) -> int:
+        return (
+            int(self.base.cumulative_billable_count)
+            if self.base is not None
+            else int(self.opening.cumulative_count)
+        )
 
 
 def email_product(db: Session, enterprise_id) -> tuple[object | None, bool]:
@@ -58,7 +70,11 @@ def email_product(db: Session, enterprise_id) -> tuple[object | None, bool]:
     return (ids[0] if ids else None), False
 
 
-def evaluate(db: Session, sub, pv: PlanVersion, start: datetime, end: datetime) -> Evaluation:
+def evaluate(
+    db: Session, sub, pv: PlanVersion, start: datetime, end: datetime, k: int | None = None
+) -> Evaluation:
+    """`k` = indeksi i periudhës (default `sub.next_period_index`); parametri lejon projeksion të periudhave të tjera (shadow) pa ndryshuar semantikën."""
+    k = sub.next_period_index if k is None else k
     ev = Evaluation(included=int(pv.included_emails))
     product_id, ambiguous = email_product(db, sub.enterprise_id)
     if ambiguous:
@@ -83,11 +99,11 @@ def evaluate(db: Session, sub, pv: PlanVersion, start: datetime, end: datetime) 
     if ev.cut is None:
         ev.wait = WAIT_REPORT
         return ev
-    ev.base = _baseline(db, sub, product_id, start)
-    if ev.base is None:
+    ev.base, ev.opening = _baseline(db, sub, product_id, start, k)
+    if ev.base is None and ev.opening is None:
         ev.postpone = BASELINE_MISSING
         return ev
-    ev.delta = int(ev.cut.cumulative_billable_count) - int(ev.base.cumulative_billable_count)
+    ev.delta = int(ev.cut.cumulative_billable_count) - ev.base_count
     if ev.delta < 0:
         ev.postpone = REGRESSION
         return ev
@@ -95,18 +111,28 @@ def evaluate(db: Session, sub, pv: PlanVersion, start: datetime, end: datetime) 
     return ev
 
 
-def _baseline(db: Session, sub, product_id, start: datetime) -> BillingUsageReport | None:
+def _baseline(db: Session, sub, product_id, start: datetime, k: int):
+    """→ (raport-baseline, baseline-hapjes). Rendi: (1) `usage_to` i periudhës së mëparshme (zinxhir) · (2) baseline-i i hapjes me `boundary == period_start`
+    (importi legacy; numërues pa raport) · (3) raporti më i fundit me `generated_at <= period_start`."""
     prev = db.scalar(
         select(BillingPeriod).where(
-            BillingPeriod.subscription_id == sub.id,
-            BillingPeriod.period_index == sub.next_period_index - 1,
+            BillingPeriod.subscription_id == sub.id, BillingPeriod.period_index == k - 1
         )
     )
     if prev is not None and prev.usage_to_report_id is not None:
         rep = db.get(BillingUsageReport, prev.usage_to_report_id)
         if rep is not None and rep.product_id == product_id:
-            return rep
-    return billing_usage.baseline_before(db, sub.enterprise_id, product_id, start)
+            return rep, None
+    opening = db.scalar(
+        select(BillingUsageBaseline).where(
+            BillingUsageBaseline.enterprise_id == sub.enterprise_id,
+            BillingUsageBaseline.product_id == product_id,
+            BillingUsageBaseline.boundary == start,
+        )
+    )
+    if opening is not None:
+        return None, opening
+    return billing_usage.baseline_before(db, sub.enterprise_id, product_id, start), None
 
 
 def overage_amount(extra: int, unit_price: Decimal) -> Decimal:

@@ -37,7 +37,7 @@ from app.models.billing import (
 )
 from app.models.email import Email, EmailStatus
 from app.models.wallet import Wallet
-from app.services import events, pricing
+from app.services import billing_authority, events, pricing
 from app.services import wallet as wallets
 from app.services.wallet import InvalidAmount
 
@@ -75,6 +75,7 @@ def create_plan(
     db: Session, code: str, name: str, currency: str, monthly_fee, included_emails: int = 0,
     email_overage_price="0",
 ) -> Plan:  # fmt: skip
+    billing_authority.require_issuer("create_plan")
     if not _CODE.match(code):
         raise InvalidBilling("code must be 2-32 chars of a-z, 0-9, _ or -")
     if db.scalar(select(Plan).where(Plan.code == code)):
@@ -97,6 +98,7 @@ def create_plan(
 
 
 def retire_plan(db: Session, plan_id: int) -> Plan:
+    billing_authority.require_issuer("retire_plan")
     p = db.get(Plan, plan_id, with_for_update=True)
     if p is None:
         raise NotFound("plan not found")
@@ -112,6 +114,7 @@ def set_profile(
     db: Session, owner: Owner, legal_name: str, address: str, country: str, email: str,
     tax_id: str | None = None, vat_rate=None,
 ) -> BillingProfile:  # fmt: skip
+    billing_authority.require_issuer("set_profile")
     from app.services import consent
 
     try:
@@ -147,6 +150,7 @@ def get_profile(db: Session, owner: Owner) -> BillingProfile | None:
 def assign_plan(
     db: Session, owner: Owner, plan_id: int, auto_pay: bool = True, now: datetime | None = None
 ) -> Subscription:
+    billing_authority.require_issuer("assign_plan")
     now = as_utc(now or datetime.now(UTC))
     plan = db.get(Plan, plan_id)
     if plan is None or plan.status != PlanStatus.ACTIVE:
@@ -173,6 +177,7 @@ def assign_plan(
 
 
 def cancel_subscription(db: Session, owner: Owner) -> Subscription:
+    billing_authority.require_issuer("cancel_subscription")
     sub = db.scalar(select(Subscription).where(owned(Subscription, owner)).with_for_update())
     if sub is None or sub.status != SubStatus.ACTIVE:
         raise NotFound("no active subscription")
@@ -240,6 +245,7 @@ def generate_invoice(
     db: Session, subscription_id: int, now: datetime | None = None
 ) -> Invoice | None:
     """Fatura e periudhës së mbyllur, ose None (s'ka ende afat / plan falas / s'ka profil)."""
+    billing_authority.require_issuer("generate_invoice")
     now = as_utc(now or datetime.now(UTC))
     sub = db.get(Subscription, subscription_id, with_for_update=True)
     if sub is None or sub.status != SubStatus.ACTIVE:
@@ -321,6 +327,7 @@ def generate_invoice(
 
 def run_billing(db: Session, now: datetime | None = None) -> int:
     """Worker: lëshon faturat e afatuara. Çdo abonim në transaksionin e vet."""
+    billing_authority.require_issuer("run_billing")
     now = as_utc(now or datetime.now(UTC))
     ids = list(db.scalars(select(Subscription.id).where(Subscription.status == SubStatus.ACTIVE)))
     db.rollback()
@@ -366,6 +373,7 @@ def _mark_paid(db: Session, inv: Invoice, via: str, now: datetime) -> None:
 def pay_from_wallet(
     db: Session, owner: Owner, invoice_id: int, now: datetime | None = None
 ) -> Invoice:
+    billing_authority.require_issuer("pay_from_wallet")
     now = as_utc(now or datetime.now(UTC))
     inv = _get_invoice(db, owner, invoice_id, lock=True)
     if inv.status == InvoiceStatus.PAID:
@@ -385,10 +393,12 @@ def pay_from_wallet(
 
 
 def mark_paid_online(db: Session, inv: Invoice, now: datetime) -> None:
+    billing_authority.require_issuer("mark_paid_online")
     _mark_paid(db, inv, "online", now)
 
 
 def void_invoice(db: Session, invoice_id: int, reason: str) -> Invoice:
+    billing_authority.require_issuer("void_invoice")
     if not reason or len(reason.strip()) < 3:
         raise InvalidBilling("a reason is required to void an invoice")
     inv = _get_invoice(db, None, invoice_id, lock=True)

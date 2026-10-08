@@ -307,6 +307,12 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "invoice_payment_allocations",
         "credit_notes",
         "credit_note_sequence",
+        "billing_import_batches",
+        "billing_import_items",
+        "billing_import_issues",
+        "billing_usage_baselines",
+        "billing_authority_state",
+        "billing_shadow_comparisons",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -385,4 +391,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0022_billing_g1.py",
         "0023_billing_usage_g2.py",
         "0024_settlement_g3.py",
+        "0025_legacy_import_g4.py",
     ]

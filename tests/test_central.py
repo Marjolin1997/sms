@@ -227,8 +227,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0025_next.py").write_text(
-        'revision = "0025"\ndown_revision = "0024"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0026_next.py").write_text(
+        'revision = "0026"\ndown_revision = "0025"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -286,6 +286,12 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "invoice_payment_allocations",
         "credit_notes",
         "credit_note_sequence",
+        "billing_import_batches",
+        "billing_import_items",
+        "billing_import_issues",
+        "billing_usage_baselines",
+        "billing_authority_state",
+        "billing_shadow_comparisons",
         "registration_products",
         "product_registration_policy",
     }
@@ -337,6 +343,12 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "invoice_payment_allocations",
         "credit_notes",
         "credit_note_sequence",
+        "billing_import_batches",
+        "billing_import_items",
+        "billing_import_issues",
+        "billing_usage_baselines",
+        "billing_authority_state",
+        "billing_shadow_comparisons",
         "registration_products",
         "product_registration_policy",
     }
@@ -396,6 +408,12 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "invoice_payment_allocations",
         "credit_notes",
         "credit_note_sequence",
+        "billing_import_batches",
+        "billing_import_items",
+        "billing_import_issues",
+        "billing_usage_baselines",
+        "billing_authority_state",
+        "billing_shadow_comparisons",
         "registration_products",
         "product_registration_policy",
     }

@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     usage_report_keep_last: int = Field(default=20, ge=1, le=10000)
     # --- M9-g1: faturimi periodik (Central lëshon). Issuer-i ngrihet në çdo faturë në lëshim. ---
     invoice_due_days: int = Field(default=14, ge=0, le=365)
+    # M9-g4: konfirmim operativ që `billing_run` është planifikuar në Central (gate i readiness-it)
+    billing_worker_configured: bool = False
     # --- M9-g2: përdorimi i email-it (raporte kumulative nga Enterprise) ---
     # Mosha e raportit të fundit (enterprise i matur): ≤ fresh OK · ≤ stale WARN · më shumë FAIL.
     billing_usage_fresh_seconds: int = Field(default=900, ge=60, le=86400)

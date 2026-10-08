@@ -523,6 +523,12 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "invoice_payment_allocations",
         "credit_notes",
         "credit_note_sequence",
+        "billing_import_batches",
+        "billing_import_items",
+        "billing_import_issues",
+        "billing_usage_baselines",
+        "billing_authority_state",
+        "billing_shadow_comparisons",
         "registration_products",
         "product_registration_policy",
     }

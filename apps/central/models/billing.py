@@ -45,7 +45,9 @@ SUB_ACTIVE, SUB_CANCELLED = "active", "cancelled"
 INV_OPEN, INV_PAID, INV_VOID = "open", "paid", "void"
 P_INVOICED, P_NO_CHARGE = "invoiced", "no_charge"
 L_MONTHLY_FEE, L_EMAIL_OVERAGE, L_ADJUSTMENT = "monthly_fee", "email_overage", "adjustment"
-LINE_TYPES = (L_MONTHLY_FEE, L_EMAIL_OVERAGE, L_ADJUSTMENT)
+L_LEGACY = "legacy"  # M9-g4: linjë e importuar që s'mapohet në mënyrë eksplicite (shuma ruhet, kuptimi mbetet legacy)
+LINE_TYPES = (L_MONTHLY_FEE, L_EMAIL_OVERAGE, L_ADJUSTMENT, L_LEGACY)
+PROV_CENTRAL, PROV_LEGACY = "central", "legacy_import"
 
 
 class BillingImmutableError(ImmutableError):
@@ -199,8 +201,12 @@ class Invoice(Base):
     period_index: Mapped[int] = mapped_column(Integer)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    plan_version_id: Mapped[uuid.UUID] = mapped_column(
+    # M9-g4: faturat legacy s'kanë referencë historike të versionit të planit ⇒ NULL (kurrë e shpikur); `provenance` e ndan nga faturat e lëshuara nga Central
+    plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("plan_versions.id", ondelete="RESTRICT")
+    )
+    provenance: Mapped[str] = mapped_column(
+        String(16), default=PROV_CENTRAL, server_default=PROV_CENTRAL
     )
     currency: Mapped[str] = mapped_column(String(3))
     subtotal: Mapped[Decimal] = mapped_column(MONEY)
@@ -234,6 +240,11 @@ class Invoice(Base):
         CheckConstraint("vat_rate >= 0 AND vat_rate <= 1", name="vat_range"),
         CheckConstraint("length(currency) = 3 AND currency = upper(currency)", name="currency"),
         CheckConstraint("period_end > period_start", name="period_order"),
+        CheckConstraint("provenance in ('central', 'legacy_import')", name="provenance"),
+        CheckConstraint(
+            "provenance = 'legacy_import' OR plan_version_id IS NOT NULL",
+            name="plan_version_required",
+        ),
         CheckConstraint(
             "(status = 'open' AND paid_at IS NULL AND voided_at IS NULL AND voided_reason IS NULL) OR "
             "(status = 'paid' AND paid_at IS NOT NULL AND voided_at IS NULL AND voided_reason IS NULL) OR "
@@ -280,7 +291,7 @@ class InvoiceLine(Base):
         UniqueConstraint("invoice_id", "line_no", name="uq_invoice_lines_no"),
         Index("ix_invoice_lines_invoice", "invoice_id"),
         CheckConstraint(
-            "line_type in ('monthly_fee', 'email_overage', 'adjustment')", name="line_type"
+            "line_type in ('monthly_fee', 'email_overage', 'adjustment', 'legacy')", name="line_type"
         ),
         CheckConstraint("quantity > 0 AND unit_price >= 0 AND amount >= 0", name="positive"),
         CheckConstraint("period_end > period_start", name="period_order"),
@@ -300,8 +311,11 @@ class BillingPeriod(Base):
     period_index: Mapped[int] = mapped_column(Integer)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    plan_version_id: Mapped[uuid.UUID] = mapped_column(
+    plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("plan_versions.id", ondelete="RESTRICT")
+    )
+    provenance: Mapped[str] = mapped_column(
+        String(16), default=PROV_CENTRAL, server_default=PROV_CENTRAL
     )
     status: Mapped[str] = mapped_column(String(10))
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -317,6 +331,10 @@ class BillingPeriod(Base):
     usage_to_report_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("billing_usage_reports.report_id", ondelete="RESTRICT")
     )
+    # M9-g4: baseline i hapjes (periudha e parë pas importit pa raport para kufirit): provon `usage_from` kur s'ka raport
+    usage_from_baseline_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("billing_usage_baselines.id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
@@ -325,6 +343,11 @@ class BillingPeriod(Base):
         UniqueConstraint("invoice_id", name="uq_billing_periods_invoice"),
         CheckConstraint("status in ('invoiced', 'no_charge')", name="status"),
         CheckConstraint("period_end > period_start", name="period_order"),
+        CheckConstraint("provenance in ('central', 'legacy_import')", name="provenance"),
+        CheckConstraint(
+            "provenance = 'legacy_import' OR plan_version_id IS NOT NULL",
+            name="plan_version_required",
+        ),
         CheckConstraint(
             "usage_from IS NULL OR (usage_to IS NOT NULL AND usage_to >= usage_from AND usage_from >= 0)",
             name="usage_order",
@@ -384,7 +407,7 @@ def _sub_frozen(_m, _c, t) -> None:
 
 
 _INVOICE_FROZEN = (
-    "id", "number", "enterprise_id", "subscription_id", "period_index", "period_start", "period_end",
+    "id", "provenance", "number", "enterprise_id", "subscription_id", "period_index", "period_start", "period_end",
     "plan_version_id", "currency", "subtotal", "vat_rate", "tax", "total", "bill_to", "issuer",
     "issued_at", "due_at", "created_at",
 )  # fmt: skip

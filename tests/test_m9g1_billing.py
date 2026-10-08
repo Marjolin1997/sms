@@ -1099,7 +1099,7 @@ def test_migration_0022_up_down_up_and_metadata_matches(make_db):
             c, opts={"compare_type": True, "version_table": "central_alembic_version"}
         )
         assert compare_metadata(ctx, Base.metadata) == []
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0024"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0025"
     uq = {u["name"] for u in inspect(eng).get_unique_constraints("billing_periods")}
     assert {"uq_billing_periods_index", "uq_billing_periods_start"} <= uq
     eng.dispose()
