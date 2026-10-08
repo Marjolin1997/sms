@@ -1,0 +1,14 @@
+# M10 — Sender ID / politika e shtetit / autoriteti i miratimit
+
+Vendimet e miratuara (design gate): **Central** zotëron politikën e shtetit, vendimin approve/reject/revoke, historinë autoritative dhe unikalitetin global të miratimit; **Enterprise** zotëron objektin `SenderId` të tenant-it, ciklin e kërkesës, projeksionin e sinkronizuar dhe zbatimin; asnjë thirrje sinkrone drejt Central në rrugën e SMS. Krahasimi alfanumerik është case-insensitive (display i ruajtur). Rikontrolli para dërgimit = B (dështim i mbyllur + çlirim hold), i aktivizueshëm vetëm pas miratimit të veçantë. Pa flamur `requires_approval` për enterprise, pa "test SMS", `requires_approval=true`/`allowed=true` si parazgjedhje V1. Central: admin shkruan, operator lexon.
+
+## S0 — kanonizimi në Enterprise (pa Central)
+- **Shërbimi kanonik** `app/services/sender_authorization.py`: `check_outbound` / `assert_outbound` (një SELECT, rezultat i strukturuar `Authorization`), `has_approved_sender` (schedule, pa shtet), `owners_of_numeric` (inbound), `recheck_for_dispatch` (API e përgatitur, **e pa-lidhur**).
+- **Normalizim:** alfanumerik → `lower()`; numerik → shifrat pa `+`. `SenderId.value` ruhet siç u shtyp; `norm_value` mban çelësin; `approved_key = "<SHTET>:<norm>"` (UNIQUE global) e njëjtë. Dy variante rasash nuk mund të jenë të miratuara njëkohësisht.
+- **Gara e kërkesës:** humbësi i kërkesës paralele merr `Conflict` (409), jo `IntegrityError`/500. Kërkesa sekuenciale e përsëritur mbetet idempotente. Rrezik i mbetur: dy kërkesa paralele me variante RASE të ndryshme mund të krijojnë dy rreshta pending (vetëm njëri mund të miratohet; `pick` zgjedh të miratuarin).
+- **Historia** `sms_sender_decisions` (append-only; ORM + trigger PG UPDATE/DELETE/TRUNCATE): `requested | approved | rejected | revoked | resubmitted` me `decided_by`, `reason`, `evidence_ref`, `policy_revision` (NULL = lokal), `source (local|backfill)`. `SenderId.current_decision_id` tregon vendimin më të fundit. Arsyet e refuzimit/revokimit mbijetojnë te resubmit.
+- **Provenienca e mesazhit:** `sms_messages.sender_ref`, `sender_decision_ref`, `sender_policy_revision` (nullable, pa FK; të ngrira në submit nga i njëjti rresht autorizimi; rreshtat historikë NULL).
+- **Schedule i fushatës:** kontroll pa shtet (sender i miratuar në ≥1 shtet, case-insensitive). Autorizimi me shtet bëhet te `messages.submit` i çdo marrësi (jo-autorizuar ⇒ marrësi `skipped/sender_not_allowed`).
+- **API:** `SenderIn` dhe `SenderReviewIn` `extra=forbid`; `country` `^[A-Za-z]{2}$`; `reason ≤255`; `evidence_ref` 1..128. Skema e template-ve nuk ndryshon.
+- **Migrimi 0028** (aditiv): kolona, indeks, tabelë, backfill (një vendim `backfill` për sender ekzistues, aktor NULL — pa aktor të shpikur), trigger-a PG; up/down/up i provuar.
+- **Dispatch:** sjellja e sotme (pa rikontroll). Aktivizimi i B kërkon raport të veçantë (SQL shtesë, çlirim hold, gara me thirrjen e provider-it).
