@@ -1162,7 +1162,7 @@ def test_enterprise_money_and_authority_are_untouched_by_m9b(m):
     }
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("0*.py"))
     # M9-b s'preku Enterprise; M9-c shtoi 0023 (autoriteti i parave) — kjo ruan që 0022 ekziston ende pa u ndryshuar
-    assert "0022_dispatch_started_at.py" in versions and versions[-1].startswith("0027")
+    assert "0022_dispatch_started_at.py" in versions and versions[-1].startswith("0028")
 
 
 def test_migration_0017_up_down_up_readiness_and_metadata(make_db):

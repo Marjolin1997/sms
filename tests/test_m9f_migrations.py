@@ -87,7 +87,7 @@ def test_heads_are_the_expected_single_revisions():
 
     from tests.test_central import ROOT
 
-    for ini, head in (("alembic.ini", "0027"), ("apps/central/alembic.ini", "0025")):
+    for ini, head in (("alembic.ini", "0028"), ("apps/central/alembic.ini", "0025")):
         cfg = Config(str(ROOT / ini))
         cfg.set_main_option(
             "script_location",

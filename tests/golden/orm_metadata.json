@@ -3432,6 +3432,33 @@
     "server_default": null,
     "type": "VARCHAR(16)"
    },
+   "sender_decision_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "sender_policy_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "sender_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
    "status": {
     "default": "scalar:<MessageStatus.QUEUED: 'queued'>",
     "fks": [],
@@ -5032,6 +5059,123 @@
   ],
   "indexes": []
  },
+ "sms_sender_decisions": {
+  "columns": {
+   "decided_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "decided_by": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "decision": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "evidence_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(128)"
+   },
+   "from_status": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "policy_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "reason": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(255)"
+   },
+   "sender_id": {
+    "default": null,
+    "fks": [
+     "sms_sender_ids.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "source": {
+    "default": "scalar:'local'",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "local",
+    "type": "VARCHAR(12)"
+   },
+   "to_status": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_sender_decisions_actor",
+   "CheckConstraint:ck_sms_sender_decisions_decision",
+   "CheckConstraint:ck_sms_sender_decisions_reason_required",
+   "CheckConstraint:ck_sms_sender_decisions_source",
+   "ForeignKeyConstraint:fk_sms_sender_decisions_sender_id_sms_sender_ids",
+   "PrimaryKeyConstraint:pk_sms_sender_decisions"
+  ],
+  "indexes": [
+   "ix_sms_sender_decisions_sender_id:['sender_id']:False",
+   "ix_sms_sender_decisions_sender_id_id:['sender_id', 'id']:False"
+  ]
+ },
  "sms_sender_ids": {
   "columns": {
    "approved_key": {
@@ -5061,6 +5205,15 @@
     "server_default": null,
     "type": "DATETIME"
    },
+   "current_decision_id": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
    "enterprise_id": {
     "default": null,
     "fks": [],
@@ -5086,6 +5239,15 @@
     "onupdate": null,
     "pk": false,
     "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "norm_value": {
+    "default": "scalar:''",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "",
     "type": "VARCHAR(16)"
    },
    "owner_ref": {
@@ -5150,6 +5312,7 @@
   ],
   "indexes": [
    "ix_sms_sender_ids_enterprise_id:['enterprise_id']:False",
+   "ix_sms_sender_ids_lookup:['owner_ref', 'country', 'norm_value']:False",
    "ix_sms_sender_ids_owner_ref:['owner_ref']:False"
   ]
  },

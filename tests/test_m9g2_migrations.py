@@ -36,7 +36,7 @@ def test_enterprise_0027_is_additive_reversible_and_matches_metadata(make_db):
         t: {c["name"] for c in inspect(eng).get_columns(t)} for t in inspect(eng).get_table_names()
     }
     assert not ENT_TABLES & set(before)
-    enterprise_alembic(url, "upgrade", "head")
+    enterprise_alembic(url, "upgrade", "0027")
     after = inspect(eng).get_table_names()
     assert ENT_TABLES <= set(after)
     for t, cols in before.items():  # asnjë tabelë ekzistuese s'ndryshon
@@ -47,7 +47,7 @@ def test_enterprise_0027_is_additive_reversible_and_matches_metadata(make_db):
         assert _diff_for(c, Base.metadata, "alembic_version", ENT_TABLES) == []
     enterprise_alembic(url, "downgrade", "0026")
     assert not ENT_TABLES & set(inspect(eng).get_table_names())
-    enterprise_alembic(url, "upgrade", "head")
+    enterprise_alembic(url, "upgrade", "0027")
     assert ENT_TABLES <= set(inspect(eng).get_table_names())
     eng.dispose()
 

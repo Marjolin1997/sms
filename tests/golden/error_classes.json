@@ -69,21 +69,21 @@
    "str": "boom"
   },
   "app.models.billing_usage.BillingEvidenceImmutableError": {
-   "name": "BillingEvidenceImmutableError",
-   "module": "app.models.billing_usage",
-   "code": null,
    "app_mro": [
     "BillingEvidenceImmutableError"
+   ],
+   "args": [
+    "boom"
    ],
    "builtin_base": [
     "RuntimeError",
     "Exception"
    ],
-   "str": "boom",
-   "args": [
-    "boom"
-   ],
-   "own_init": false
+   "code": null,
+   "module": "app.models.billing_usage",
+   "name": "BillingEvidenceImmutableError",
+   "own_init": false,
+   "str": "boom"
   },
   "app.models.contacts.ConsentImmutableError": {
    "app_mro": [
@@ -116,6 +116,23 @@
    "code": null,
    "module": "app.models.email",
    "name": "EmailEventImmutableError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.models.messaging.SenderDecisionImmutableError": {
+   "app_mro": [
+    "SenderDecisionImmutableError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "RuntimeError",
+    "Exception"
+   ],
+   "code": null,
+   "module": "app.models.messaging",
+   "name": "SenderDecisionImmutableError",
    "own_init": false,
    "str": "boom"
   },
@@ -307,22 +324,22 @@
    "str": "boom"
   },
   "app.services.billing_authority.BillingAuthorityFrozen": {
-   "name": "BillingAuthorityFrozen",
-   "module": "app.services.billing_authority",
-   "code": "billing_authority_frozen",
    "app_mro": [
     "BillingAuthorityFrozen",
     "DomainError"
+   ],
+   "args": [
+    "boom"
    ],
    "builtin_base": [
     "Exception",
     "BaseException"
    ],
-   "str": "boom",
-   "args": [
-    "boom"
-   ],
-   "own_init": false
+   "code": "billing_authority_frozen",
+   "module": "app.services.billing_authority",
+   "name": "BillingAuthorityFrozen",
+   "own_init": false,
+   "str": "boom"
   },
   "app.services.campaigns.InvalidCampaign": {
    "app_mro": [

@@ -25,6 +25,9 @@ MOVED = {
     "app.services.wallet.WalletError": ("app.core.errors.DomainError", "DomainError"),
     "app.services.wallet.NotFound": ("app.core.errors.NotFound", "NotFound"),
     "app.services.wallet.Conflict": ("app.core.errors.Conflict", "Conflict"),
+    # M10-S0: autorizimi kanonik i sender-it mban gabimet e domenit (sender_ids i ri-eksporton)
+    "app.services.sender_ids.InvalidSender": ("app.services.sender_authorization.InvalidSender", "InvalidSender"),
+    "app.services.sender_ids.SenderNotAllowed": ("app.services.sender_authorization.SenderNotAllowed", "SenderNotAllowed"),
 }
 
 
@@ -88,7 +91,7 @@ def test_every_runtime_error_class_keeps_name_code_message_args_and_inheritance(
     assert (
         now_classes == expected
     )  # 47 klasa + 3 (M7-d) + 7 (M7-e) + 3 (M7-g) + 8 (M9-c) + 2 (M9-d) + 5 (M9-e): .code, str, args, __init__, zinxhiri i trashëgimisë
-    assert len(expected) == 77
+    assert len(expected) == 78  # M10-S0: + SenderDecisionImmutableError
 
 
 def test_http_status_mapping_dictionaries_are_identical():
@@ -105,7 +108,7 @@ def test_exactly_the_documented_classes_changed_module():
         v["name"] for v in now_classes.values()
         if before_modules.get(v["name"], v["module"]) != v["module"] and v["name"] != "DomainError"
     }  # fmt: skip
-    assert moved == {"NotFound", "Conflict"}  # + WalletError→DomainError (alias)
+    assert moved == {"NotFound", "Conflict", "InvalidSender", "SenderNotAllowed"}  # + WalletError→DomainError (alias); M10-S0: sender_authorization
 
 
 # --- Aliase dhe sjellje -----------------------------------------------------------------------------------------
