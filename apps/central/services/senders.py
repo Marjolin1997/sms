@@ -7,6 +7,7 @@ Parimet:
   Kështu një miratim nuk kalon kurrë me politikë të vjetruar: ose merr revizionin e ri, ose politika e re pret dhe pastaj revokon miratimin.
 - `allowed=true→false`: ndryshimi i politikës revokon ATOMIKISHT (vendim `revoked`, aktor `system:sender-policy`, kategori `policy_revoked`) çdo sender të miratuar në fushë."""
 
+import functools
 import hashlib
 import json
 import re
@@ -23,7 +24,7 @@ from apps.central.core.timeutil import utcnow
 from apps.central.models.enterprise import Enterprise
 from apps.central.models.sender import CountrySenderPolicy, SenderDecision, SenderRegistry
 from apps.central.models.user import CentralUser
-from apps.central.services import audit, money_common
+from apps.central.services import audit, money_common, sender_sync
 from apps.central.services import sender_identity as ident
 
 SYSTEM_POLICY = "system:sender-policy"
@@ -35,6 +36,23 @@ def _utc(dt: datetime | None) -> datetime:
     from apps.central.services.billing import utc
 
     return utc(dt or utcnow())
+
+
+def _publishing(fn):
+    """Publikon (outbox `cp.sender.v1`) gjendjet e ndryshuara NË FUND të mutacionit, në të njëjtin transaksion; gabim ⇒ asgjë s'mbetet e mbledhur."""
+
+    @functools.wraps(fn)
+    def wrapper(db, *a, **kw):
+        sender_sync.discard(db)
+        try:
+            out = fn(db, *a, **kw)
+            sender_sync.publish(db)
+        except BaseException:
+            sender_sync.discard(db)
+            raise
+        return out
+
+    return wrapper
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +187,7 @@ def get_policy(db: Session, policy_id) -> CountrySenderPolicy:
     return row
 
 
+@_publishing
 def set_policy(
     db: Session,
     actor,
@@ -448,6 +467,7 @@ def _after_pending(db: Session, row: SenderRegistry, pol: PolicyView, now: datet
     return "not_applicable"
 
 
+@_publishing
 def request_sender(
     db: Session,
     actor,
@@ -571,6 +591,7 @@ _VERB = {
 }
 
 
+@_publishing
 def approve(
     db: Session, actor, sender_id, evidence_ref=None, *, now: datetime | None = None
 ) -> SenderRegistry:
@@ -609,6 +630,7 @@ def approve(
     return row
 
 
+@_publishing
 def reject(
     db: Session, actor, sender_id, reason, evidence_ref=None, *, now: datetime | None = None
 ) -> SenderRegistry:
@@ -640,6 +662,7 @@ def reject(
     return row
 
 
+@_publishing
 def revoke(
     db: Session, actor, sender_id, reason, evidence_ref=None, *, now: datetime | None = None
 ) -> SenderRegistry:
@@ -671,6 +694,7 @@ def revoke(
     return row
 
 
+@_publishing
 def resubmit(
     db: Session, actor, sender_id, evidence_ref=None, *, now: datetime | None = None
 ) -> RequestResult:

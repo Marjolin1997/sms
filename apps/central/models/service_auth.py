@@ -29,7 +29,7 @@ from apps.central.core.db import Base
 from apps.central.core.timeutil import utcnow
 
 ALLOWED_SCOPES = frozenset(
-    {"sync:read", "money:read", "money:report", "pricing:read", "billing:report"}
+    {"sync:read", "money:read", "money:report", "pricing:read", "billing:report", "sender:read"}
 )  # M9-c: money:read ≠ sync:read (ndarë)
 
 

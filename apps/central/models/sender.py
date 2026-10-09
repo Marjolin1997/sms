@@ -10,12 +10,15 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     UniqueConstraint,
     Uuid,
@@ -180,3 +183,61 @@ def _append_only(*_) -> None:
 @event.listens_for(SenderRegistry, "before_delete")
 def _registry_never_deleted(*_) -> None:
     raise SenderImmutableError("sender registry rows are never deleted")
+
+
+class SenderSyncSequence(Base):
+    """M10-S2: numërues global transaksional i feed-it `cp.sender.v1` (rresht singleton i kyçur `FOR UPDATE` deri në commit ⇒ seq N i dukshëm para N+1; rollback heq edhe rritjen)."""
+
+    __tablename__ = "sender_sync_sequence"
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=False)
+    epoch: Mapped[uuid.UUID] = mapped_column(Uuid, default=uuid.uuid4)
+    last_seq: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    floor_seq: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+        CheckConstraint("last_seq >= 0", name="last_seq_non_negative"),
+        CheckConstraint("floor_seq >= 0 and floor_seq <= last_seq", name="floor_within_range"),
+    )
+
+
+class SenderSyncOutbox(Base):
+    """Ngjarje të ngrira (gjendje e plotë) të krijuara në të njëjtin transaksion me mutacionin autoritativ. `enterprise_id` NULL = politikë globale."""
+
+    __tablename__ = "sender_sync_outbox"
+
+    seq: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid, unique=True, default=uuid.uuid4)
+    enterprise_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("enterprises.id", ondelete="RESTRICT")
+    )
+    event_type: Mapped[str] = mapped_column(String(32))
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    revision: Mapped[int] = mapped_column(BigInteger)
+    group_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "event_type", "entity_id", "revision", name="uq_sender_sync_outbox_entity_revision"
+        ),
+        Index("ix_sender_sync_outbox_enterprise_seq", "enterprise_id", "seq"),
+        Index("ix_sender_sync_outbox_group", "group_id", "seq"),
+        CheckConstraint("seq >= 1 and revision >= 1", name="positive"),
+        CheckConstraint(
+            "event_type in ('sender.policy.upserted', 'sender.registry.upserted')",
+            name="event_type",
+        ),
+        CheckConstraint(
+            "(event_type = 'sender.policy.upserted') = (enterprise_id IS NULL)",
+            name="policy_is_global",
+        ),
+    )
+
+
+@event.listens_for(SenderSyncOutbox, "before_update")
+@event.listens_for(SenderSyncOutbox, "before_delete")
+def _outbox_append_only(*_) -> None:
+    raise SenderImmutableError("sender_sync_outbox rows are append-only")
