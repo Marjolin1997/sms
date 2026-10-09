@@ -19,10 +19,36 @@ def policy(allowed=True, req=True, country="AL", kind="alphanumeric", pid=0xA1):
     return v1.PolicyStateV1(country, kind, allowed, req, U(pid), AT)
 
 
-def reg(status="pending", decision="requested", display="Acme", country="AL", kind="alphanumeric", did=0xD1, src="default", pid=None, prev=None, ref="ext-1"):
+def reg(
+    status="pending",
+    decision="requested",
+    display="Acme",
+    country="AL",
+    kind="alphanumeric",
+    did=0xD1,
+    src="default",
+    pid=None,
+    prev=None,
+    ref="ext-1",
+):
     norm = display.lower()
     key = f"{country}:{norm}" if status == "approved" else None
-    return v1.RegistryStateV1(ENT, ref, country, kind, display, norm, status, key, U(did), decision, AT, src, None if pid is None else U(pid), prev)
+    return v1.RegistryStateV1(
+        ENT,
+        ref,
+        country,
+        kind,
+        display,
+        norm,
+        status,
+        key,
+        U(did),
+        decision,
+        AT,
+        src,
+        None if pid is None else U(pid),
+        prev,
+    )
 
 
 def ev(seq, etype, state, rev, gid=0x9001, gsize=1, eid=None):
@@ -39,14 +65,27 @@ def cases() -> list[tuple[str, list[v1.SenderEventV1]]]:
         ("policy_explicit", [ev(1, P, policy(True, False), 1)]),
         ("policy_denied", [ev(2, P, policy(False, True, "XK", "numeric", 0xA2), 3)]),
         ("sender_pending", [ev(3, R, reg(), 1)]),
-        ("sender_approved", [ev(4, R, reg("approved", "approved", did=0xD2, src="explicit", pid=0xA1, prev=1), 2)]),
+        (
+            "sender_approved",
+            [ev(4, R, reg("approved", "approved", did=0xD2, src="explicit", pid=0xA1, prev=1), 2)],
+        ),
         ("sender_rejected", [ev(5, R, reg("rejected", "rejected", did=0xD3), 2)]),
-        ("sender_revoked", [ev(6, R, reg("revoked", "revoked", did=0xD4, src="explicit", pid=0xA2, prev=3), 3)]),
+        (
+            "sender_revoked",
+            [ev(6, R, reg("revoked", "revoked", did=0xD4, src="explicit", pid=0xA2, prev=3), 3)],
+        ),
         (
             "policy_revocation_group",
             [
                 ev(7, P, policy(False, True), 2, gid=0x9002, gsize=2),
-                ev(8, R, reg("revoked", "revoked", did=0xD5, src="explicit", pid=0xA1, prev=2), 4, gid=0x9002, gsize=2),
+                ev(
+                    8,
+                    R,
+                    reg("revoked", "revoked", did=0xD5, src="explicit", pid=0xA1, prev=2),
+                    4,
+                    gid=0x9002,
+                    gsize=2,
+                ),
             ],
         ),
     ]
@@ -57,7 +96,9 @@ def main() -> None:
     for name, events in cases():
         body = b"\n".join(e.to_bytes() for e in events)
         (HERE / f"{name}.body").write_bytes(body)
-        meta.append({"name": name, "events": [e.to_dict() for e in events], "body_file": f"{name}.body"})
+        meta.append(
+            {"name": name, "events": [e.to_dict() for e in events], "body_file": f"{name}.body"}
+        )
     (HERE / "cases.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
 
 

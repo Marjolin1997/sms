@@ -1193,6 +1193,115 @@
    "own_init": false,
    "str": "boom"
   },
+  "app.services.sender_sync.ApplyError": {
+   "app_mro": [
+    "ApplyError",
+    "SenderSyncError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.sender_sync",
+   "name": "ApplyError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.sender_sync.EventConflict": {
+   "app_mro": [
+    "EventConflict",
+    "ApplyError",
+    "SenderSyncError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.sender_sync",
+   "name": "EventConflict",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.sender_sync.IncompleteGroup": {
+   "app_mro": [
+    "IncompleteGroup",
+    "ApplyError",
+    "SenderSyncError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.sender_sync",
+   "name": "IncompleteGroup",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.sender_sync.SenderSyncError": {
+   "app_mro": [
+    "SenderSyncError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.sender_sync",
+   "name": "SenderSyncError",
+   "own_init": false,
+   "str": "boom"
+  },
+  "app.services.sender_sync.SnapshotRequired": {
+   "app_mro": [
+    "SnapshotRequired",
+    "SenderSyncError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.sender_sync",
+   "name": "SnapshotRequired",
+   "own_init": true,
+   "str": "boom"
+  },
+  "app.services.sender_sync.StaleSnapshot": {
+   "app_mro": [
+    "StaleSnapshot",
+    "SenderSyncError"
+   ],
+   "args": [
+    "boom"
+   ],
+   "builtin_base": [
+    "Exception",
+    "BaseException"
+   ],
+   "code": null,
+   "module": "app.services.sender_sync",
+   "name": "StaleSnapshot",
+   "own_init": false,
+   "str": "boom"
+  },
   "app.services.templates.InvalidTemplate": {
    "app_mro": [
     "InvalidTemplate",

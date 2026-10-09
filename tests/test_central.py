@@ -205,6 +205,8 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/senders", "/admin/senders/{sender_id}", "/admin/senders/{sender_id}/history",
         "/admin/senders/{sender_id}/approve", "/admin/senders/{sender_id}/reject",
         "/admin/senders/{sender_id}/revoke", "/admin/senders/{sender_id}/resubmit",
+        # M10-S2: feed-i cp.sender.v1 (vetëm lexim, skop sender:read)
+        "/internal/sender/state", "/internal/sender/changes", "/internal/sender/snapshot",
     }  # fmt: skip
 
 
@@ -234,8 +236,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0027_next.py").write_text(
-        'revision = "0027"\ndown_revision = "0026"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0028_next.py").write_text(
+        'revision = "0028"\ndown_revision = "0027"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -302,6 +304,8 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "country_sender_policies",
         "sender_registry",
         "sender_decisions",
+        "sender_sync_sequence",
+        "sender_sync_outbox",
         "registration_products",
         "product_registration_policy",
     }
@@ -362,6 +366,8 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "country_sender_policies",
         "sender_registry",
         "sender_decisions",
+        "sender_sync_sequence",
+        "sender_sync_outbox",
         "registration_products",
         "product_registration_policy",
     }
@@ -430,6 +436,8 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "country_sender_policies",
         "sender_registry",
         "sender_decisions",
+        "sender_sync_sequence",
+        "sender_sync_outbox",
         "registration_products",
         "product_registration_policy",
     }

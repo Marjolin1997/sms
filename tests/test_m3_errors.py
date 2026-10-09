@@ -97,7 +97,9 @@ def test_every_runtime_error_class_keeps_name_code_message_args_and_inheritance(
     assert (
         now_classes == expected
     )  # 47 klasa + 3 (M7-d) + 7 (M7-e) + 3 (M7-g) + 8 (M9-c) + 2 (M9-d) + 5 (M9-e): .code, str, args, __init__, zinxhiri i trashëgimisë
-    assert len(expected) == 78  # M10-S0: + SenderDecisionImmutableError
+    assert (
+        len(expected) == 84
+    )  # M10-S0: + SenderDecisionImmutableError; M10-S2: + 6 gabime të sender_sync
 
 
 def test_http_status_mapping_dictionaries_are_identical():
@@ -113,6 +115,7 @@ def test_exactly_the_documented_classes_changed_module():
     moved = {
         v["name"] for v in now_classes.values()
         if before_modules.get(v["name"], v["module"]) != v["module"] and v["name"] != "DomainError"
+        and v["module"] != "app.services.sender_sync"  # M10-S2: modul i ri (emra të njëjtë me cp.v1 por klasa të reja, jo zhvendosje)
     }  # fmt: skip
     assert moved == {
         "NotFound",

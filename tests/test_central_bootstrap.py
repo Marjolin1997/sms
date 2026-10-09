@@ -316,6 +316,8 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "country_sender_policies",
         "sender_registry",
         "sender_decisions",
+        "sender_sync_sequence",
+        "sender_sync_outbox",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -396,4 +398,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0024_settlement_g3.py",
         "0025_legacy_import_g4.py",
         "0026_sender_authority_s1.py",
+        "0027_sender_sync_s2.py",
     ]

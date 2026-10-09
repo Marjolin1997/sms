@@ -71,7 +71,7 @@ def test_every_model_default_that_used_utcnow_is_still_a_callable_returning_awar
                 if isinstance(v, datetime):
                     assert v.tzinfo is UTC, (table.name, col.name)
     assert (
-        n == 65
+        n == 67
     )  # snapshot: 45 para M7-d + 3 `sms_entitlements` + 3 M9-c + 3 M9-d (outbox created_at/updated_at/next_attempt_at) + 6 M9-e (cache çmimesh) + 4 M9-g2 (evidence billable_at/created_at, report generated_at/created_at... shih modelin)
 
 
@@ -149,7 +149,7 @@ def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
     assert (
-        len(golden) == 58 and sum(len(v["columns"]) for v in golden.values()) == 601
+        len(golden) == 61 and sum(len(v["columns"]) for v in golden.values()) == 647
     )  # M10-S0: +1 tabelë, +16 kolona
 
 

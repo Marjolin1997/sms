@@ -406,7 +406,8 @@ def test_enterprise_id_is_written_only_by_the_centralized_hook():
                "services/entitlements.py", "services/money_sync.py", "services/money_authority.py",
                "services/money_readiness.py", "models/money_authority.py", "services/money_usage.py",
                "models/money_usage.py", "services/billing_usage.py", "models/billing_usage.py", "services/billing_export.py", "models/pricing.py", "services/pricing.py",
-               "services/pricing_sync.py", "services/pricing_poller.py", "services/pricing_readiness.py"}  # fmt: skip
+               "services/pricing_sync.py", "services/pricing_poller.py", "services/pricing_readiness.py",
+               "models/sender_sync.py", "services/sender_sync.py"}  # fmt: skip
     offenders = [
         p.relative_to(root).as_posix()
         for p in root.rglob("*.py")
