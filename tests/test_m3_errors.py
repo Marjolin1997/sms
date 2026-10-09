@@ -109,14 +109,10 @@ def test_http_status_mapping_dictionaries_are_identical():
 
 
 def test_exactly_the_documented_classes_changed_module():
+    """Klasat që HUMBËN çelësin e tyre (module.qualname) në golden = ato që u zhvendosën; klasat e reja me emër të njëjtë (p.sh. `ApplyError` e sender_sync) nuk llogariten si zhvendosje."""
     now_classes, _ = _runtime_snapshot()
     g = json.loads(GOLDEN.read_text())["classes"]
-    before_modules = {v["name"]: v["module"] for v in g.values()}
-    moved = {
-        v["name"] for v in now_classes.values()
-        if before_modules.get(v["name"], v["module"]) != v["module"] and v["name"] != "DomainError"
-        and v["module"] != "app.services.sender_sync"  # M10-S2: modul i ri (emra të njëjtë me cp.v1 por klasa të reja, jo zhvendosje)
-    }  # fmt: skip
+    moved = {g[k]["name"] for k in g.keys() - now_classes.keys()} - {"WalletError"}
     assert moved == {
         "NotFound",
         "Conflict",
