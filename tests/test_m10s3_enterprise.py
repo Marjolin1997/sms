@@ -942,6 +942,8 @@ def test_enterprise_0030_is_additive_reversible_and_matches_metadata(make_db):
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_triggers_freeze_content_and_forbid_delete_and_truncate(make_db):
     url = make_db("ent")
+    if not url.startswith("postgresql"):
+        pytest.skip("postgres parametrization only")
     enterprise_alembic(url, "upgrade", "head")
     eng = create_engine(url)
     with Session(eng) as s:

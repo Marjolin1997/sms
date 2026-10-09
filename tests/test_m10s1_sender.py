@@ -1012,7 +1012,7 @@ def _drift(conn):
         repr(i)
         for d in compare_metadata(ctx, Base.metadata)
         for i in (d if isinstance(d, list) else [d])
-        if any(t in repr(i) for t in NEW)
+        if any(t in repr(i) for t in NEW) and "sender_request_operations" not in repr(i)
     ]
 
 

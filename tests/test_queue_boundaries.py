@@ -17,6 +17,7 @@ SKIP_LOCKED_ALLOWLIST = {
     "services/campaigns.py": 1,  # run_due (lock pune për një campaign)
     "services/payments.py": 1,  # expire_pending (sweep)
     "services/billing_usage.py": 1,  # M9-g2: deliver (lease i raporteve billing; jo rrugë dërgimi)
+    "services/sender_request_outbox.py": 1,  # M10-S3: deliver (lease i kërkesave të sender-ave; jo rrugë dërgimi)
     "services/money_usage.py": 1,  # M9-d: deliver (lease i raporteve të përdorimit; jo rrugë dërgimi)
 }
 

@@ -487,8 +487,14 @@ def _race(renv, payloads):
     return outs, errs
 
 
+def need_pg(renv):
+    if renv.eng.dialect.name != "postgresql":
+        pytest.skip("postgres parametrization only")
+
+
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_same_operation_delivered_twice_concurrently_has_exactly_one_effect(renv):
+    need_pg(renv)
     b = body(renv)
     outs, errs = _race(renv, [b, b, b])
     assert not errs and sorted(d for _o, d in outs) == [False, True, True]
@@ -497,6 +503,7 @@ def test_pg_same_operation_delivered_twice_concurrently_has_exactly_one_effect(r
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_two_distinct_resubmits_race_to_one_transition(renv):
+    need_pg(renv)
     assert post(renv, body(renv)).status_code == 201
     rid = registry(renv).id
     mutate(renv, lambda s, a: svc.reject(s, a, rid, "x"))
@@ -510,6 +517,7 @@ def test_pg_two_distinct_resubmits_race_to_one_transition(renv):
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_initial_request_and_resubmit_arriving_together_never_create_two_registries(renv):
+    need_pg(renv)
     outs, errs = _race(renv, [body(renv), body(renv, operation="resubmit")])
     with Session(renv.eng) as s:
         assert s.scalar(select(func.count()).select_from(SenderRegistry)) == 1
@@ -575,6 +583,7 @@ def test_operations_are_append_only_in_the_orm(renv):
 
 @pytest.mark.skipif(not IS_PG, reason="needs PostgreSQL")
 def test_pg_triggers_make_operations_append_only(renv):
+    need_pg(renv)
     assert post(renv, body(renv)).status_code == 201
     for stmt in (
         "UPDATE sender_request_operations SET outcome = 'existing'",
