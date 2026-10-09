@@ -42,7 +42,7 @@ def enterprise_alembic(url, *args):
     return r
 
 
-def drop_database(admin, name, attempts=8):
+def drop_database(admin, name, attempts=40):
     """DROP DATABASE WITH (FORCE) pa superuser mund të dështojë nëse autovacuum (role postgres) ka
     sesion të hapur te DB e re ("permission denied to terminate process"): riprovo shkurt."""
     import time
@@ -57,7 +57,9 @@ def drop_database(admin, name, attempts=8):
         except ProgrammingError as e:
             if "terminate process" not in str(e) or i == attempts - 1:
                 raise
-            time.sleep(0.5)
+            time.sleep(
+                0.5
+            )  # autovacuum/sesione të tjera mbyllen brenda disa sekondave; 40×0.5s = 20s (nën ngarkesë paralele 8 provat s'mjaftonin)
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
