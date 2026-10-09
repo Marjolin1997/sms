@@ -249,6 +249,7 @@ def set_policy(
         raise Conflict(
             "a concurrent policy revision was created for this country and sender kind"
         ) from e
+    sender_sync.note_policy(db, row)
     audit.record(
         db,
         actor,
@@ -362,6 +363,7 @@ def _append(
         )
     db.add(d)
     db.flush()
+    sender_sync.note_registry(db, row, d)
     _audit(
         db,
         actor,

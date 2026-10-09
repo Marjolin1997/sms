@@ -29,6 +29,7 @@ SCOPE = "sync:read"
 REPORT_SCOPE = "money:report"  # M9-d: raportimi i përdorimit (scope i veçantë nga money:read)
 BILLING_REPORT_SCOPE = "billing:report"  # M9-g2: raportimi kumulativ i email-eve të faturueshme
 MONEY_SCOPE = "money:read"
+SENDER_SCOPE = "sender:read"  # M10-S2: feed-i i autorizimit të sender-ave (cp.sender.v1)
 PRICING_SCOPE = "pricing:read"  # M9-e: snapshot-i i çmimeve  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
 LIFETIME_S = 120  # ≤ 300 (kufiri i Central); i shkurtër: mbrojtje ndaj rrjedhjes
 SNAPSHOT_REQUIRED_CODES = frozenset(
@@ -37,6 +38,11 @@ SNAPSHOT_REQUIRED_CODES = frozenset(
         "sync_authorization_changed",
         "sync_cursor_expired",
         "sync_cursor_ahead",
+        # M10-S2: feed-i i sender-ave kërkon snapshot në të njëjtat raste
+        "sender_epoch_mismatch",
+        "sender_authorization_changed",
+        "sender_cursor_ahead",
+        "sender_cursor_expired",
     }
 )
 
@@ -298,6 +304,20 @@ class ControlPlaneClient:
         if not isinstance(d, dict) or d.get("status") not in ("PASS", "WARN", "FAIL", "CRITICAL"):
             raise CpProtocolError("reconciliation response is malformed")
         return d
+
+    # --- M10-S2: feed-i i sender-ave `cp.sender.v1` (scope `sender:read`; instancë me `scope=SENDER_SCOPE`) ---
+
+    def get_sender_snapshot(self) -> Any:
+        return self._get("/internal/sender/snapshot")
+
+    def get_sender_changes(
+        self, after_seq: int, epoch: uuid.UUID, generation: int, limit: int = 200
+    ) -> ChangesPage:
+        d = self._get(
+            "/internal/sender/changes",
+            {"after_seq": after_seq, "epoch": str(epoch), "generation": generation, "limit": limit},
+        )
+        return parse_changes(d)
 
     # --- M9-c: feed-i i parave (scope `money:read`; instancë me `scope=MONEY_SCOPE`) ---
 

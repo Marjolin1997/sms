@@ -1,0 +1,284 @@
+[
+ {
+  "body_file": "policy_explicit.body",
+  "events": [
+   {
+    "data": {
+     "allowed": true,
+     "country": "AL",
+     "effective_from": "2030-01-02T03:04:05.123456+00:00",
+     "policy_id": "00000000-0000-0000-0000-0000000000a1",
+     "requires_approval": false,
+     "sender_kind": "alphanumeric"
+    },
+    "enterprise_id": null,
+    "entity": {
+     "id": "2f2692d9-f84c-5c33-a0c4-19e3677f0578",
+     "type": "sender_policy"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000501",
+    "event_type": "sender.policy.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009001",
+     "size": 1
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 1,
+    "schema": "cp.sender.v1",
+    "seq": 1
+   }
+  ],
+  "name": "policy_explicit"
+ },
+ {
+  "body_file": "policy_denied.body",
+  "events": [
+   {
+    "data": {
+     "allowed": false,
+     "country": "XK",
+     "effective_from": "2030-01-02T03:04:05.123456+00:00",
+     "policy_id": "00000000-0000-0000-0000-0000000000a2",
+     "requires_approval": true,
+     "sender_kind": "numeric"
+    },
+    "enterprise_id": null,
+    "entity": {
+     "id": "5b4ee178-c109-572c-919f-06bad2170871",
+     "type": "sender_policy"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000502",
+    "event_type": "sender.policy.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009001",
+     "size": 1
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 3,
+    "schema": "cp.sender.v1",
+    "seq": 2
+   }
+  ],
+  "name": "policy_denied"
+ },
+ {
+  "body_file": "sender_pending.body",
+  "events": [
+   {
+    "data": {
+     "approved_key": null,
+     "country": "AL",
+     "decided_at": "2030-01-02T03:04:05.123456+00:00",
+     "decision": "requested",
+     "decision_id": "00000000-0000-0000-0000-0000000000d1",
+     "display_value": "Acme",
+     "enterprise_id": "00000000-0000-0000-0000-000000000111",
+     "external_ref": "ext-1",
+     "norm_value": "acme",
+     "policy_id": null,
+     "policy_revision": null,
+     "policy_source": "default",
+     "sender_kind": "alphanumeric",
+     "status": "pending"
+    },
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "entity": {
+     "id": "00000000-0000-0000-0000-0000000000e1",
+     "type": "sender_registry"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000503",
+    "event_type": "sender.registry.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009001",
+     "size": 1
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 1,
+    "schema": "cp.sender.v1",
+    "seq": 3
+   }
+  ],
+  "name": "sender_pending"
+ },
+ {
+  "body_file": "sender_approved.body",
+  "events": [
+   {
+    "data": {
+     "approved_key": "AL:acme",
+     "country": "AL",
+     "decided_at": "2030-01-02T03:04:05.123456+00:00",
+     "decision": "approved",
+     "decision_id": "00000000-0000-0000-0000-0000000000d2",
+     "display_value": "Acme",
+     "enterprise_id": "00000000-0000-0000-0000-000000000111",
+     "external_ref": "ext-1",
+     "norm_value": "acme",
+     "policy_id": "00000000-0000-0000-0000-0000000000a1",
+     "policy_revision": 1,
+     "policy_source": "explicit",
+     "sender_kind": "alphanumeric",
+     "status": "approved"
+    },
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "entity": {
+     "id": "00000000-0000-0000-0000-0000000000e1",
+     "type": "sender_registry"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000504",
+    "event_type": "sender.registry.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009001",
+     "size": 1
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 2,
+    "schema": "cp.sender.v1",
+    "seq": 4
+   }
+  ],
+  "name": "sender_approved"
+ },
+ {
+  "body_file": "sender_rejected.body",
+  "events": [
+   {
+    "data": {
+     "approved_key": null,
+     "country": "AL",
+     "decided_at": "2030-01-02T03:04:05.123456+00:00",
+     "decision": "rejected",
+     "decision_id": "00000000-0000-0000-0000-0000000000d3",
+     "display_value": "Acme",
+     "enterprise_id": "00000000-0000-0000-0000-000000000111",
+     "external_ref": "ext-1",
+     "norm_value": "acme",
+     "policy_id": null,
+     "policy_revision": null,
+     "policy_source": "default",
+     "sender_kind": "alphanumeric",
+     "status": "rejected"
+    },
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "entity": {
+     "id": "00000000-0000-0000-0000-0000000000e1",
+     "type": "sender_registry"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000505",
+    "event_type": "sender.registry.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009001",
+     "size": 1
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 2,
+    "schema": "cp.sender.v1",
+    "seq": 5
+   }
+  ],
+  "name": "sender_rejected"
+ },
+ {
+  "body_file": "sender_revoked.body",
+  "events": [
+   {
+    "data": {
+     "approved_key": null,
+     "country": "AL",
+     "decided_at": "2030-01-02T03:04:05.123456+00:00",
+     "decision": "revoked",
+     "decision_id": "00000000-0000-0000-0000-0000000000d4",
+     "display_value": "Acme",
+     "enterprise_id": "00000000-0000-0000-0000-000000000111",
+     "external_ref": "ext-1",
+     "norm_value": "acme",
+     "policy_id": "00000000-0000-0000-0000-0000000000a2",
+     "policy_revision": 3,
+     "policy_source": "explicit",
+     "sender_kind": "alphanumeric",
+     "status": "revoked"
+    },
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "entity": {
+     "id": "00000000-0000-0000-0000-0000000000e1",
+     "type": "sender_registry"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000506",
+    "event_type": "sender.registry.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009001",
+     "size": 1
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 3,
+    "schema": "cp.sender.v1",
+    "seq": 6
+   }
+  ],
+  "name": "sender_revoked"
+ },
+ {
+  "body_file": "policy_revocation_group.body",
+  "events": [
+   {
+    "data": {
+     "allowed": false,
+     "country": "AL",
+     "effective_from": "2030-01-02T03:04:05.123456+00:00",
+     "policy_id": "00000000-0000-0000-0000-0000000000a1",
+     "requires_approval": true,
+     "sender_kind": "alphanumeric"
+    },
+    "enterprise_id": null,
+    "entity": {
+     "id": "2f2692d9-f84c-5c33-a0c4-19e3677f0578",
+     "type": "sender_policy"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000507",
+    "event_type": "sender.policy.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009002",
+     "size": 2
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 2,
+    "schema": "cp.sender.v1",
+    "seq": 7
+   },
+   {
+    "data": {
+     "approved_key": null,
+     "country": "AL",
+     "decided_at": "2030-01-02T03:04:05.123456+00:00",
+     "decision": "revoked",
+     "decision_id": "00000000-0000-0000-0000-0000000000d5",
+     "display_value": "Acme",
+     "enterprise_id": "00000000-0000-0000-0000-000000000111",
+     "external_ref": "ext-1",
+     "norm_value": "acme",
+     "policy_id": "00000000-0000-0000-0000-0000000000a1",
+     "policy_revision": 2,
+     "policy_source": "explicit",
+     "sender_kind": "alphanumeric",
+     "status": "revoked"
+    },
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "entity": {
+     "id": "00000000-0000-0000-0000-0000000000e1",
+     "type": "sender_registry"
+    },
+    "event_id": "00000000-0000-0000-0000-000000000508",
+    "event_type": "sender.registry.upserted",
+    "group": {
+     "id": "00000000-0000-0000-0000-000000009002",
+     "size": 2
+    },
+    "occurred_at": "2030-01-02T03:04:05.123456+00:00",
+    "revision": 4,
+    "schema": "cp.sender.v1",
+    "seq": 8
+   }
+  ],
+  "name": "policy_revocation_group"
+ }
+]
