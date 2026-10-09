@@ -70,6 +70,7 @@ def test_package_is_leaf_and_stdlib_only():
         "control_plane/pricing/__init__.py",
         "control_plane/pricing/v1.py",
         "control_plane/sender/__init__.py",
+        "control_plane/sender/request_v1.py",
         "control_plane/sender/v1.py",
         "control_plane/v1.py",
     ]

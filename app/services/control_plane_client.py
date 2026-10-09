@@ -30,8 +30,14 @@ REPORT_SCOPE = "money:report"  # M9-d: raportimi i përdorimit (scope i veçant�
 BILLING_REPORT_SCOPE = "billing:report"  # M9-g2: raportimi kumulativ i email-eve të faturueshme
 MONEY_SCOPE = "money:read"
 SENDER_SCOPE = "sender:read"  # M10-S2: feed-i i autorizimit të sender-ave (cp.sender.v1)
+SENDER_REPORT_SCOPE = (
+    "sender:report"  # M10-S3: kërkesat e sender-ave Enterprise → Central (sender.request.v1)
+)
 PRICING_SCOPE = "pricing:read"  # M9-e: snapshot-i i çmimeve  # M9-c: scope i dedikuar; klienti i parave përdor çelës me këtë scope
 LIFETIME_S = 120  # ≤ 300 (kufiri i Central); i shkurtër: mbrojtje ndaj rrjedhjes
+SENDER_ACK_OUTCOMES = frozenset(
+    {"created", "existing", "resubmitted", "noop_pending", "noop_approved"}
+)
 SNAPSHOT_REQUIRED_CODES = frozenset(
     {
         "sync_epoch_mismatch",
@@ -219,7 +225,14 @@ class ControlPlaneClient:
         return self._call("GET", path, params=params)
 
     def _call(
-        self, method: str, path: str, params: dict | None = None, json_body: Any = None
+        self,
+        method: str,
+        path: str,
+        params: dict | None = None,
+        json_body: Any = None,
+        *,
+        rejected: tuple[int, ...] = (409, 413, 422),
+        max_bytes: int | None = None,
     ) -> Any:
         try:
             r = self._http.request(
@@ -229,8 +242,10 @@ class ControlPlaneClient:
         except httpx.HTTPError as e:  # timeout, lidhje, TLS, ...
             raise CpTransportError(f"{type(e).__name__} calling {path}") from None
         sc = r.status_code
-        if method == "POST" and sc in (409, 413, 422):
+        if method == "POST" and sc in rejected:
             raise CpReportRejected(sc, _error_code(r))
+        if max_bytes is not None and len(r.content) > max_bytes:
+            raise CpProtocolError(f"{path}: response is too large")
         if sc in (200, 201):
             try:
                 return r.json()
@@ -239,6 +254,8 @@ class ControlPlaneClient:
         if sc == 401:
             raise CpAuthError("401 unauthorized (check client id, key id and private key)")
         if sc == 403:
+            if method == "POST" and _error_code(r) == "enterprise_not_authorized":
+                raise CpReportRejected(sc, "enterprise_not_authorized")
             raise CpForbidden("403 forbidden (scope or enterprise authorization)")
         if sc in (409, 410):
             code = _error_code(r)
@@ -295,6 +312,29 @@ class ControlPlaneClient:
         d = self._call("POST", "/internal/billing/usage-reports", json_body=payload)
         if not isinstance(d, dict) or d.get("status") not in ("stored", "duplicate"):
             raise CpProtocolError("billing usage report response is malformed")
+        return d
+
+    def post_sender_request(self, payload: dict) -> dict:
+        """M10-S3: POST idempotent (scope `sender:report`); 200/201 = pranuar. 404/409/413/422 dhe 403 `enterprise_not_authorized` ⇒ `CpReportRejected` (permanente).
+        Përgjigjja është ACK dorëzimi, e validuar strikt; thirrësi NUK e pasqyron në gjendje lokale."""
+        d = self._call(
+            "POST", "/internal/sender/requests", json_body=payload,
+            rejected=(404, 409, 413, 422), max_bytes=8192,
+        )  # fmt: skip
+        ok = (
+            isinstance(d, dict)
+            and d.get("status") in ("accepted", "duplicate")
+            and d.get("operation_id") == payload.get("operation_id")
+            and d.get("outcome") in SENDER_ACK_OUTCOMES
+            and isinstance(d.get("registry_ref"), str)
+        )
+        if ok:
+            try:
+                uuid.UUID(d["registry_ref"])
+            except ValueError:
+                ok = False
+        if not ok:
+            raise CpProtocolError("sender request response is malformed")
         return d
 
     def get_reconciliation(self, enterprise_id: uuid.UUID) -> dict:

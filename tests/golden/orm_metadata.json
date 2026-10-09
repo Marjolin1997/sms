@@ -5316,6 +5316,198 @@
    "ix_sms_sender_ids_owner_ref:['owner_ref']:False"
   ]
  },
+ "sms_sender_request_outbox": {
+  "columns": {
+   "ack_outcome": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(24)"
+   },
+   "ack_registry_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "attempts": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "INTEGER"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "external_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "last_error_code": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(32)"
+   },
+   "leased_until": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "next_attempt_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "operation_id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "payload": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "JSON"
+   },
+   "request_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "request_type": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(12)"
+   },
+   "schema_version": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(24)"
+   },
+   "sender_id": {
+    "default": null,
+    "fks": [
+     "sms_sender_ids.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "sent_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "state": {
+    "default": "scalar:'pending'",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "pending",
+    "type": "VARCHAR(10)"
+   },
+   "updated_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_sender_request_outbox_attempts",
+   "CheckConstraint:ck_sms_sender_request_outbox_external_ref",
+   "CheckConstraint:ck_sms_sender_request_outbox_request_type",
+   "CheckConstraint:ck_sms_sender_request_outbox_state",
+   "ForeignKeyConstraint:fk_sms_sender_request_outbox_sender_id_sms_sender_ids",
+   "PrimaryKeyConstraint:pk_sms_sender_request_outbox",
+   "UniqueConstraint:uq_sms_sender_request_outbox_operation_id"
+  ],
+  "indexes": [
+   "ix_sms_sender_request_outbox_enterprise_id:['enterprise_id']:False",
+   "ix_sms_sender_request_outbox_sender:['sender_id', 'id']:False",
+   "ix_sms_sender_request_outbox_state_next:['state', 'next_attempt_at']:False",
+   "uq_sms_sender_request_outbox_one_request:['sender_id']:True"
+  ]
+ },
  "sms_sender_sync_cursor": {
   "columns": {
    "authorization_generation": {

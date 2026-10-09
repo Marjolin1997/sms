@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import Conflict, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, SenderDecision, SenderId
-from app.services import approvals
+from app.services import approvals, sender_request_outbox
 from app.services import sender_authorization as sa
 from app.services.sender_authorization import (  # noqa: F401  (ri-eksport për përputhshmëri)
     ALNUM,
@@ -72,6 +72,7 @@ def request(
             approvals.transition(existing, "resubmit", who)
             db.flush()
             _record(db, existing, "resubmitted", who, None, before)
+            sender_request_outbox.enqueue(db, existing, "resubmitted")
         return existing
     s = SenderId(
         owner_ref=ref(owner), country=country, value=n.display, kind=n.kind, norm_value=n.norm
@@ -83,6 +84,7 @@ def request(
     except IntegrityError as e:
         raise Conflict("a request for this sender id and country is already in progress") from e
     _record(db, s, "requested", who, None, None)
+    sender_request_outbox.enqueue(db, s, "requested")
     return s
 
 

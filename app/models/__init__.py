@@ -36,6 +36,7 @@ from app.models.pricing import (  # noqa: F401
     PricingVersion,
 )
 from app.models.rates import Rate, RateCard, RateCardVersion  # noqa: F401
+from app.models.sender_request import SenderRequestOutbox  # noqa: F401
 from app.models.sender_sync import (  # noqa: F401
     SenderSyncCursor,
     SyncedSenderAuthorization,

@@ -471,6 +471,7 @@ def kenv(make_db):
             ("c-price", ["pricing:read"]),
             ("c-bill", ["billing:report"]),
             ("c-send", ["sender:read"]),
+            ("c-sreq", ["sender:report"]),
         ):
             service_auth.create_client(s, cid, scopes, [e1.id])
             service_auth.add_key(s, cid, "k1", public)
@@ -495,6 +496,7 @@ def endpoints(c):
         "money:report": [("GET", f"/internal/money/reconciliation?enterprise_id={c.ids['e1']}", None), ("POST", "/internal/money/usage-reports", {})],
         "pricing:read": [("GET", "/internal/pricing/state", None), ("GET", "/internal/pricing/snapshot", None)],
         "billing:report": [("POST", "/internal/billing/usage-reports", {})],
+        "sender:report": [("POST", "/internal/sender/requests", {})],
         "sender:read": [("GET", "/internal/sender/state", None), ("GET", "/internal/sender/snapshot", None), ("GET", f"/internal/sender/changes?after_seq=0&epoch={ep}&generation=1", None)],
     }  # fmt: skip
 
@@ -506,6 +508,7 @@ CLIENT_OF = {
     "pricing:read": "c-price",
     "billing:report": "c-bill",
     "sender:read": "c-send",
+    "sender:report": "c-sreq",
 }
 
 
@@ -516,7 +519,7 @@ def call(c, method, url, token, body=None):
     return getattr(c, method.lower())(url, **kw)
 
 
-def test_the_scope_set_is_exactly_the_six_known_scopes_and_each_endpoint_requires_exactly_its_own(
+def test_the_scope_set_is_exactly_the_seven_known_scopes_and_each_endpoint_requires_exactly_its_own(
     kenv,
 ):
     assert ALLOWED_SCOPES == {
@@ -526,6 +529,7 @@ def test_the_scope_set_is_exactly_the_six_known_scopes_and_each_endpoint_require
         "pricing:read",
         "billing:report",
         "sender:read",
+        "sender:report",
     }
     eps = endpoints(kenv)
     for scope, routes in eps.items():

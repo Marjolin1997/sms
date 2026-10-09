@@ -77,7 +77,7 @@ def test_central_0023_is_additive_reversible_and_matches_metadata(make_db):
             )
             == []
         )
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0027"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0028"
     central_alembic(url, "downgrade", "0022")
     assert "billing_usage_reports" not in inspect(eng).get_table_names()
     assert {c["name"] for c in inspect(eng).get_columns("billing_periods")} == cols_before

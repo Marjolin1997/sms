@@ -241,3 +241,42 @@ class SenderSyncOutbox(Base):
 @event.listens_for(SenderSyncOutbox, "before_delete")
 def _outbox_append_only(*_) -> None:
     raise SenderImmutableError("sender_sync_outbox rows are append-only")
+
+
+class SenderRequestOperation(Base):
+    """M10-S3: veprimet logjike të pranuara nga Enterprise (`sender.request.v1`). `operation_id` UNIQUE = dedupe i transportit at-least-once: i njëjti veprim
+    nuk prodhon kurrë efekt të dytë. Shkruhet në fund të veprimit, në të njëjtin transaksion me regjistrin/vendimin; APPEND-ONLY."""
+
+    __tablename__ = "sender_request_operations"
+
+    operation_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("enterprises.id", ondelete="RESTRICT")
+    )
+    registry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("sender_registry.id", ondelete="RESTRICT")
+    )
+    external_ref: Mapped[str] = mapped_column(String(64))
+    operation: Mapped[str] = mapped_column(String(8))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    outcome: Mapped[str] = mapped_column(String(24))
+    auto: Mapped[str] = mapped_column(String(16))
+    status_after: Mapped[str] = mapped_column(String(12))
+    decision_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_sender_request_operations_registry", "registry_id", "received_at"),
+        CheckConstraint("operation in ('request', 'resubmit')", name="operation"),
+        CheckConstraint(
+            "outcome in ('created', 'existing', 'resubmitted', 'noop_pending', 'noop_approved')",
+            name="outcome",
+        ),
+        CheckConstraint("auto in ('not_applicable', 'approved', 'denied', 'blocked')", name="auto"),
+    )
+
+
+@event.listens_for(SenderRequestOperation, "before_update")
+@event.listens_for(SenderRequestOperation, "before_delete")
+def _operation_append_only(*_) -> None:
+    raise SenderImmutableError("sender_request_operations rows are append-only")

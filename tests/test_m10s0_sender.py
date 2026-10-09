@@ -544,7 +544,7 @@ def _drift(conn):
         repr(i)
         for d in compare_metadata(ctx, Base.metadata)
         for i in (d if isinstance(d, list) else [d])
-        if any(t in repr(i) for t in TOUCHED)
+        if any(t in repr(i) for t in TOUCHED) and "sms_sender_request_outbox" not in repr(i)
     ]
 
 

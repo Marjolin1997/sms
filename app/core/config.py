@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     sender_sync_enabled: bool = False
     sender_poll_interval_seconds: int = Field(30, ge=5, le=3600)
     sender_snapshot_interval_seconds: int = Field(3600, ge=60, le=86400)
+    # M10-S3: raportimi i kërkesave të sender-ave drejt Central (roli `sender_request_reporter`; jo në rrugën e kërkesës së klientit).
+    sender_request_reporting: bool = False
+    sender_request_interval_seconds: int = Field(30, ge=5, le=3600)
+    sender_request_alert_age_seconds: int = Field(900, ge=60, le=604800)
     # M9-g4: autoriteti i FATURIMIT periodik. local = Enterprise lëshon (sjellja e sotme) · shadow = Enterprise lëshon ende; Central krahason pa lëshuar ·
     # central = Central lëshon; faturimi/shlyerja/planet legacy refuzohen fail-closed (historia mbetet vetëm-lexim). Në prodhim `central` kërkon ACK
     # (pas `scripts.billing_authority_readiness` + `apps.central.tools.billing_authority_readiness`).
@@ -202,6 +206,8 @@ class Settings(BaseSettings):
             )
         if self.sender_sync_enabled and not self.cp_base_url.startswith("https://"):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_SYNC_ENABLED is true")
+        if self.sender_request_reporting and not self.cp_base_url.startswith("https://"):
+            bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_REQUEST_REPORTING is true")
         if self.money_authority != "local" and not self.cp_base_url.startswith("https://"):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_MONEY_AUTHORITY is not local")
         if self.money_authority == "central" and not self.money_authority_ack:

@@ -48,6 +48,7 @@ from apps.central.models.sender import (  # noqa: F401
     CountrySenderPolicy,
     SenderDecision,
     SenderRegistry,
+    SenderRequestOperation,
 )
 from apps.central.models.service_auth import (
     ServiceAssertionJti,
