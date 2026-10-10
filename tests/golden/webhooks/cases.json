@@ -1,0 +1,1367 @@
+[
+ {
+  "name": "message.sent",
+  "db": true,
+  "event": {
+   "id": 100,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "sent",
+    "segments": 1
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "message.sent.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "sent"
+   },
+   "id": "evt_100",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=1b1397705a25d23bf7e64316c9b50d5ee6e9d8ccd9bab3b66d6c4b1279c5a196"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=1b1397705a25d23bf7e64316c9b50d5ee6e9d8ccd9bab3b66d6c4b1279c5a196",
+   "x-sms-event-id": "evt_100",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "message.delivered",
+  "db": true,
+  "event": {
+   "id": 101,
+   "type": "message.delivered",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "delivered",
+    "segments": 2
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "message.delivered.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 2,
+    "status": "delivered"
+   },
+   "id": "evt_101",
+   "type": "message.delivered"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=8441e1d7fd08cf1825def5cf071ffaa945962dd51043694c507b21e34e0f9226"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=8441e1d7fd08cf1825def5cf071ffaa945962dd51043694c507b21e34e0f9226",
+   "x-sms-event-id": "evt_101",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "message.failed.error_code_null",
+  "db": true,
+  "event": {
+   "id": 102,
+   "type": "message.failed",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "failed",
+    "segments": 1,
+    "error_code": null
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "message.failed.error_code_null.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "error_code": null,
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "failed"
+   },
+   "id": "evt_102",
+   "type": "message.failed"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=7d24fdcdcc1018e5f100f104aa43f396ca6aaba392040c3220f41d476924894d"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=7d24fdcdcc1018e5f100f104aa43f396ca6aaba392040c3220f41d476924894d",
+   "x-sms-event-id": "evt_102",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "message.failed.error_code_value",
+  "db": true,
+  "event": {
+   "id": 103,
+   "type": "message.failed",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "failed",
+    "segments": 1,
+    "error_code": "rejected:invalid_number"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "message.failed.error_code_value.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "error_code": "rejected:invalid_number",
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "failed"
+   },
+   "id": "evt_103",
+   "type": "message.failed"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=15c04c0ead0f6b26e51f7d634e8897bf6150ca66dde9ee108b22e73f12ee2911"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=15c04c0ead0f6b26e51f7d634e8897bf6150ca66dde9ee108b22e73f12ee2911",
+   "x-sms-event-id": "evt_103",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "message.received.non_ascii",
+  "db": true,
+  "event": {
+   "id": 104,
+   "type": "message.received",
+   "resource_type": "inbound",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "from": "355691234567",
+    "to": "355690000001",
+    "text": "P\u00ebrsh\u00ebndetje \u4f60\u597d \ud83d\ude00 \"ok\" \\ \n",
+    "action": null,
+    "keyword": null
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "message.received.non_ascii.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "action": null,
+    "from": "355691234567",
+    "keyword": null,
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "inbound",
+    "text": "P\u00ebrsh\u00ebndetje \u4f60\u597d \ud83d\ude00 \"ok\" \\ \n",
+    "to": "355690000001"
+   },
+   "id": "evt_104",
+   "type": "message.received"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=ba6b5e9c19a79452c1a209d0e5dbffde7f88f79352d83d75c2714e2d93bb3fc3"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=ba6b5e9c19a79452c1a209d0e5dbffde7f88f79352d83d75c2714e2d93bb3fc3",
+   "x-sms-event-id": "evt_104",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "email.sent",
+  "db": true,
+  "event": {
+   "id": 105,
+   "type": "email.sent",
+   "resource_type": "email",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "sent"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "email.sent.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "email",
+    "status": "sent"
+   },
+   "id": "evt_105",
+   "type": "email.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=f89d2191e2f4c106f373c280beda84894d78d728414b15922ba5433d2e668d8f"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=f89d2191e2f4c106f373c280beda84894d78d728414b15922ba5433d2e668d8f",
+   "x-sms-event-id": "evt_105",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "email.delivered",
+  "db": true,
+  "event": {
+   "id": 106,
+   "type": "email.delivered",
+   "resource_type": "email",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "delivered"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "email.delivered.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "email",
+    "status": "delivered"
+   },
+   "id": "evt_106",
+   "type": "email.delivered"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=6c6e40cd336d17c83fac8f1e2be7c70711bf96485154b9dd9eccaf21dc3e096c"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=6c6e40cd336d17c83fac8f1e2be7c70711bf96485154b9dd9eccaf21dc3e096c",
+   "x-sms-event-id": "evt_106",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "email.bounced",
+  "db": true,
+  "event": {
+   "id": 107,
+   "type": "email.bounced",
+   "resource_type": "email",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "bounced",
+    "reason": "550 5.1.1 user unknown"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "email.bounced.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "reason": "550 5.1.1 user unknown",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "email",
+    "status": "bounced"
+   },
+   "id": "evt_107",
+   "type": "email.bounced"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=d087248913fd1413be5418f4dbc50dfb4a30805566620790bafe621f4298d63e"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=d087248913fd1413be5418f4dbc50dfb4a30805566620790bafe621f4298d63e",
+   "x-sms-event-id": "evt_107",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "email.complained",
+  "db": true,
+  "event": {
+   "id": 108,
+   "type": "email.complained",
+   "resource_type": "email",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "complained",
+    "reason": "abuse"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "email.complained.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "reason": "abuse",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "email",
+    "status": "complained"
+   },
+   "id": "evt_108",
+   "type": "email.complained"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=0a9525f2b6f8677bebf0f0bdb7f85dda00f75a2968ac57840dffa8b496ddc6d3"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=0a9525f2b6f8677bebf0f0bdb7f85dda00f75a2968ac57840dffa8b496ddc6d3",
+   "x-sms-event-id": "evt_108",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "email.failed",
+  "db": true,
+  "event": {
+   "id": 109,
+   "type": "email.failed",
+   "resource_type": "email",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "failed",
+    "reason": null
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "email.failed.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "email_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "reason": null,
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "email",
+    "status": "failed"
+   },
+   "id": "evt_109",
+   "type": "email.failed"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=57b1673eb3ee283c93c2052ea9bb61d644878c3ec0cc124f6eacd003665c964b"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=57b1673eb3ee283c93c2052ea9bb61d644878c3ec0cc124f6eacd003665c964b",
+   "x-sms-event-id": "evt_109",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "campaign.running",
+  "db": true,
+  "event": {
+   "id": 110,
+   "type": "campaign.running",
+   "resource_type": "campaign",
+   "resource_id": "42",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "status": "running",
+    "pause_reason": null
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "campaign.running.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "pause_reason": null,
+    "resource_id": "42",
+    "resource_type": "campaign",
+    "status": "running"
+   },
+   "id": "evt_110",
+   "type": "campaign.running"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=7d7032fc1949f5e76e70aa349071759e45f35a5145ce0133094e65b79365ee11"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=7d7032fc1949f5e76e70aa349071759e45f35a5145ce0133094e65b79365ee11",
+   "x-sms-event-id": "evt_110",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "campaign.paused",
+  "db": true,
+  "event": {
+   "id": 111,
+   "type": "campaign.paused",
+   "resource_type": "campaign",
+   "resource_id": "42",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "status": "paused",
+    "pause_reason": "insufficient_funds"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "campaign.paused.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "pause_reason": "insufficient_funds",
+    "resource_id": "42",
+    "resource_type": "campaign",
+    "status": "paused"
+   },
+   "id": "evt_111",
+   "type": "campaign.paused"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=fe218ab5301e5c0407cfbc19ea409234df395bc9a33c636956db3967f9f003c8"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=fe218ab5301e5c0407cfbc19ea409234df395bc9a33c636956db3967f9f003c8",
+   "x-sms-event-id": "evt_111",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "campaign.completed",
+  "db": true,
+  "event": {
+   "id": 112,
+   "type": "campaign.completed",
+   "resource_type": "campaign",
+   "resource_id": "42",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "status": "completed",
+    "pause_reason": null
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "campaign.completed.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "pause_reason": null,
+    "resource_id": "42",
+    "resource_type": "campaign",
+    "status": "completed"
+   },
+   "id": "evt_112",
+   "type": "campaign.completed"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=04cbfd5020303e3491c962a8c4fe1a6f53b187774d4a1e635995664c150f417a"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=04cbfd5020303e3491c962a8c4fe1a6f53b187774d4a1e635995664c150f417a",
+   "x-sms-event-id": "evt_112",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "campaign.cancelled",
+  "db": true,
+  "event": {
+   "id": 113,
+   "type": "campaign.cancelled",
+   "resource_type": "campaign",
+   "resource_id": "42",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "status": "cancelled",
+    "pause_reason": null
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "campaign.cancelled.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "campaign_id": 42,
+    "name": "Black Friday",
+    "pause_reason": null,
+    "resource_id": "42",
+    "resource_type": "campaign",
+    "status": "cancelled"
+   },
+   "id": "evt_113",
+   "type": "campaign.cancelled"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=35e8a2cac8992c724d02cefd621a69bc62b04d49310878068d883851b00cb11d"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=35e8a2cac8992c724d02cefd621a69bc62b04d49310878068d883851b00cb11d",
+   "x-sms-event-id": "evt_113",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "consent.opted_in",
+  "db": true,
+  "event": {
+   "id": 114,
+   "type": "consent.opted_in",
+   "resource_type": "consent",
+   "resource_id": "7",
+   "data": {
+    "channel": "sms",
+    "address": "355691234567",
+    "reason": null,
+    "hard": false
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "consent.opted_in.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "address": "355691234567",
+    "channel": "sms",
+    "hard": false,
+    "reason": null,
+    "resource_id": "7",
+    "resource_type": "consent"
+   },
+   "id": "evt_114",
+   "type": "consent.opted_in"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=70c598b8b09b6d9b5ab454c999effaf72447525cab75c278d896a9f52c9ad915"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=70c598b8b09b6d9b5ab454c999effaf72447525cab75c278d896a9f52c9ad915",
+   "x-sms-event-id": "evt_114",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "consent.opted_out",
+  "db": true,
+  "event": {
+   "id": 115,
+   "type": "consent.opted_out",
+   "resource_type": "consent",
+   "resource_id": "7",
+   "data": {
+    "channel": "email",
+    "address": "ana@example.com",
+    "reason": "stop",
+    "hard": true
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "consent.opted_out.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "address": "ana@example.com",
+    "channel": "email",
+    "hard": true,
+    "reason": "stop",
+    "resource_id": "7",
+    "resource_type": "consent"
+   },
+   "id": "evt_115",
+   "type": "consent.opted_out"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=5dc50af5402ac747dde6ed9a6f3eec0f4711109d9d5d166e378d2a5521edbb8b"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=5dc50af5402ac747dde6ed9a6f3eec0f4711109d9d5d166e378d2a5521edbb8b",
+   "x-sms-event-id": "evt_115",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "invoice.issued",
+  "db": true,
+  "event": {
+   "id": 116,
+   "type": "invoice.issued",
+   "resource_type": "invoice",
+   "resource_id": "INV-2030-0001",
+   "data": {
+    "invoice_id": "INV-2030-0001",
+    "total": "12.500000",
+    "currency": "EUR",
+    "due_at": "2030-01-15T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "invoice.issued.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "currency": "EUR",
+    "due_at": "2030-01-15T12:00:00+00:00",
+    "invoice_id": "INV-2030-0001",
+    "resource_id": "INV-2030-0001",
+    "resource_type": "invoice",
+    "total": "12.500000"
+   },
+   "id": "evt_116",
+   "type": "invoice.issued"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=93f173d89b275042f9f5e6374aca0fd679e67496858da0c13fcb5377359441c6"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=93f173d89b275042f9f5e6374aca0fd679e67496858da0c13fcb5377359441c6",
+   "x-sms-event-id": "evt_116",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "invoice.paid",
+  "db": true,
+  "event": {
+   "id": 117,
+   "type": "invoice.paid",
+   "resource_type": "invoice",
+   "resource_id": "INV-2030-0001",
+   "data": {
+    "invoice_id": "INV-2030-0001",
+    "total": "12.500000",
+    "via": "wallet"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "invoice.paid.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "invoice_id": "INV-2030-0001",
+    "resource_id": "INV-2030-0001",
+    "resource_type": "invoice",
+    "total": "12.500000",
+    "via": "wallet"
+   },
+   "id": "evt_117",
+   "type": "invoice.paid"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=53ddd08d349d1dd853e540b84ce5abaae38a5249379d8e23b939d5e501b320cb"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=53ddd08d349d1dd853e540b84ce5abaae38a5249379d8e23b939d5e501b320cb",
+   "x-sms-event-id": "evt_117",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "payment.succeeded",
+  "db": true,
+  "event": {
+   "id": 118,
+   "type": "payment.succeeded",
+   "resource_type": "payment",
+   "resource_id": "9",
+   "data": {
+    "payment_id": 9,
+    "purpose": "topup",
+    "amount": "10.000000",
+    "currency": "EUR"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "payment.succeeded.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "amount": "10.000000",
+    "currency": "EUR",
+    "payment_id": 9,
+    "purpose": "topup",
+    "resource_id": "9",
+    "resource_type": "payment"
+   },
+   "id": "evt_118",
+   "type": "payment.succeeded"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=7b4cfbb5834f38fb18509079adfb4ea054ba0f7bb67a62d2e6ac27313aa5fbcf"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=7b4cfbb5834f38fb18509079adfb4ea054ba0f7bb67a62d2e6ac27313aa5fbcf",
+   "x-sms-event-id": "evt_118",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "payment.failed",
+  "db": true,
+  "event": {
+   "id": 119,
+   "type": "payment.failed",
+   "resource_type": "payment",
+   "resource_id": "9",
+   "data": {
+    "payment_id": 9,
+    "purpose": "topup"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "payment.failed.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "payment_id": 9,
+    "purpose": "topup",
+    "resource_id": "9",
+    "resource_type": "payment"
+   },
+   "id": "evt_119",
+   "type": "payment.failed"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=1a2f05074a4fe72b4ec9dd6f4c8614d89f6f99db134af3aa3ae8b214b7ed6ff3"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=1a2f05074a4fe72b4ec9dd6f4c8614d89f6f99db134af3aa3ae8b214b7ed6ff3",
+   "x-sms-event-id": "evt_119",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "wallet.low_balance",
+  "db": true,
+  "event": {
+   "id": 120,
+   "type": "wallet.low_balance",
+   "resource_type": "wallet",
+   "resource_id": "3",
+   "data": {
+    "currency": "EUR",
+    "available": "4.950000",
+    "threshold": "5.000000"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "wallet.low_balance.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "available": "4.950000",
+    "currency": "EUR",
+    "resource_id": "3",
+    "resource_type": "wallet",
+    "threshold": "5.000000"
+   },
+   "id": "evt_120",
+   "type": "wallet.low_balance"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=380079ebfe797457580ad04d4e8de8c3d11a431c0c2a6e4336eae115de293549"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=380079ebfe797457580ad04d4e8de8c3d11a431c0c2a6e4336eae115de293549",
+   "x-sms-event-id": "evt_120",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "webhook.ping",
+  "db": true,
+  "event": {
+   "id": 121,
+   "type": "webhook.ping",
+   "resource_type": "endpoint",
+   "resource_id": "1",
+   "data": {
+    "ok": true
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "webhook.ping.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "ok": true,
+    "resource_id": "1",
+    "resource_type": "endpoint"
+   },
+   "id": "evt_121",
+   "type": "webhook.ping"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=ae59e0b5228b001bb7e7620fdad4a8c77e6f8e6a162a3ac9c136491cf933ecb2"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=ae59e0b5228b001bb7e7620fdad4a8c77e6f8e6a162a3ac9c136491cf933ecb2",
+   "x-sms-event-id": "evt_121",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.microseconds_zero",
+  "db": true,
+  "event": {
+   "id": 122,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "sent",
+    "segments": 1
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.microseconds_zero.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "sent"
+   },
+   "id": "evt_122",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=0d7341b8288f77f15699e8773cefe436cd1c71d56d7ab7e9774da71125df64a5"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=0d7341b8288f77f15699e8773cefe436cd1c71d56d7ab7e9774da71125df64a5",
+   "x-sms-event-id": "evt_122",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.microseconds_nonzero",
+  "db": true,
+  "event": {
+   "id": 123,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "sent",
+    "segments": 1
+   },
+   "created_at": "2030-01-01T12:00:00.123456+00:00"
+  },
+  "body_file": "edge.microseconds_nonzero.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00.123456+00:00",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "sent"
+   },
+   "id": "evt_123",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=7c0fa7438cb7340f5a1a5032a6437a59bb8e2c2c1c0fdb5c2d7cc8de754c06e8"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=7c0fa7438cb7340f5a1a5032a6437a59bb8e2c2c1c0fdb5c2d7cc8de754c06e8",
+   "x-sms-event-id": "evt_123",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.naive_created_at",
+  "db": false,
+  "event": {
+   "id": 124,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "sent",
+    "segments": 1
+   },
+   "created_at": "2030-01-01T12:00:00"
+  },
+  "body_file": "edge.naive_created_at.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "sent"
+   },
+   "id": "evt_124",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=9b02b67a38f9b31eb9b96bd8879b03bda0e2d41eeae60f431840edc497d3dede"
+  },
+  "headers": null
+ },
+ {
+  "name": "edge.offset_created_at",
+  "db": false,
+  "event": {
+   "id": 125,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "status": "sent",
+    "segments": 1
+   },
+   "created_at": "2030-01-01T14:00:00+02:00"
+  },
+  "body_file": "edge.offset_created_at.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "sent"
+   },
+   "id": "evt_125",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=0b537430c18d810a5912a70bd8a02c29363915c711aaf50aad334bff97bdcedc"
+  },
+  "headers": null
+ },
+ {
+  "name": "edge.decimal_scale_short",
+  "db": true,
+  "event": {
+   "id": 126,
+   "type": "wallet.low_balance",
+   "resource_type": "wallet",
+   "resource_id": "3",
+   "data": {
+    "currency": "EUR",
+    "available": "5",
+    "threshold": "5"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.decimal_scale_short.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "available": "5",
+    "currency": "EUR",
+    "resource_id": "3",
+    "resource_type": "wallet",
+    "threshold": "5"
+   },
+   "id": "evt_126",
+   "type": "wallet.low_balance"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=27e71f4ed0158a6371378fd56ab30308151adbd1bb0fe24e88c1bc0b633dd7e8"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=27e71f4ed0158a6371378fd56ab30308151adbd1bb0fe24e88c1bc0b633dd7e8",
+   "x-sms-event-id": "evt_126",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.decimal_scale_long",
+  "db": true,
+  "event": {
+   "id": 127,
+   "type": "wallet.low_balance",
+   "resource_type": "wallet",
+   "resource_id": "3",
+   "data": {
+    "currency": "EUR",
+    "available": "5.0000",
+    "threshold": "5.000000"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.decimal_scale_long.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "available": "5.0000",
+    "currency": "EUR",
+    "resource_id": "3",
+    "resource_type": "wallet",
+    "threshold": "5.000000"
+   },
+   "id": "evt_127",
+   "type": "wallet.low_balance"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=cfdb6e5a65c45c9e3c6024f3b40786ad44909168b2afa607b002ef87b3179a92"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=cfdb6e5a65c45c9e3c6024f3b40786ad44909168b2afa607b002ef87b3179a92",
+   "x-sms-event-id": "evt_127",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.data_none",
+  "db": true,
+  "event": {
+   "id": 128,
+   "type": "webhook.ping",
+   "resource_type": "endpoint",
+   "resource_id": "1",
+   "data": null,
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.data_none.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "resource_id": "1",
+    "resource_type": "endpoint"
+   },
+   "id": "evt_128",
+   "type": "webhook.ping"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=fddb3679197518494ee8c5319f675d68a24a3cbbcffd3eda7519575e5d5f70c3"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=fddb3679197518494ee8c5319f675d68a24a3cbbcffd3eda7519575e5d5f70c3",
+   "x-sms-event-id": "evt_128",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.data_empty",
+  "db": true,
+  "event": {
+   "id": 129,
+   "type": "webhook.ping",
+   "resource_type": "endpoint",
+   "resource_id": "1",
+   "data": {},
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.data_empty.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "resource_id": "1",
+    "resource_type": "endpoint"
+   },
+   "id": "evt_129",
+   "type": "webhook.ping"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=51795ebf5a23738a52b3e8f968c2a74ddfc7e3172be4e8c54eccd74c7600d66e"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=51795ebf5a23738a52b3e8f968c2a74ddfc7e3172be4e8c54eccd74c7600d66e",
+   "x-sms-event-id": "evt_129",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.key_ordering",
+  "db": true,
+  "event": {
+   "id": 130,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "zeta": 1,
+    "alpha": 2,
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "Beta": 3,
+    "segments": 1,
+    "status": "sent"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.key_ordering.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "Beta": 3,
+    "alpha": 2,
+    "message_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "segments": 1,
+    "status": "sent",
+    "zeta": 1
+   },
+   "id": "evt_130",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=a13c562b53aa3ffaba3bda2444e3471eb273ece6dd4c685d153bdff21730d496"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=a13c562b53aa3ffaba3bda2444e3471eb273ece6dd4c685d153bdff21730d496",
+   "x-sms-event-id": "evt_130",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.nested_structure",
+  "db": true,
+  "event": {
+   "id": 131,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+   "data": {
+    "z": {
+     "y": [
+      3,
+      1,
+      {
+       "b": null,
+       "a": true
+      }
+     ],
+     "x": {}
+    },
+    "id": "inner",
+    "type": "inner"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.nested_structure.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "id": "inner",
+    "resource_id": "6f1c2a9e-3b7d-4c55-9a10-0d2e5f7a8b11",
+    "resource_type": "message",
+    "type": "inner",
+    "z": {
+     "x": {},
+     "y": [
+      3,
+      1,
+      {
+       "a": true,
+       "b": null
+      }
+     ]
+    }
+   },
+   "id": "evt_131",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=1600471f86ed703a7c90f1396c27adaa388c75e8cac6ac1f3cfd1428ff87fabc"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=1600471f86ed703a7c90f1396c27adaa388c75e8cac6ac1f3cfd1428ff87fabc",
+   "x-sms-event-id": "evt_131",
+   "x-sms-delivery-id": "1"
+  }
+ },
+ {
+  "name": "edge.overwrite_resource_fields",
+  "db": true,
+  "event": {
+   "id": 132,
+   "type": "message.sent",
+   "resource_type": "message",
+   "resource_id": "m1",
+   "data": {
+    "resource_type": "EVIL",
+    "resource_id": "x",
+    "status": "sent"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  },
+  "body_file": "edge.overwrite_resource_fields.body",
+  "parsed": {
+   "created_at": "2030-01-01T12:00:00+00:00",
+   "data": {
+    "resource_id": "x",
+    "resource_type": "EVIL",
+    "status": "sent"
+   },
+   "id": "evt_132",
+   "type": "message.sent"
+  },
+  "signature": {
+   "secret": "whsec_test_contract_v1",
+   "timestamp": 1700000000,
+   "header": "t=1700000000,v1=e5ed90cdea23b1e3ca7b445c376111335089a693ace60ab4f0a465de97819a02"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "user-agent": "sms-platform-webhooks/1",
+   "x-sms-signature": "t=1700000000,v1=e5ed90cdea23b1e3ca7b445c376111335089a693ace60ab4f0a465de97819a02",
+   "x-sms-event-id": "evt_132",
+   "x-sms-delivery-id": "1"
+  }
+ }
+]

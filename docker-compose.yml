@@ -1,27 +1,43 @@
 services:
   db:
-    image: mariadb:11
+    image: postgres:16-alpine
     environment:
-      MARIADB_DATABASE: sms_dev
-      MARIADB_USER: sms
-      MARIADB_PASSWORD: sms
-      MARIADB_ROOT_PASSWORD: root
-    ports: ["3307:3306"]
-    volumes: [dbdata:/var/lib/mysql]
+      POSTGRES_DB: sms_dev
+      POSTGRES_USER: sms
+      POSTGRES_PASSWORD: sms
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: [dbdata:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U sms -d sms_dev"]
       interval: 5s
       retries: 20
-  redis:
-    image: redis:7-alpine
   api:
     build: .
     environment:
-      SMS_DATABASE_URL: mysql+pymysql://sms:sms@db:3306/sms_dev?charset=utf8mb4
+      SMS_DATABASE_URL: postgresql+psycopg://sms:sms@db:5432/sms_dev
       SMS_ADMIN_API_KEY: dev-admin-key
+      SMS_PII_HMAC_KEY: dev-only-change-me
+      SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=  # vetëm për dev
     depends_on:
       db: {condition: service_healthy}
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  worker:
+    build: .
+    environment:
+      SMS_DATABASE_URL: postgresql+psycopg://sms:sms@db:5432/sms_dev
+      SMS_PII_HMAC_KEY: dev-only-change-me
+      SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=  # vetëm për dev
+    depends_on:
+      db: {condition: service_healthy}
+    command: python -m app.worker
+  webhook-worker:
+    build: .
+    environment:
+      SMS_DATABASE_URL: postgresql+psycopg://sms:sms@db:5432/sms_dev
+      SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=  # vetëm për dev
+    depends_on:
+      db: {condition: service_healthy}
+    command: python -m app.worker --role webhooks
 volumes:
   dbdata:

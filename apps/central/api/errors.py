@@ -1,0 +1,40 @@
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from apps.central.api.registration_public import PublicError
+from apps.central.core.errors import Conflict, Forbidden, Invalid, NotFound
+from apps.central.services.sync_feed import SyncApiError
+
+_MAP = {
+    NotFound: (404, "not_found"),
+    Conflict: (409, "conflict"),
+    Invalid: (422, "invalid"),
+    Forbidden: (403, "forbidden"),
+}
+
+
+def install(app: FastAPI) -> None:
+    async def sync_handler(_request: Request, e: SyncApiError):
+        detail = {"code": e.code, "message": str(e), "action": e.action}
+        return JSONResponse({"detail": detail}, status_code=e.status)
+
+    async def public_handler(_request: Request, e: PublicError):
+        detail = {"code": e.code, "message": e.message}
+        if e.code != "registration_unavailable":  # çaktivizimi i qëllimshëm s'është gabim
+            from apps.central.services import registration_metrics as m
+
+            m.inc(
+                "registration_public_5xx_total"
+                if e.status >= 500
+                else "registration_public_4xx_total"
+            )
+        return JSONResponse({"detail": detail}, status_code=e.status)
+
+    app.add_exception_handler(SyncApiError, sync_handler)
+    app.add_exception_handler(PublicError, public_handler)
+    for exc, (status, code) in _MAP.items():
+
+        async def handler(_request: Request, e: Exception, status=status, code=code):
+            return JSONResponse({"detail": {"code": code, "message": str(e)}}, status_code=status)
+
+        app.add_exception_handler(exc, handler)

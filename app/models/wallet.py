@@ -8,11 +8,12 @@ Rregulla të hekurta:
 """
 
 import enum
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -24,18 +25,21 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
 )
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.timeutil import utcnow  # noqa: F401  (re-export i përputhshmërisë; shih më poshtë)
+from app.models.tenant import TenantOwned
 
 MONEY = Numeric(20, 6)
 
 
-def utcnow() -> datetime:
-    return datetime.now(UTC)
+# `utcnow` mbetet këtu vetëm si ALIAS PËRKOHSHËM përputhshmërie (M3-b): burimi i së vërtetës është
+# `app.core.timeutil.utcnow`; modelet e tjera nuk guxojnë ta importojnë nga ky modul (e ruan test).
 
 
-class Wallet(Base):
+class Wallet(TenantOwned, Base):
     """Rreshti që kyçet (SELECT ... FOR UPDATE) për të serializuar lëvizjet e parave.
     Nuk mban balancë; balanca jeton vetëm në ledger."""
 
@@ -48,6 +52,12 @@ class Wallet(Base):
     owner_ref: Mapped[str] = mapped_column(String(64), index=True)
     currency: Mapped[str] = mapped_column(String(3))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Njoftim kur balanca e disponueshme bie nën këtë prag (event wallet.low_balance, një herë
+    # për çdo rënie; rifutet kur balanca ngrihet sërish mbi prag).
+    low_balance_threshold: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    low_balance_notified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false()
+    )
 
     __table_args__ = (UniqueConstraint("owner_ref", "currency"),)
 
@@ -59,6 +69,10 @@ class EntryType(str, enum.Enum):
     RELEASE = "release"
     REFUND = "refund"
     ADJUSTMENT = "adjustment"
+    INVOICE = "invoice"  # pagesë fature nga wallet (debit)
+    # M9-c: kredi e autorizuar nga Central (vetëm `money_sync`) + reversal-i konservativ i saj
+    GRANT = "grant"
+    GRANT_REVERSAL = "grant_reversal"
 
 
 class LedgerEntry(Base):

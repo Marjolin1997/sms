@@ -1,0 +1,629 @@
+[
+ {
+  "name": "enterprise_active",
+  "body_file": "enterprise_active.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000001",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 1,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 1,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-000000000001",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "enterprise_suspended",
+  "body_file": "enterprise_suspended.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "suspended"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000002",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 2,
+   "schema": "cp.v1",
+   "seq": 2,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "suspended"
+   },
+   "seq": 2,
+   "revision": 2,
+   "event_id": "00000000-0000-0000-0000-000000000002",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "enterprise_non_ascii",
+  "body_file": "enterprise_non_ascii.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Shoq\u00ebria \u00c7 \u4f60\u597d \ud83d\ude00",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000003",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 3,
+   "schema": "cp.v1",
+   "seq": 3,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Shoq\u00ebria \u00c7 \u4f60\u597d \ud83d\ude00",
+    "status": "active"
+   },
+   "seq": 3,
+   "revision": 3,
+   "event_id": "00000000-0000-0000-0000-000000000003",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "sms_active",
+  "body_file": "sms_active.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "sms",
+     "code": "sms",
+     "id": "00000000-0000-0000-0000-0000000000a1"
+    },
+    "rate_limit_per_min": null,
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b1",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000004",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 4,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b1",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a1",
+     "code": "sms",
+     "channel": "sms"
+    },
+    "status": "active",
+    "rate_limit_per_min": null
+   },
+   "seq": 4,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-000000000004",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "sms_suspended",
+  "body_file": "sms_suspended.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "sms",
+     "code": "sms",
+     "id": "00000000-0000-0000-0000-0000000000a1"
+    },
+    "rate_limit_per_min": null,
+    "status": "suspended"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b1",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000005",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 2,
+   "schema": "cp.v1",
+   "seq": 5,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b1",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a1",
+     "code": "sms",
+     "channel": "sms"
+    },
+    "status": "suspended",
+    "rate_limit_per_min": null
+   },
+   "seq": 5,
+   "revision": 2,
+   "event_id": "00000000-0000-0000-0000-000000000005",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "email_active",
+  "body_file": "email_active.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "email",
+     "code": "email",
+     "id": "00000000-0000-0000-0000-0000000000a2"
+    },
+    "rate_limit_per_min": null,
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b2",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000006",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 6,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b2",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a2",
+     "code": "email",
+     "channel": "email"
+    },
+    "status": "active",
+    "rate_limit_per_min": null
+   },
+   "seq": 6,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-000000000006",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "email_suspended",
+  "body_file": "email_suspended.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "email",
+     "code": "email",
+     "id": "00000000-0000-0000-0000-0000000000a2"
+    },
+    "rate_limit_per_min": null,
+    "status": "suspended"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b2",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000007",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 2,
+   "schema": "cp.v1",
+   "seq": 7,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b2",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a2",
+     "code": "email",
+     "channel": "email"
+    },
+    "status": "suspended",
+    "rate_limit_per_min": null
+   },
+   "seq": 7,
+   "revision": 2,
+   "event_id": "00000000-0000-0000-0000-000000000007",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_high_seq",
+  "body_file": "edge_high_seq.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000008",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 9007199254740993,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 9007199254740993,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-000000000008",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_high_revision",
+  "body_file": "edge_high_revision.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-000000000009",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 4294967296,
+   "schema": "cp.v1",
+   "seq": 9,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 9,
+   "revision": 4294967296,
+   "event_id": "00000000-0000-0000-0000-000000000009",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_microseconds_zero",
+  "body_file": "edge_microseconds_zero.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000a",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 10,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 10,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-00000000000a",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_microseconds_nonzero",
+  "body_file": "edge_microseconds_nonzero.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000b",
+   "occurred_at": "2030-01-01T12:00:00.123456+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 11,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 11,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-00000000000b",
+   "created_at": "2030-01-01T12:00:00.123456+00:00"
+  }
+ },
+ {
+  "name": "edge_naive_created_at",
+  "body_file": "edge_naive_created_at.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000c",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 12,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 12,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-00000000000c",
+   "created_at": "2030-01-01T12:00:00"
+  }
+ },
+ {
+  "name": "edge_offset_created_at",
+  "body_file": "edge_offset_created_at.body",
+  "parsed": {
+   "data": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-000000000111",
+    "type": "enterprise"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000d",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 1,
+   "schema": "cp.v1",
+   "seq": 13,
+   "type": "enterprise.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise",
+   "entity_id": "00000000-0000-0000-0000-000000000111",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise.upserted",
+   "payload": {
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "name": "Acme",
+    "status": "active"
+   },
+   "seq": 13,
+   "revision": 1,
+   "event_id": "00000000-0000-0000-0000-00000000000d",
+   "created_at": "2030-01-01T14:00:00+02:00"
+  }
+ },
+ {
+  "name": "sms_rate_limit_set",
+  "body_file": "sms_rate_limit_set.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "sms",
+     "code": "sms",
+     "id": "00000000-0000-0000-0000-0000000000a1"
+    },
+    "rate_limit_per_min": 120,
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b1",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000e",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 3,
+   "schema": "cp.v1",
+   "seq": 14,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b1",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b1",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a1",
+     "code": "sms",
+     "channel": "sms"
+    },
+    "status": "active",
+    "rate_limit_per_min": 120
+   },
+   "seq": 14,
+   "revision": 3,
+   "event_id": "00000000-0000-0000-0000-00000000000e",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "email_rate_limit_set",
+  "body_file": "email_rate_limit_set.body",
+  "parsed": {
+   "data": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "channel": "email",
+     "code": "email",
+     "id": "00000000-0000-0000-0000-0000000000a2"
+    },
+    "rate_limit_per_min": 30,
+    "status": "active"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity": {
+    "id": "00000000-0000-0000-0000-0000000000b2",
+    "type": "enterprise_product"
+   },
+   "event_id": "00000000-0000-0000-0000-00000000000f",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "revision": 3,
+   "schema": "cp.v1",
+   "seq": 15,
+   "type": "enterprise_product.upserted"
+  },
+  "row": {
+   "entity_type": "enterprise_product",
+   "entity_id": "00000000-0000-0000-0000-0000000000b2",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_type": "enterprise_product.upserted",
+   "payload": {
+    "assignment_id": "00000000-0000-0000-0000-0000000000b2",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product": {
+     "id": "00000000-0000-0000-0000-0000000000a2",
+     "code": "email",
+     "channel": "email"
+    },
+    "status": "active",
+    "rate_limit_per_min": 30
+   },
+   "seq": 15,
+   "revision": 3,
+   "event_id": "00000000-0000-0000-0000-00000000000f",
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ }
+]

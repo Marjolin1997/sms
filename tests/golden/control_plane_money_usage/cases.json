@@ -1,0 +1,1022 @@
+[
+ {
+  "name": "local_plain",
+  "body_file": "local_plain.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000501",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "local",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "9.500000",
+    "held": "0.000000",
+    "gross": "9.500000",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "0.000000",
+    "grant_reversals": "0.000000",
+    "captured": "0.500000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "10.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "9.500000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": []
+  },
+  "parsed": {
+   "authority_mode": "local",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.500000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "0.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "10.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [],
+   "integrity": {
+    "ledger_sum_available": "9.500000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000501",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "9.500000",
+    "gross": "9.500000",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "0829f46a7f52c382f35a3656e0b63710702211a60952b259422de6624e4ece93",
+  "content_hash": "4b22dcf99762131082bfd1d29eb24c41fed396618838c7df874eceeb2b5506f3"
+ },
+ {
+  "name": "shadow_baseline_deferred",
+  "body_file": "shadow_baseline_deferred.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000502",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "shadow",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "10.000000",
+    "held": "2.000000",
+    "gross": "12.000000",
+    "active_hold_total": "2.000000",
+    "active_hold_count": 1
+   },
+   "baseline": {
+    "baseline_ref": "abababababababababababababababababababababababababababababababab",
+    "gross_at_cutover": "12.000000",
+    "ledger_max_id": 3,
+    "status": "active"
+   },
+   "flows": {
+    "baseline_gross": "12.000000",
+    "grants_applied": "0.000000",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "10.000000",
+    "ledger_sum_held": "2.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": [
+    {
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "status": "matched_to_existing_balance",
+     "amount": "12.000000",
+     "currency": "EUR",
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "bootstrap",
+     "baseline_ref": "abababababababababababababababababababababababababababababababab",
+     "issued_seq": 1,
+     "reversed_seq": null,
+     "updated_at": "2030-01-01T11:00:00.000000+00:00",
+     "detail": null
+    },
+    {
+     "grant_id": "00000000-0000-0000-0000-000000000102",
+     "status": "deferred_shadow",
+     "amount": "5.000000",
+     "currency": "EUR",
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "baseline_ref": null,
+     "issued_seq": 2,
+     "reversed_seq": null,
+     "updated_at": "2030-01-01T11:00:00.000000+00:00",
+     "detail": null
+    }
+   ]
+  },
+  "parsed": {
+   "authority_mode": "shadow",
+   "baseline": {
+    "baseline_ref": "abababababababababababababababababababababababababababababababab",
+    "gross_at_cutover": "12.000000",
+    "ledger_max_id": 3,
+    "status": "active"
+   },
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "12.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "0.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [
+    {
+     "amount": "12.000000",
+     "baseline_ref": "abababababababababababababababababababababababababababababababab",
+     "currency": "EUR",
+     "detail": null,
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "issued_seq": 1,
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "bootstrap",
+     "reversed_seq": null,
+     "status": "matched_to_existing_balance",
+     "updated_at": "2030-01-01T11:00:00.000000+00:00"
+    },
+    {
+     "amount": "5.000000",
+     "baseline_ref": null,
+     "currency": "EUR",
+     "detail": null,
+     "grant_id": "00000000-0000-0000-0000-000000000102",
+     "issued_seq": 2,
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "reversed_seq": null,
+     "status": "deferred_shadow",
+     "updated_at": "2030-01-01T11:00:00.000000+00:00"
+    }
+   ],
+   "integrity": {
+    "ledger_sum_available": "10.000000",
+    "ledger_sum_held": "2.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000502",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 1,
+    "active_hold_total": "2.000000",
+    "available": "10.000000",
+    "gross": "12.000000",
+    "held": "2.000000"
+   }
+  },
+  "payload_hash": "749b911c61546e36ddca87f198c1e6aed1055a641f07ab68827bc74b437c1774",
+  "content_hash": "92252c9443e35822951a7274cac135c8686eb39ade7d0fc0371ea2db3db4ea77"
+ },
+ {
+  "name": "central_applied_and_reversed",
+  "body_file": "central_applied_and_reversed.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000503",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "central",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "40.000000",
+    "held": "0.000000",
+    "gross": "40.000000",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "100.000000",
+    "grant_reversals": "60.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "40.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": [
+    {
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "status": "applied",
+     "amount": "40.000000",
+     "currency": "EUR",
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "baseline_ref": null,
+     "issued_seq": 1,
+     "reversed_seq": null,
+     "updated_at": "2030-01-01T11:00:00.000000+00:00",
+     "detail": null
+    },
+    {
+     "grant_id": "00000000-0000-0000-0000-000000000102",
+     "status": "reversed",
+     "amount": "60.000000",
+     "currency": "EUR",
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "baseline_ref": null,
+     "issued_seq": 2,
+     "reversed_seq": 9,
+     "updated_at": "2030-01-01T11:00:00.000000+00:00",
+     "detail": null
+    }
+   ]
+  },
+  "parsed": {
+   "authority_mode": "central",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "60.000000",
+    "grants_applied": "100.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [
+    {
+     "amount": "40.000000",
+     "baseline_ref": null,
+     "currency": "EUR",
+     "detail": null,
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "issued_seq": 1,
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "reversed_seq": null,
+     "status": "applied",
+     "updated_at": "2030-01-01T11:00:00.000000+00:00"
+    },
+    {
+     "amount": "60.000000",
+     "baseline_ref": null,
+     "currency": "EUR",
+     "detail": null,
+     "grant_id": "00000000-0000-0000-0000-000000000102",
+     "issued_seq": 2,
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "reversed_seq": 9,
+     "status": "reversed",
+     "updated_at": "2030-01-01T11:00:00.000000+00:00"
+    }
+   ],
+   "integrity": {
+    "ledger_sum_available": "40.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000503",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "40.000000",
+    "gross": "40.000000",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "d598a17003fb2265879d3d0956881dbe931e1fe7b3c82344cb0676864c4e59a5",
+  "content_hash": "a7dad72491e42fb0492219eea790619ed92d88834e4a205ab287af55afeb97a1"
+ },
+ {
+  "name": "central_unresolved_reversal",
+  "body_file": "central_unresolved_reversal.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000504",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "central",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "1.000000",
+    "held": "29.000000",
+    "gross": "30.000000",
+    "active_hold_total": "29.000000",
+    "active_hold_count": 2
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "30.000000",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "1.000000",
+    "ledger_sum_held": "29.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": [
+    {
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "status": "reconciliation_required",
+     "amount": "30.000000",
+     "currency": "EUR",
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "baseline_ref": null,
+     "issued_seq": 1,
+     "reversed_seq": 8,
+     "updated_at": "2030-01-01T11:00:00.000000+00:00",
+     "detail": "insufficient available funds for reversal: available=1 amount=30"
+    }
+   ]
+  },
+  "parsed": {
+   "authority_mode": "central",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "30.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [
+    {
+     "amount": "30.000000",
+     "baseline_ref": null,
+     "currency": "EUR",
+     "detail": "insufficient available funds for reversal: available=1 amount=30",
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "issued_seq": 1,
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "reversed_seq": 8,
+     "status": "reconciliation_required",
+     "updated_at": "2030-01-01T11:00:00.000000+00:00"
+    }
+   ],
+   "integrity": {
+    "ledger_sum_available": "1.000000",
+    "ledger_sum_held": "29.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000504",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 2,
+    "active_hold_total": "29.000000",
+    "available": "1.000000",
+    "gross": "30.000000",
+    "held": "29.000000"
+   }
+  },
+  "payload_hash": "98f2561f239fc9f091be6e4b4a027bc056d3e3cb146d9349ee52d3dcd877d7e5",
+  "content_hash": "bad6cb9c55ebdc821ab94db1cc4c462a5bceadbba3d7f62bf5af8ca51279f6a7"
+ },
+ {
+  "name": "negative_balance_is_representable",
+  "body_file": "negative_balance_is_representable.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000505",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "central",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "-1.000000",
+    "held": "0.000000",
+    "gross": "-1.000000",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "0.000000",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "-1.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": []
+  },
+  "parsed": {
+   "authority_mode": "central",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "0.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [],
+   "integrity": {
+    "ledger_sum_available": "-1.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000505",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "-1.000000",
+    "gross": "-1.000000",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "585cb37575cf8cb1446769853f5fbdcdbd6375f70f79ae1037c11099f1a91185",
+  "content_hash": "611325b93f8e2d0ca6e7ac81475b60354990d2b436b53bffa33a5ff59bb45ed6"
+ },
+ {
+  "name": "edge_micro_amounts",
+  "body_file": "edge_micro_amounts.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000506",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "central",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "0.000001",
+    "held": "0.000000",
+    "gross": "0.000001",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "0.000001",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "0.000001",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": [
+    {
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "status": "applied",
+     "amount": "0.000001",
+     "currency": "EUR",
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "baseline_ref": null,
+     "issued_seq": 1,
+     "reversed_seq": null,
+     "updated_at": "2030-01-01T11:00:00.000000+00:00",
+     "detail": null
+    }
+   ]
+  },
+  "parsed": {
+   "authority_mode": "central",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "0.000001",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [
+    {
+     "amount": "0.000001",
+     "baseline_ref": null,
+     "currency": "EUR",
+     "detail": null,
+     "grant_id": "00000000-0000-0000-0000-000000000101",
+     "issued_seq": 1,
+     "product_id": "00000000-0000-0000-0000-0000000000a1",
+     "purpose": "standard",
+     "reversed_seq": null,
+     "status": "applied",
+     "updated_at": "2030-01-01T11:00:00.000000+00:00"
+    }
+   ],
+   "integrity": {
+    "ledger_sum_available": "0.000001",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000506",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "0.000001",
+    "gross": "0.000001",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "404f38f02939bad343e74353c098fd64030607afa7b2604dc3622f0a35177de0",
+  "content_hash": "38eaf98ddf4823cee512aac3150946ab1ed246b516a76515e7b2419ec6b914ca"
+ },
+ {
+  "name": "edge_large_amounts",
+  "body_file": "edge_large_amounts.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000507",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "central",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "99999999999999.999999",
+    "held": "0.000000",
+    "gross": "99999999999999.999999",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "99999999999999.999999",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "99999999999999.999999",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": []
+  },
+  "parsed": {
+   "authority_mode": "central",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "99999999999999.999999",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [],
+   "integrity": {
+    "ledger_sum_available": "99999999999999.999999",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000507",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "99999999999999.999999",
+    "gross": "99999999999999.999999",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "88b685d794b7c1218d2b3265a8f1801aef472be7f0ef3a59b70b934d17af9131",
+  "content_hash": "e6c09e1b38f58134e5267d30a4c7fedbf1975eb33ec4f0eafab53c517f58015d"
+ },
+ {
+  "name": "edge_high_seq",
+  "body_file": "edge_high_seq.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000508",
+   "report_seq": 9007199254740993,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "central",
+   "ledger_max_id": 9007199254740993,
+   "wallet": {
+    "available": "40.000000",
+    "held": "0.000000",
+    "gross": "40.000000",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "40.000000",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "40.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 9007199254740993,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": []
+  },
+  "parsed": {
+   "authority_mode": "central",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 9007199254740993,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "40.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [],
+   "integrity": {
+    "ledger_sum_available": "40.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "0.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 9007199254740993,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000508",
+   "report_seq": 9007199254740993,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "40.000000",
+    "gross": "40.000000",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "a1f447996a448f4424ef001c3d0fa87a2581787290608d7bc40c2357977febf6",
+  "content_hash": "23765b143189e4dcdfef07dfac9c87cc449eb9c739a3d49a44118da5ce502ca5"
+ },
+ {
+  "name": "shadow_orphan_integrity",
+  "body_file": "shadow_orphan_integrity.body",
+  "input": {
+   "schema": "cp.money.usage.v1",
+   "report_id": "00000000-0000-0000-0000-000000000509",
+   "report_seq": 1,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "currency": "EUR",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "authority_mode": "shadow",
+   "ledger_max_id": 12,
+   "wallet": {
+    "available": "3.000000",
+    "held": "0.000000",
+    "gross": "3.000000",
+    "active_hold_total": "0.000000",
+    "active_hold_count": 0
+   },
+   "baseline": null,
+   "flows": {
+    "baseline_gross": "0.000000",
+    "grants_applied": "3.000000",
+    "grant_reversals": "0.000000",
+    "captured": "0.000000",
+    "negative_adjustments": "0.000000",
+    "invoice_debits": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "integrity": {
+    "ledger_sum_available": "3.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "3.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "last_seq": 7,
+    "generation": 1,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00",
+    "has_error": false
+   },
+   "grants": []
+  },
+  "parsed": {
+   "authority_mode": "shadow",
+   "baseline": null,
+   "currency": "EUR",
+   "cursor": {
+    "epoch": "00000000-0000-0000-0000-0000000000e0",
+    "generation": 1,
+    "has_error": false,
+    "last_seq": 7,
+    "last_success_at": "2030-01-01T11:59:30.000000+00:00"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "flows": {
+    "baseline_gross": "0.000000",
+    "captured": "0.000000",
+    "grant_reversals": "0.000000",
+    "grants_applied": "3.000000",
+    "invoice_debits": "0.000000",
+    "negative_adjustments": "0.000000",
+    "other_debits": "0.000000",
+    "positive_local_credit": "0.000000",
+    "released": "0.000000"
+   },
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "grants": [],
+   "integrity": {
+    "ledger_sum_available": "3.000000",
+    "ledger_sum_held": "0.000000",
+    "orphan_grant_credit": "3.000000",
+    "orphan_grant_reversal": "0.000000"
+   },
+   "ledger_max_id": 12,
+   "product_id": "00000000-0000-0000-0000-0000000000a1",
+   "report_id": "00000000-0000-0000-0000-000000000509",
+   "report_seq": 1,
+   "schema": "cp.money.usage.v1",
+   "wallet": {
+    "active_hold_count": 0,
+    "active_hold_total": "0.000000",
+    "available": "3.000000",
+    "gross": "3.000000",
+    "held": "0.000000"
+   }
+  },
+  "payload_hash": "ca3dc764cdf0f9dd027419321d373ae9ef48756f351e489d9c1ee6568b4c5eb5",
+  "content_hash": "4b782972b9b5afb716c14f14f1f60c9dae5a3c2cf0931003ff6959c5c5c6a249"
+ }
+]

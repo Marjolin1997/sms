@@ -1,14 +1,134 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_USER: sms, POSTGRES_PASSWORD: sms, POSTGRES_DB: sms_test}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sms" --health-interval 5s --health-retries 10
+    env:
+      SMS_TEST_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_test
+      PGPASSWORD: sms
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements-dev.txt}
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - name: Static security scan (bandit, medium+)
+        run: pip install bandit && bandit -q -r app apps -ll
+      - name: Tests on PostgreSQL
+        run: pytest -q
+      - name: Tests on SQLite (dev fallback)
+        run: env -u SMS_TEST_DATABASE_URL pytest -q
+      - name: Migrations up / down / up on a clean database
+        env:
+          SMS_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_migrate
+        run: |
+          psql -h localhost -U sms -d postgres -c "create database sms_migrate"
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+      - name: Backup, restore and ledger verification round-trip
+        env:
+          SMS_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_migrate
+          SMS_PII_HMAC_KEY: ci-only-hmac-key-0123456789abcdef0123456789
+        run: |
+          DATABASE_URL=postgresql://sms:sms@localhost:5432/sms_migrate BACKUP_DIR=/tmp/bk scripts/backup.sh
+          ADMIN_URL=postgresql://sms:sms@localhost:5432/postgres scripts/restore.sh /tmp/bk/sms-*.dump sms_restored
+          SMS_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_restored python -m scripts.verify_ledger
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: frontend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci
+      - name: Component and unit tests (Vitest)
+        run: npm test
+      - name: i18n coverage + production build
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_USER: sms, POSTGRES_PASSWORD: sms, POSTGRES_DB: sms_e2e}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sms" --health-interval 5s --health-retries 10
+    env:
+      SMS_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_e2e
+      SMS_PII_HMAC_KEY: ci-only-hmac-key-0123456789abcdef0123456789
+      SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=
+      SMS_ADMIN_API_KEY: ci-bootstrap-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements-dev.txt}
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: pip install -r requirements-dev.txt playwright
+      - run: playwright install --with-deps chromium
+      - run: npm ci
+        working-directory: frontend
+      - run: alembic upgrade head
+      - name: Seed demo data and start the stack
+        run: |
+          python -m scripts.seed_demo > seed.out
+          uvicorn app.main:app --port 8000 &
+          (cd frontend && npx vite --port 5173 --host 127.0.0.1 &)
+          for i in $(seq 1 30); do curl -sf localhost:8000/readyz && curl -sf localhost:5173 >/dev/null && break; sleep 1; done
+      - name: Browser end-to-end test
+        env:
+          PYTHONPATH: .
+        run: |
+          export E2E_CLIENT_KEY=$(sed -n 's/^CLIENT_KEY=//p' seed.out)
+          export E2E_ADMIN_KEY=$(sed -n 's/^ADMIN_KEY=//p' seed.out)
+          python e2e/test_console.py
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API/worker image and smoke-test it
+        run: |
+          docker build -t sms-api .
+          docker run --rm -e SMS_DATABASE_URL=sqlite:////tmp/smoke.db sms-api python -c "from app.main import app; print('import ok')"
+          docker run --rm sms-api python -m scripts.worker_health 1 || echo "worker_health correctly fails when no worker runs"
+      - name: Build web image (frontend + nginx)
+        run: docker build -f deploy/web.Dockerfile -t sms-web .
+      - name: nginx configuration is valid
+        run: |
+          docker run --rm --add-host api:127.0.0.1 sms-web nginx -t
+
+  audit:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # këshillues: raporton dobësi të njohura, nuk bllokon
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install -r requirements-dev.txt
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest -q
-      - run: SMS_DATABASE_URL=sqlite:///./ci.db alembic upgrade head
+      - run: pip install pip-audit && pip-audit -r requirements.txt
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend

@@ -1,0 +1,156 @@
+# Prodhim (një host): docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# .env krijohet nga .env.example (SEKRETE TË VËRTETA, kurrë në git). Shih docs/RUNBOOK.md.
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    SMS_ENV: production
+    SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+    SMS_TRUSTED_PROXY_HOPS: "1"
+  depends_on:
+    db: {condition: service_healthy}
+    migrate: {condition: service_completed_successfully}
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sms
+      POSTGRES_USER: sms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes: [dbdata:/var/lib/postgresql/data, ./backups:/backups]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sms -d sms"]
+      interval: 5s
+      retries: 20
+    # asnjë port i publikuar: vetëm rrjeti i brendshëm i compose
+
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+    depends_on:
+      db: {condition: service_healthy}
+    command: alembic upgrade head
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--workers", "2"]
+
+  worker:
+    <<: *app
+    command: python -m app.worker
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "90"]
+      interval: 30s
+      start_period: 30s
+
+  webhook-worker:
+    <<: *app
+    command: python -m app.worker --role webhooks
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "90"]
+      interval: 30s
+      start_period: 30s
+
+  # M7-e (opsional, `docker compose --profile control-plane up -d`): poller i Control Plane në modalitet
+  # shadow. Një aktiv për DB (kyç advisory). Çelësi privat Ed25519 vetëm si mount sekret; konfigurimi
+  # SMS_CP_* vjen nga .env (SMS_CP_SYNC_MODE=shadow duhet edhe te `api` që të vëzhgohet krahasimi).
+  cp-sync:
+    <<: *app
+    profiles: ["control-plane"]
+    command: python -m app.worker --role control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-c (opsional, `--profile money-sync`): consumer i `cp.money.v1`. Boshe kur SMS_MONEY_AUTHORITY=local.
+  # Një aktiv për DB (kyç advisory i veçantë). Kredenciali Ed25519 duhet të ketë scope `money:read` te Central
+  # (`create_service_credential --scope money:read`); mund të jetë i njëjti klient me sync:read.
+  money-sync:
+    <<: *app
+    profiles: ["money-sync"]
+    command: python -m app.worker --role money_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-d (opsional, `--profile money-report`): raportuesi i përdorimit financiar drejt Central. Boshe kur
+  # SMS_MONEY_REPORTING=false. Kredenciali Ed25519 duhet të ketë scope `money:report` (+ autorizim per enterprise).
+  money-report:
+    <<: *app
+    profiles: ["money-report"]
+    command: python -m app.worker --role money_usage_reporter
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-g2 (opsional, `--profile billing-report`): raportuesi i email-eve të faturueshme drejt Central. Boshe kur
+  # SMS_BILLING_USAGE_REPORTING=false. Kredenciali Ed25519 duhet të ketë scope `billing:report` (+ autorizim per enterprise).
+  billing-report:
+    <<: *app
+    profiles: ["billing-report"]
+    command: python -m app.worker --role billing_usage_reporter
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-e (opsional, `--profile pricing-sync`): konsumatori i çmimeve Central (`cp.pricing.v1`). Boshe kur SMS_PRICING_AUTHORITY=local.
+  # Kredenciali Ed25519 duhet të ketë scope `pricing:read` (+ autorizim per enterprise).
+  pricing-sync:
+    <<: *app
+    profiles: ["pricing-sync"]
+    command: python -m app.worker --role pricing_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["127.0.0.1:8080:8080"]  # vendose TLS/load balancer përpara këtij porti
+
+volumes:
+  dbdata:
