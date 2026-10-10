@@ -72,6 +72,19 @@ def enqueue(db: Session, sender: SenderId, request_type: str) -> SenderRequestOu
     return row
 
 
+def enqueue_resubmission(db: Session, sender: SenderId) -> SenderRequestOutbox | None:
+    """Ridërgim lokal. Sender legacy (para S3) nuk ka kërkesë të mëparshme drejt Central ⇒ kontakti i parë është `requested` (Central s'ka rresht; `resubmit` do të kthente 409 `sender_not_registered`)."""
+    first = (
+        db.scalar(
+            select(SenderRequestOutbox.id)
+            .where(SenderRequestOutbox.sender_id == sender.id)
+            .limit(1)
+        )
+        is None
+    )
+    return enqueue(db, sender, "requested" if first else "resubmitted")
+
+
 @dataclass(slots=True)
 class DeliveryOutcome:
     kind: str = "ok"

@@ -280,3 +280,28 @@ class SenderRequestOperation(Base):
 @event.listens_for(SenderRequestOperation, "before_delete")
 def _operation_append_only(*_) -> None:
     raise SenderImmutableError("sender_request_operations rows are append-only")
+
+
+class SenderBootstrapRun(Base):
+    """M10-S4: provë e qëndrueshme e një zbatimi bootstrap (import i senderave ekzistues nga Enterprise): hash i artefaktit të miratuar, hash i raportit, numrat, kohët. Dry-run nuk shkruan asgjë."""
+
+    __tablename__ = "sender_bootstrap_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    bootstrap_version: Mapped[int] = mapped_column(Integer, default=1)
+    artifact_hash: Mapped[str] = mapped_column(String(64))
+    report_hash: Mapped[str | None] = mapped_column(String(64))
+    source_revision: Mapped[str | None] = mapped_column(String(64))
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    status: Mapped[str] = mapped_column(String(10), default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tenant_count: Mapped[int] = mapped_column(Integer, default=0)
+    sender_count: Mapped[int] = mapped_column(Integer, default=0)
+    imported_count: Mapped[int] = mapped_column(Integer, default=0)
+    unresolved_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (
+        Index("ix_sender_bootstrap_runs_artifact", "artifact_hash", "started_at"),
+        CheckConstraint("status in ('running', 'completed', 'failed')", name="status"),
+    )

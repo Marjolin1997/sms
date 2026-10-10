@@ -3432,6 +3432,33 @@
     "server_default": null,
     "type": "VARCHAR(16)"
    },
+   "sender_authority_source": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "sender_central_decision_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "sender_central_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
    "sender_decision_ref": {
     "default": null,
     "fks": [],
@@ -3458,6 +3485,15 @@
     "pk": false,
     "server_default": null,
     "type": "BIGINT"
+   },
+   "sender_registry_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
    },
    "status": {
     "default": "scalar:<MessageStatus.QUEUED: 'queued'>",
@@ -5056,6 +5092,251 @@
   "constraints": [
    "PrimaryKeyConstraint:pk_sms_routes",
    "UniqueConstraint:uq_sms_routes_prefix"
+  ],
+  "indexes": []
+ },
+ "sms_sender_authority_comparisons": {
+  "columns": {
+   "category": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(32)"
+   },
+   "central_allowed": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BOOLEAN"
+   },
+   "central_cp_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "central_policy_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "central_reason": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(24)"
+   },
+   "central_registry_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "country": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(2)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "identity_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "local_allowed": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BOOLEAN"
+   },
+   "local_sender_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "projection_stale": {
+    "default": "scalar:False",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "BOOLEAN"
+   },
+   "ref": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "sender_kind": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(12)"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_sender_authority_comparisons_category",
+   "PrimaryKeyConstraint:pk_sms_sender_authority_comparisons"
+  ],
+  "indexes": [
+   "ix_sms_sender_authority_cmp_cat:['category', 'created_at']:False"
+  ]
+ },
+ "sms_sender_bootstrap_state": {
+  "columns": {
+   "bootstrap_version": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "INTEGER"
+   },
+   "completed_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "id": {
+    "default": "scalar:1",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "report_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "sender_count": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "INTEGER"
+   },
+   "source_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "started_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "tenant_count": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "INTEGER"
+   },
+   "unresolved_count": {
+    "default": "scalar:0",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "0",
+    "type": "INTEGER"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_sender_bootstrap_state_singleton",
+   "PrimaryKeyConstraint:pk_sms_sender_bootstrap_state"
   ],
   "indexes": []
  },

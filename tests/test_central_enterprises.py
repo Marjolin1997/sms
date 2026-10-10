@@ -179,6 +179,7 @@ def test_schema_isolation_between_enterprise_and_central_databases(make_db):  # 
         "sender_sync_sequence",
         "sender_sync_outbox",
         "sender_request_operations",
+        "sender_bootstrap_runs",
         "registration_products",
         "product_registration_policy",
     }

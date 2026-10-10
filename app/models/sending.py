@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -123,6 +124,12 @@ class Message(TenantOwned, Base):
     sender_ref: Mapped[int | None] = mapped_column(PK)
     sender_decision_ref: Mapped[int | None] = mapped_column(PK)
     sender_policy_revision: Mapped[int | None] = mapped_column(Integer)
+    # M10-S4: burimi i autorizimit të sender-it në çastin e dërgimit. NULL = para S4 (lokal, historik); `local` (local|shadow) ose `central`.
+    # Për `central`: `sender_ref`/`sender_decision_ref` lokale mbeten NULL; provenanca Central është këtu (nuk përzihet me atë lokale).
+    sender_authority_source: Mapped[str | None] = mapped_column(String(8))
+    sender_registry_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    sender_central_decision_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    sender_central_revision: Mapped[int | None] = mapped_column(BigInteger)
     provider: Mapped[str] = mapped_column(String(32))
     provider_message_id: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[MessageStatus] = mapped_column(

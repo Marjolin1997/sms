@@ -535,6 +535,7 @@ def test_users_schema_matches_metadata_and_stays_in_central_db(make_db):  # noqa
         "sender_sync_sequence",
         "sender_sync_outbox",
         "sender_request_operations",
+        "sender_bootstrap_runs",
         "registration_products",
         "product_registration_policy",
     }

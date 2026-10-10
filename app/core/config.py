@@ -116,6 +116,17 @@ class Settings(BaseSettings):
     sender_request_reporting: bool = False
     sender_request_interval_seconds: int = Field(30, ge=5, le=3600)
     sender_request_alert_age_seconds: int = Field(900, ge=60, le=604800)
+    # M10-S4: autoriteti i autorizimit të sender-ave (default `local` = sjellja e sotme; `shadow` krahason me projeksionin pa efekt; `central` = projeksioni vendos).
+    sender_authority: Literal["local", "shadow", "central"] = "local"
+    sender_authority_ack: bool = (
+        False  # prodhim + central: `scripts.sender_authority_readiness` kaloi mbi këtë DB
+    )
+    sender_shadow_sample_pct: int = Field(
+        10, ge=0, le=100
+    )  # përqindja e krahasimeve që PËRPUTHEN dhe ruhen (mospërputhjet ruhen gjithmonë)
+    sender_projection_fresh_seconds: int = Field(
+        3600, ge=60, le=604800
+    )  # vetëm raportim: pas kësaj projeksioni raportohet "stale" (kurrë mohim)
     # M9-g4: autoriteti i FATURIMIT periodik. local = Enterprise lëshon (sjellja e sotme) · shadow = Enterprise lëshon ende; Central krahason pa lëshuar ·
     # central = Central lëshon; faturimi/shlyerja/planet legacy refuzohen fail-closed (historia mbetet vetëm-lexim). Në prodhim `central` kërkon ACK
     # (pas `scripts.billing_authority_readiness` + `apps.central.tools.billing_authority_readiness`).
@@ -208,6 +219,25 @@ class Settings(BaseSettings):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_SYNC_ENABLED is true")
         if self.sender_request_reporting and not self.cp_base_url.startswith("https://"):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_REQUEST_REPORTING is true")
+        if self.sender_authority != "local":
+            if not self.cp_base_url.startswith("https://"):
+                bad.append(
+                    "SMS_CP_BASE_URL must be https:// when SMS_SENDER_AUTHORITY is not local"
+                )
+            if not self.sender_sync_enabled:
+                bad.append(
+                    "SMS_SENDER_AUTHORITY≠local requires SMS_SENDER_SYNC_ENABLED=true (the projection must be kept current)"
+                )
+        if self.sender_authority == "central":
+            if not self.sender_authority_ack:
+                bad.append(
+                    "SMS_SENDER_AUTHORITY=central requires SMS_SENDER_AUTHORITY_ACK=true "
+                    "(scripts.sender_authority_readiness passed on this database)"
+                )
+            if not self.sender_request_reporting:
+                bad.append(
+                    "SMS_SENDER_AUTHORITY=central requires SMS_SENDER_REQUEST_REPORTING=true (requests must reach Central)"
+                )
         if self.money_authority != "local" and not self.cp_base_url.startswith("https://"):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_MONEY_AUTHORITY is not local")
         if self.money_authority == "central" and not self.money_authority_ack:

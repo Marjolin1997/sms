@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import Conflict, NotFound
 from app.core.scope import Owner, owned, ref
 from app.models.messaging import ApprovalStatus, SenderDecision, SenderId
-from app.services import approvals, sender_request_outbox
+from app.services import approvals, sender_authority, sender_request_outbox
 from app.services import sender_authorization as sa
 from app.services.sender_authorization import (  # noqa: F401  (ri-eksport për përputhshmëri)
     ALNUM,
@@ -72,7 +72,7 @@ def request(
             approvals.transition(existing, "resubmit", who)
             db.flush()
             _record(db, existing, "resubmitted", who, None, before)
-            sender_request_outbox.enqueue(db, existing, "resubmitted")
+            sender_request_outbox.enqueue_resubmission(db, existing)
         return existing
     s = SenderId(
         owner_ref=ref(owner), country=country, value=n.display, kind=n.kind, norm_value=n.norm
@@ -96,6 +96,7 @@ def _get(db: Session, sender_id: int) -> SenderId:
 
 
 def approve(db: Session, sender_id: int, actor: str, evidence_ref: str | None = None) -> SenderId:
+    sender_authority.require_local_review("approve")
     s = _get(db, sender_id)
     before = s.status.value
     approvals.transition(s, "approve", actor)
@@ -112,6 +113,7 @@ def approve(db: Session, sender_id: int, actor: str, evidence_ref: str | None = 
 def reject(
     db: Session, sender_id: int, actor: str, reason: str, evidence_ref: str | None = None
 ) -> SenderId:
+    sender_authority.require_local_review("reject")
     s = _get(db, sender_id)
     before = s.status.value
     approvals.transition(s, "reject", actor, reason)
@@ -123,6 +125,7 @@ def reject(
 def revoke(
     db: Session, sender_id: int, actor: str, reason: str, evidence_ref: str | None = None
 ) -> SenderId:
+    sender_authority.require_local_review("revoke")
     s = _get(db, sender_id)
     before = s.status.value
     approvals.transition(s, "revoke", actor, reason)

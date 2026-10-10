@@ -46,6 +46,7 @@ from apps.central.models.registration import (
 from apps.central.models.registration_policy import ProductRegistrationPolicy
 from apps.central.models.sender import (  # noqa: F401
     CountrySenderPolicy,
+    SenderBootstrapRun,
     SenderDecision,
     SenderRegistry,
     SenderRequestOperation,

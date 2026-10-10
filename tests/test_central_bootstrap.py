@@ -319,6 +319,7 @@ def test_two_real_postgres_databases_with_real_enterprise_schema(make_db):  # no
         "sender_sync_sequence",
         "sender_sync_outbox",
         "sender_request_operations",
+        "sender_bootstrap_runs",
         "registration_products",
         "product_registration_policy",
     }  # bootstrap s'ndryshon skemë
@@ -401,4 +402,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0026_sender_authority_s1.py",
         "0027_sender_sync_s2.py",
         "0028_sender_requests_s3.py",
+        "0029_sender_bootstrap_s4.py",
     ]

@@ -13,7 +13,13 @@ from app.services.audit import audit
 
 router = APIRouter(prefix="/v1")
 
-_STATUS = {"not_found": 404, "conflict": 409, "sender_not_allowed": 403, "template_not_usable": 403}
+_STATUS = {
+    "not_found": 404,
+    "conflict": 409,
+    "sender_authority_frozen": 409,
+    "sender_not_allowed": 403,
+    "template_not_usable": 403,
+}
 
 
 def _run(db: Session, fn):

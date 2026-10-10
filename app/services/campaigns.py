@@ -37,7 +37,7 @@ from app.services import (
     emails,
     events,
     pricing,
-    sender_authorization,
+    sender_authority,
     switches,
     templates,
 )
@@ -175,7 +175,7 @@ def schedule(
         if email_domains.verified_domain_for(db, owner, c.from_email) is None:
             raise InvalidCampaign("from_email is not on a verified domain of this account")
     else:
-        approved = sender_authorization.has_approved_sender(db, owner, c.sender)
+        approved = sender_authority.has_approved_sender_authority(db, owner, c.sender)
         if not approved:
             raise InvalidCampaign("sender id is not approved for this account")
     now = as_utc(now or datetime.now(UTC))

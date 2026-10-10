@@ -39,7 +39,7 @@ from app.services import (
     events,
     pricing,
     rates,
-    sender_authorization,
+    sender_authority,
     switches,
     templates,
 )
@@ -186,7 +186,7 @@ def submit(
         raise rates.InvalidNumber("destination must be E.164")
     destination = destination.lstrip("+")
     route = find_route(db, destination)
-    auth = sender_authorization.assert_outbound(db, owner, route.country, sender)
+    auth = sender_authority.assert_outbound_authority(db, owner, route.country, sender)
     consent.assert_may_send(db, owner, "sms", destination, category)
 
     template_version_id = None
@@ -219,13 +219,13 @@ def submit(
                 country=route.country, text=text,
                 template_version_id=template_version_id, **pricing.message_fields(q),
                 provider=route.provider, next_attempt_at=now,
-                sender_ref=auth.sender_ref, sender_decision_ref=auth.decision_ref,
-                sender_policy_revision=auth.policy_revision,
+                **auth.message_fields(),
             )  # fmt: skip
             queue.publish(db, m)
             pricing.record_comparison(
                 db, q.shadow, public_id
             )  # shadow: krahasim (pa efekt parash); lokali ngarkohet
+            auth.record_comparison(db, public_id)  # M10-S4 shadow: krahasim (pa efekt mbi klientin)
             db.add(MessageEvent(message_id=m.id, from_status=None, to_status="queued"))
     except IntegrityError:
         # kërkesë paralele me të njëjtin key fitoi garën

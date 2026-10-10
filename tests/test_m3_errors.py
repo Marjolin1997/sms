@@ -98,8 +98,8 @@ def test_every_runtime_error_class_keeps_name_code_message_args_and_inheritance(
         now_classes == expected
     )  # 47 klasa + 3 (M7-d) + 7 (M7-e) + 3 (M7-g) + 8 (M9-c) + 2 (M9-d) + 5 (M9-e): .code, str, args, __init__, zinxhiri i trashëgimisë
     assert (
-        len(expected) == 85
-    )  # M10-S0: + SenderDecisionImmutableError; M10-S2: + 6 gabime të sender_sync; M10-S3: + SenderRequestImmutableError
+        len(expected) == 87
+    )  # M10-S0: + SenderDecisionImmutableError; M10-S2: + 6 gabime të sender_sync; M10-S3: + SenderRequestImmutableError; M10-S4: + SenderAuthorityFrozen, SenderAuthorityImmutableError
 
 
 def test_http_status_mapping_dictionaries_are_identical():
