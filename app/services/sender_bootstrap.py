@@ -8,7 +8,7 @@ import json
 from collections import Counter
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import utcnow
@@ -22,6 +22,7 @@ from packages.contracts.control_plane.sender import request_v1 as rv
 SCHEMA = "sender-bootstrap.v1"
 REPORT_SCHEMA = "sender-bootstrap-report.v1"
 VERSION = 1
+RECONCILE_LOCK_KEY = 0x534D5342  # "SMSB": kyç advisory për `reconcile --record`
 UNRESOLVED = frozenset({
     "identity_conflict", "invalid_legacy_identity", "missing_enterprise_mapping", "missing_in_central", "policy_denied", "global_key_conflict",
     "local_approved_central_pending", "local_approved_central_rejected", "local_approved_central_revoked",
@@ -76,6 +77,9 @@ def reconcile(
 ) -> dict:
     """Rakordim lokal-vs-projeksion (+ opsionalisht raporti Central i importit për kategoritë që Enterprise s'i sheh: politikë, çelës global). `record` shkruan çështjet + gjendjen."""
     now = now or utcnow()
+    if record and db.get_bind().dialect.name == "postgresql":
+        # dy `reconcile --record` paralele s'duhet të shkruajnë të njëjtat çështje/gjendje: serializim për transaksion
+        db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": RECONCILE_LOCK_KEY})
     a = SyncedSenderAuthorization
     proj = {
         (r.enterprise_id, r.country, r.norm_value): r
