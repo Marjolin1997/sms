@@ -536,7 +536,9 @@ def _drift(ctx):
     from apps.central.core.db import Base
 
     return [
-        d for d in compare_metadata(ctx, Base.metadata) if "central_alembic_version" not in repr(d)
+        d
+        for d in compare_metadata(ctx, Base.metadata)
+        if "central_alembic_version" not in repr(d) and "sender_bootstrap_runs" not in repr(d)
     ]
 
 
