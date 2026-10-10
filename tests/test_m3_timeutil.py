@@ -71,7 +71,7 @@ def test_every_model_default_that_used_utcnow_is_still_a_callable_returning_awar
                 if isinstance(v, datetime):
                     assert v.tzinfo is UTC, (table.name, col.name)
     assert (
-        n == 71
+        n == 73
     )  # snapshot: 1 M10-S4 (comparisons created_at) + 3 M10-S3 (outbox next_attempt_at/created_at/updated_at) + 45 para M7-d + 3 `sms_entitlements` + 3 M9-c + 3 M9-d (outbox created_at/updated_at/next_attempt_at) + 6 M9-e (cache çmimesh) + 4 M9-g2 (evidence billable_at/created_at, report generated_at/created_at... shih modelin)
 
 
@@ -149,8 +149,8 @@ def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
     assert (
-        len(golden) == 64 and sum(len(v["columns"]) for v in golden.values()) == 695
-    )  # M10-S4: +2 tabela, +4 kolona te sms_messages, +25 kolona gjithsej
+        len(golden) == 66 and sum(len(v["columns"]) for v in golden.values()) == 721
+    )  # M10-S4: +2 tabela, +4 kolona te sms_messages, +25 kolona gjithsej; M10-S5: +2 tabela, +26 kolona
 
 
 @pytest.mark.skipif(

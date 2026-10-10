@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -118,9 +119,17 @@ class Settings(BaseSettings):
     sender_request_alert_age_seconds: int = Field(900, ge=60, le=604800)
     # M10-S4: autoriteti i autorizimit të sender-ave (default `local` = sjellja e sotme; `shadow` krahason me projeksionin pa efekt; `central` = projeksioni vendos).
     sender_authority: Literal["local", "shadow", "central"] = "local"
-    sender_authority_ack: bool = (
-        False  # prodhim + central: `scripts.sender_authority_readiness` kaloi mbi këtë DB
+    # ACK i lidhur me provën (M10-S5): `evidence_hash` (64 hex) i regjistrimit `pre_cutover` nga `scripts.sender_cutover evidence`. Bosh = pa ACK.
+    sender_authority_ack: str = ""
+    sender_dispatch_recheck: bool = (
+        True  # rikontrolli para provider-it për mesazhet e autorizuara nga Central (vendimi B)
     )
+    sender_evidence_min_samples: int = Field(
+        100, ge=1, le=10_000_000
+    )  # mostra minimale shadow; vlerë e operatorit, e regjistruar në prova
+    sender_evidence_window_hours: int | None = Field(
+        None, ge=1, le=100_000
+    )  # opsionale: kufizon dritaren (parazgjedhje: që nga bootstrap-i)
     sender_shadow_sample_pct: int = Field(
         10, ge=0, le=100
     )  # përqindja e krahasimeve që PËRPUTHEN dhe ruhen (mospërputhjet ruhen gjithmonë)
@@ -229,11 +238,13 @@ class Settings(BaseSettings):
                     "SMS_SENDER_AUTHORITY≠local requires SMS_SENDER_SYNC_ENABLED=true (the projection must be kept current)"
                 )
         if self.sender_authority == "central":
-            if not self.sender_authority_ack:
+            if not re.fullmatch(r"[0-9a-f]{64}", self.sender_authority_ack or ""):
                 bad.append(
-                    "SMS_SENDER_AUTHORITY=central requires SMS_SENDER_AUTHORITY_ACK=true "
-                    "(scripts.sender_authority_readiness passed on this database)"
+                    "SMS_SENDER_AUTHORITY=central requires SMS_SENDER_AUTHORITY_ACK=<evidence_hash> "
+                    "(64 hex from `python -m scripts.sender_cutover evidence`)"
                 )
+            if not self.sender_dispatch_recheck:
+                bad.append("SMS_SENDER_AUTHORITY=central requires SMS_SENDER_DISPATCH_RECHECK=true")
             if not self.sender_request_reporting:
                 bad.append(
                     "SMS_SENDER_AUTHORITY=central requires SMS_SENDER_REQUEST_REPORTING=true (requests must reach Central)"

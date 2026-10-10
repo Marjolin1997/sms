@@ -1,6 +1,6 @@
 """Gatishmëria e autoritetit të sender-ave (M10-S4). VETËM LEXIM, pa PII, pa rrjet.
 
-    python -m scripts.sender_authority_readiness [--json] [--strict] [--min-samples N] [--window-hours H | --all-time]
+    python -m scripts.sender_authority_readiness [--json] [--strict] [--min-samples N] [--window-hours H]
     python -m scripts.sender_authority_readiness --rollback-to shadow|local [--accept-divergence] [--json]
 
 Kodi: 0 PASS (ose WARN pa `--strict`) · 1 FAIL (ose WARN me `--strict`) · 2 gabim i brendshëm."""
@@ -18,13 +18,12 @@ def main(argv: list[str] | None = None, factory=None) -> int:
     ap = argparse.ArgumentParser(description="Sender authority readiness (read-only).")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true")
-    ap.add_argument("--min-samples", type=int, default=20)
-    ap.add_argument("--window-hours", type=int, default=168)
-    ap.add_argument("--all-time", action="store_true")
+    ap.add_argument("--min-samples", type=int, default=None)
+    ap.add_argument("--window-hours", type=int, default=None)
     ap.add_argument("--rollback-to", choices=("shadow", "local"))
     ap.add_argument("--accept-divergence", action="store_true")
     args = ap.parse_args(argv)
-    window = None if args.all_time else args.window_hours
+    window = args.window_hours
     try:
         with (factory or SessionLocal)() as db:
             if args.rollback_to:

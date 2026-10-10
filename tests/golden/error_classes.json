@@ -1209,6 +1209,40 @@
    ],
    "own_init": false
   },
+  "app.services.sender_bootstrap.ResolutionError": {
+   "name": "ResolutionError",
+   "module": "app.services.sender_bootstrap",
+   "code": null,
+   "app_mro": [
+    "ResolutionError"
+   ],
+   "builtin_base": [
+    "ValueError",
+    "Exception"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
+  "app.services.sender_cutover.EvidenceRefused": {
+   "name": "EvidenceRefused",
+   "module": "app.services.sender_cutover",
+   "code": null,
+   "app_mro": [
+    "EvidenceRefused"
+   ],
+   "builtin_base": [
+    "ValueError",
+    "Exception"
+   ],
+   "str": "boom",
+   "args": [
+    "boom"
+   ],
+   "own_init": false
+  },
   "app.services.sender_ids.InvalidSender": {
    "app_mro": [
     "InvalidSender",

@@ -11,8 +11,10 @@ Rregullat Central (V1, të vetmet): (1) politika efektive = e eksplicitja e sink
 
 import hashlib
 import logging
+import threading
 import time
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -43,6 +45,33 @@ DENY_MESSAGE = "sender id is not approved for this account and country"
 
 class SenderAuthorityFrozen(DomainError):
     code = "sender_authority_frozen"
+
+
+# --- numërues operacionalë (në proces; çelësa të kufizuar, ASNJË vlerë sender) ---------------------------------------------------------------------------
+_stats: Counter = Counter()
+_stats_lock = threading.Lock()
+_last_log: dict[str, float] = {}
+
+
+def _count(key: str) -> None:
+    with _stats_lock:
+        _stats[key] += 1
+    if key.startswith(("central_denied_", "recheck_block_")):
+        t = time.monotonic()
+        if t - _last_log.get(key, -1e9) > 60:  # rate-limited: 1 log/minutë/çelës
+            _last_log[key] = t
+            log.warning("sender authority event %s (count in this process: %d)", key, _stats[key])
+
+
+def stats_snapshot() -> dict[str, int]:
+    with _stats_lock:
+        return dict(sorted(_stats.items()))
+
+
+def reset_stats() -> None:
+    with _stats_lock:
+        _stats.clear()
+    _last_log.clear()
 
 
 def mode() -> str:
@@ -286,6 +315,8 @@ def assert_outbound_authority(
         a = sa.assert_outbound(db, owner, country, value)
         return AuthorityDecision(LOCAL, True, local=a)
     d = check_outbound_authority(db, owner, country, value)
+    if d.source == CENTRAL:
+        _count("central_allowed" if d.allowed else f"central_denied_{d.central.reason}")
     if not d.allowed:
         if d.comparison is not None and d.comparison.mismatch:
             _record_detached(
@@ -318,7 +349,7 @@ def has_approved_sender_authority(db: Session, owner: Owner, value: str) -> bool
     return any(_policy(db, r.country, r.sender_kind)[1] for r in rows)
 
 
-# --- rikontrolli para dispatch-it (VETËM themeli; i palidhur me process_one NUK është aktivizuar) ------------------------------------------------------
+# --- rikontrolli para dispatch-it (M10-S5: AKTIV për mesazhet e autorizuara nga Central) -----------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -329,28 +360,69 @@ class DispatchCheck:
     stale: bool = False
 
 
+BLOCK_CODES = {  # error_code i mesazhit FAILED; i kufizuar
+    "revoked": "sender_revoked", "rejected": "sender_rejected", "pending": "sender_pending",
+    "policy_denied": "sender_policy_denied",
+}  # fmt: skip
+
+
 def recheck_for_dispatch(db: Session, m) -> DispatchCheck:
-    """Gjendja AKTUALE e burimit që e autorizoi mesazhin `m` (vetëm lexim lokal, pa rrjet). Semantika e propozuar:
-    - bllokon: `revoked`/`rejected`/`pending` eksplicit (Central: nga projeksioni; lokal: S0) dhe politika Central `allowed=false`;
-    - NUK bllokon: projeksion i vjetër (stale), rresht projeksioni që mungon/tërhequr (boshllëk/ndërprerje: s'shpikim revokim), mesazh pa provenancë (para M10).
-    Nuk thirret nga `process_one` (aktivizimi është vendim i veçantë)."""
+    """Gjendja AKTUALE e burimit që e autorizoi mesazhin `m` (vetëm lexime lokale, pa rrjet).
+    Bllokon vetëm mohim EKSPLICIT dhe më i ri se provenanca: `revoked`/`rejected`; `pending` kur politika kërkon miratim; politikë `allowed=false`.
+    NUK bllokon: projeksion i vjetër sipas moshës, rresht që mungon/tërhequr (boshllëk/ndërprerje: mungesa e provës ≠ revokim), projeksion më i vjetër se provenanca e ngrirë,
+    mesazh pa provenancë (para S4) ose me provenancë lokale (autoriteti lokal ruan sjelljen e mëparshme)."""
     src = getattr(m, "sender_authority_source", None)
-    if src == CENTRAL:
-        ref = m.sender_registry_ref
-        if ref is None:
-            return DispatchCheck(False, "no_registry_ref", CENTRAL)
-        row = db.scalar(
-            select(SyncedSenderAuthorization).where(SyncedSenderAuthorization.registry_id == ref)
+    if src != CENTRAL:
+        return DispatchCheck(False, "no_central_provenance", "local" if src == LOCAL else "none")
+    ref = m.sender_registry_ref
+    if ref is None:
+        return DispatchCheck(False, "no_registry_ref", CENTRAL)
+    row = db.scalar(
+        select(SyncedSenderAuthorization).where(SyncedSenderAuthorization.registry_id == ref)
+    )
+    stale = projection_stale(db)
+    if row is None or row.projection_state != "active":
+        return DispatchCheck(False, "projection_missing", CENTRAL, stale)
+    if m.sender_central_revision is not None and row.cp_revision < m.sender_central_revision:
+        return DispatchCheck(False, "projection_older_than_provenance", CENTRAL, stale)
+    _src, allowed, requires, _rev = _policy(db, row.country, row.sender_kind)
+    if row.status in ("revoked", "rejected"):
+        return DispatchCheck(True, row.status, CENTRAL, stale)
+    if not allowed:
+        return DispatchCheck(True, "policy_denied", CENTRAL, stale)
+    if row.status == "pending":
+        return DispatchCheck(
+            requires, "pending" if requires else "pending_no_approval_required", CENTRAL, stale
         )
-        stale = projection_stale(db)
-        if row is None or row.projection_state != "active":
-            return DispatchCheck(False, "projection_missing", CENTRAL, stale)
-        if row.status != "approved":
-            return DispatchCheck(True, row.status, CENTRAL, stale)
-        if not _policy(db, row.country, row.sender_kind)[1]:
-            return DispatchCheck(True, "policy_denied", CENTRAL, stale)
-        return DispatchCheck(False, "approved", CENTRAL, stale)
-    a = sa.recheck_for_dispatch(db, m.sender_ref)
-    if a is None:
-        return DispatchCheck(False, "no_provenance", "none")
-    return DispatchCheck(not a.allowed, a.category, LOCAL)
+    return DispatchCheck(False, "approved", CENTRAL, stale)
+
+
+def dispatch_gate(db: Session, m) -> str | None:
+    """Thirret nga `process_one` PARA `dispatch_started_at`/COMMIT#1b. Kthen `error_code` nëse mesazhi duhet të dështojë PA thirrje provider-i, përndryshe None."""
+    if (
+        not settings.sender_dispatch_recheck
+        or getattr(m, "sender_authority_source", None) != CENTRAL
+    ):
+        return None
+    c = recheck_for_dispatch(db, m)
+    _count(f"recheck_block_{c.reason}" if c.block else "recheck_pass")
+    return BLOCK_CODES[c.reason] if c.block else None
+
+
+def central_status_of(db: Session, sender) -> str | None:
+    """Statusi Central i sinkronizuar (active) për identitetin e një `SenderId`, ose None. Përdoret nga ridërgimi nën `central`."""
+    enterprise_id, country = sender.enterprise_id, sender.country
+    if enterprise_id is None:
+        return None
+    try:
+        n = sa.normalize(sender.value)
+    except InvalidSender:
+        return None
+    return db.scalar(
+        select(SyncedSenderAuthorization.status).where(
+            SyncedSenderAuthorization.enterprise_id == enterprise_id,
+            SyncedSenderAuthorization.country == country.upper(),
+            SyncedSenderAuthorization.norm_value == n.norm,
+            SyncedSenderAuthorization.projection_state == "active",
+        ).limit(1)
+    )  # fmt: skip

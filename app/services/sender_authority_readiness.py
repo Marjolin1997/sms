@@ -25,6 +25,7 @@ from app.services import sender_request_readiness as rr
 from app.services import sender_sync_readiness as sr
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
+AUTHORITY_VERSION = 1
 Check = sr.Check
 # kontrollet S2 që janë të detyrueshme për autoritet (lag/gabim i fundit mbeten paralajmërime)
 SYNC_REQUIRED = ("cursor_valid", "generation_known", "snapshot_known", "sync_fresh", "projection_consistent", "revisions_sane", "policy_registry_coherent")  # fmt: skip
@@ -33,6 +34,7 @@ TRANSPORT_REQUIRED = (
     "https_required",
     "scope_granted",
     "no_permanent_failures",
+    "oldest_pending_age",
 )
 
 
@@ -49,11 +51,16 @@ def local_approved_without_central(db: Session) -> int:
             a.norm_value == SenderId.norm_value, a.status == "approved", a.projection_state == "active",
         )
     )  # fmt: skip
+    from app.models.sender_authority import SenderBootstrapIssue as Iss
+
+    explained = exists().where(
+        and_(Iss.sender_id == SenderId.id, Iss.resolution == "accepted_not_migrated")
+    )
     return (
         db.scalar(
             select(func.count())
             .select_from(SenderId)
-            .where(SenderId.status == ApprovalStatus.APPROVED, ~covered)
+            .where(SenderId.status == ApprovalStatus.APPROVED, ~covered, ~explained)
         )
         or 0
     )
@@ -92,18 +99,67 @@ def divergence(db: Session) -> dict:
     central_only_approved = sum(
         1 for k, v in proj.items() if v == "approved" and local.get(k) != "approved"
     )
-    return {"status_differs": differ, "central_approved_not_local": central_only_approved}
+    risk = sum(
+        1 for k, v in local.items() if v == "approved" and k in proj and proj[k] != "approved"
+    )
+    return {
+        "status_differs": differ,
+        "central_approved_not_local": central_only_approved,
+        "reauthorize_risk": risk,
+    }
+
+
+def evidence_since(db: Session, now: datetime, window_hours: int | None) -> datetime | None:
+    """Dritarja e provës shadow: që nga përfundimi i bootstrap-it (drifti i vjetër i korrigjuar s'bllokon përgjithmonë), e kufizuar opsionalisht nga `window_hours`."""
+    st = bootstrap_state(db)
+    start = as_utc(st.completed_at) if (st is not None and st.completed_at is not None) else None
+    if window_hours is not None:
+        w = now - timedelta(hours=window_hours)
+        start = w if start is None else max(start, w)
+    return start
+
+
+def ack_status(db: Session) -> tuple[bool, str]:
+    """ACK i lidhur me provën: `SMS_SENDER_AUTHORITY_ACK` = `evidence_hash` i një prove `pre_cutover` që ekziston, me versionin e autoritetit dhe mjedisin e njëjtë, lidhur me hash-in AKTUAL të bootstrap-it
+    dhe pa FAIL në gatishmërinë e saj. Ndryshimi i provës së bootstrap-it e bën ACK-un e vjetër të pavlefshëm."""
+    from app.models.sender_authority import SenderCutoverEvidence
+
+    h = settings.sender_authority_ack or ""
+    if not h:
+        return False, "no ACK configured"
+    ev = db.scalar(
+        select(SenderCutoverEvidence).where(
+            SenderCutoverEvidence.evidence_hash == h, SenderCutoverEvidence.kind == "pre_cutover"
+        )
+    )
+    if ev is None:
+        return False, "ACK does not match any recorded pre_cutover evidence"
+    if ev.authority_version != AUTHORITY_VERSION:
+        return (
+            False,
+            f"ACK was issued for authority version {ev.authority_version}, current is {AUTHORITY_VERSION}",
+        )
+    if ev.environment != settings.env:
+        return False, "ACK was issued for a different environment"
+    st = bootstrap_state(db)
+    if st is None or st.report_hash != ev.bootstrap_report_hash:
+        return False, "ACK is stale: the bootstrap evidence changed after it was issued"
+    if ev.readiness_status == "FAIL":
+        return False, "ACK evidence recorded a failing readiness"
+    return True, f"ACK bound to evidence {h[:12]}"
 
 
 def checks(
     db: Session,
     *,
     now: datetime | None = None,
-    min_samples: int = 20,
-    window_hours: int | None = 168,
+    min_samples: int | None = None,
+    window_hours: int | None = None,
 ) -> list[Check]:
     now = as_utc(now or utcnow())
-    since = None if window_hours is None else now - timedelta(hours=window_hours)
+    min_samples = settings.sender_evidence_min_samples if min_samples is None else min_samples
+    window_hours = settings.sender_evidence_window_hours if window_hours is None else window_hours
+    since = evidence_since(db, now, window_hours)
     out: list[Check] = []
     mode = settings.sender_authority
     out.append(
@@ -207,15 +263,19 @@ def checks(
             else "not applicable before central",
         )
     )
-    prod = settings.env == "production"
-    ack_bad = mode == "central" and prod and not settings.sender_authority_ack
-    out.append(
-        Check(
-            "production_ack",
-            FAIL if ack_bad else PASS,
-            "SMS_SENDER_AUTHORITY_ACK is required in production for central" if ack_bad else "ok",
+    if d["by_category"].get("local_deny_central_allow"):
+        out.append(
+            Check(
+                "expected_drift",
+                WARN,
+                f"{d['by_category']['local_deny_central_allow']} local-deny/central-allow comparison(s): understand before cutover (they become allowed)",
+            )
         )
-    )
+    if mode == "central" and settings.env == "production":
+        ok, why = ack_status(db)
+        out.append(Check("production_ack", PASS if ok else FAIL, why))
+    else:
+        out.append(Check("production_ack", PASS, "not required before central/production"))
     return out
 
 
@@ -227,9 +287,10 @@ def overall(items: list[Check]) -> str:
     )
 
 
-def metrics(db: Session, now: datetime | None = None, window_hours: int | None = 168) -> dict:
+def metrics(db: Session, now: datetime | None = None, window_hours: int | None = None) -> dict:
     now = as_utc(now or utcnow())
-    since = None if window_hours is None else now - timedelta(hours=window_hours)
+    window_hours = settings.sender_evidence_window_hours if window_hours is None else window_hours
+    since = evidence_since(db, now, window_hours)
     st = bootstrap_state(db)
     central_msgs = (
         db.scalar(
@@ -271,23 +332,31 @@ def rollback_checks(db: Session, target: str, *, accept_divergence: bool = False
             f"{cm} message(s) were authorised by Central (provenance preserved)",
         )
     )
+    risk, other = div["reauthorize_risk"], div["status_differs"] + div["central_approved_not_local"]
     if target == "shadow":
         out.append(
             Check(
                 "divergence",
-                PASS if not (div["status_differs"] or div["central_approved_not_local"]) else WARN,
+                PASS if not other else WARN,
                 f"local authority resumes; drift will be recorded: {div}",
             )
         )
     else:
-        bad = bool(div["status_differs"] or div["central_approved_not_local"])
+        # rikthimi në local NUK duhet të ri-autorizojë heshtur sender të revokuar/refuzuar nga Central
+        out.append(
+            Check(
+                "reauthorize_risk",
+                FAIL if (risk and not accept_divergence) else (WARN if risk else PASS),
+                f"{risk} locally approved sender(s) are denied by Central and would be re-authorised by local authority"
+                if risk
+                else "no locally approved sender is denied by Central",
+            )
+        )
         out.append(
             Check(
                 "divergence",
-                FAIL if (bad and not accept_divergence) else (WARN if bad else PASS),
-                f"local state differs from Central decisions: {div}"
-                if bad
-                else "local and Central agree",
+                WARN if other else PASS,
+                f"local and Central statuses differ: {div}" if other else "local and Central agree",
             )
         )
     return out

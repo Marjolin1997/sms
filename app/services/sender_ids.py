@@ -73,6 +73,19 @@ def request(
             db.flush()
             _record(db, existing, "resubmitted", who, None, before)
             sender_request_outbox.enqueue_resubmission(db, existing)
+        elif sender_authority.frozen() and existing.status in (
+            ApprovalStatus.PENDING,
+            ApprovalStatus.APPROVED,
+        ):
+            # M10-S5: nën `central` statusi lokal s'është autoritativ. Nëse Central e ka refuzuar/revokuar, klienti mund ta ridërgojë: SenderId lokal kthehet në pending
+            # (JO autorizim) dhe del veprimi `resubmit` drejt Central; autoriteti vjen vetëm nga cp.sender.v1.
+            cs = sender_authority.central_status_of(db, existing)
+            if cs in ("rejected", "revoked"):
+                before = existing.status.value
+                existing.status, existing.approved_key = ApprovalStatus.PENDING, None
+                db.flush()
+                _record(db, existing, "resubmitted", who, f"central_status:{cs}", before)
+                sender_request_outbox.enqueue_resubmission(db, existing)
         return existing
     s = SenderId(
         owner_ref=ref(owner), country=country, value=n.display, kind=n.kind, norm_value=n.norm

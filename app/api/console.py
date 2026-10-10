@@ -23,6 +23,7 @@ from app.models.wallet import EntryType, LedgerEntry, Topup, TopupStatus, Wallet
 from app.services import messages as msg_svc
 from app.services import pricing as pricing_svc
 from app.services import rates as rates_svc
+from app.services import sender_view
 from app.services import templates as tpl
 from app.services import wallet as wallets
 from app.services.audit import audit, cross_tenant
@@ -184,11 +185,15 @@ def list_sender_ids(
         stmt = stmt.where(owned(SenderId, owner))
     if status:
         stmt = stmt.where(SenderId.status == status)
-    rows = db.scalars(stmt.order_by(SenderId.id.desc()).limit(300))
+    rows = list(db.scalars(stmt.order_by(SenderId.id.desc()).limit(300)))
+    views = sender_view.build_views(
+        db, rows, admin=p.has("sender:review")
+    )  # M10-S5: i pandashëm, pa N+1
     return [
         {"id": s.id, "owner_ref": s.owner_ref, "country": s.country, "value": s.value,
          "kind": s.kind.value, "status": s.status.value, "reason": s.reason,
-         "created_at": s.created_at, "reviewed_by": s.reviewed_by}
+         "created_at": s.created_at, "reviewed_by": s.reviewed_by,
+         **sender_view.api_fields(views[s.id])}
         for s in rows
     ]  # fmt: skip
 

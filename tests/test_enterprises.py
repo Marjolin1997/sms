@@ -409,7 +409,8 @@ def test_enterprise_id_is_written_only_by_the_centralized_hook():
                "services/pricing_sync.py", "services/pricing_poller.py", "services/pricing_readiness.py",
                "models/sender_sync.py", "services/sender_sync.py",
                "models/sender_request.py", "services/sender_request_outbox.py",
-               "models/sender_authority.py", "services/sender_authority.py", "services/sender_authority_readiness.py", "services/sender_bootstrap.py"}  # fmt: skip
+               "models/sender_authority.py", "services/sender_authority.py", "services/sender_authority_readiness.py", "services/sender_bootstrap.py",
+               "services/sender_view.py", "services/sender_cutover.py", "services/sender_policy_readiness.py", "services/sender_alerts.py"}  # fmt: skip
     offenders = [
         p.relative_to(root).as_posix()
         for p in root.rglob("*.py")

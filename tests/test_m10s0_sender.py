@@ -548,7 +548,13 @@ def _drift(conn):
         and "sms_sender_request_outbox" not in repr(i)
         and not any(
             n in repr(i)
-            for n in ("sender_authority_source", "sender_registry_ref", "sender_central_")
+            for n in (
+                "sender_authority_source",
+                "sender_registry_ref",
+                "sender_central_",
+                "sms_sender_bootstrap_issues",
+                "sms_sender_cutover_evidence",
+            )
         )
     ]
 

@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from app.api.tenant import access_or_404, tenant
 from app.core.db import get_db
 from app.core.errors import DomainError
-from app.core.security import Principal, require
+from app.core.security import Principal, require, require_any
 from app.models.messaging import ApprovalStatus, SenderId, Template, TemplateVersion
 from app.services import sender_ids as sid
+from app.services import sender_view
 from app.services import templates as tpl
 from app.services.audit import audit
 
@@ -45,8 +46,19 @@ class SenderOut(BaseModel):
     country: str
     value: str
     kind: str
-    status: ApprovalStatus
+    status: ApprovalStatus  # statusi LOKAL (përputhshmëri); statusi efektiv është më poshtë
     reason: str | None
+    # M10-S5 (shtesë, pa ndryshuar fushat ekzistuese): modeli i leximit efektiv
+    authority_mode: str | None = None
+    effective_status: str | None = None
+    central_status: str | None = None
+    sync_status: str | None = None
+    can_resubmit: bool | None = None
+    can_review_locally: bool | None = None
+    drift: str | None = None
+    cp_revision: int | None = None
+    policy_revision: int | None = None
+    bootstrap_issues: list[str] | None = None
 
 
 class ReviewIn(BaseModel):
@@ -98,10 +110,18 @@ def _own_template(db: Session, template_id: int, p: Principal) -> None:
     access_or_404(db, p, t)
 
 
-def _sender(s: SenderId) -> SenderOut:
+def _sender(s: SenderId, db: Session | None = None, admin: bool = False) -> SenderOut:
+    extra: dict = {}
+    if db is not None:
+        v = sender_view.build_views(db, [s], admin=admin)[s.id]
+        extra = {
+            k: (list(x) if isinstance(x, tuple) else x)
+            for k, x in v.public().items()
+            if k not in ("local_status", "decided_at")
+        }
     return SenderOut(
         id=s.id, owner_ref=s.owner_ref, country=s.country, value=s.value,
-        kind=s.kind.value, status=s.status, reason=s.reason,
+        kind=s.kind.value, status=s.status, reason=s.reason, **extra,
     )  # fmt: skip
 
 
@@ -125,7 +145,20 @@ def request_sender(
         audit(db, p, "sender.request", "sender_id", s.id, body.model_dump())
         return s
 
-    return _sender(_run(db, go))
+    return _sender(_run(db, go), db)
+
+
+@router.get("/sender-ids/{sender_id}", response_model=SenderOut)
+def get_sender_id(
+    sender_id: int,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require_any("sender:request", "sender:review")),
+):
+    s = db.get(SenderId, sender_id)
+    if s is None:
+        raise HTTPException(404, {"code": "not_found", "message": "sender id not found"})
+    access_or_404(db, p, s)
+    return _sender(s, db, admin=p.has("sender:review"))
 
 
 def _sender_review(action: str, fn):
@@ -147,7 +180,7 @@ def _sender_review(action: str, fn):
             )  # fmt: skip
             return s
 
-        return _sender(_run(db, go))
+        return _sender(_run(db, go), db, admin=True)
 
     return endpoint
 

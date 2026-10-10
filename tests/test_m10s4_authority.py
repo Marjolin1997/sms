@@ -15,7 +15,7 @@ from app.core.config import Settings, settings
 from app.core.context import TenantContext
 from app.core.db import SessionLocal, engine
 from app.models.enterprise_registry import resolve_id
-from app.models.messaging import ApprovalStatus, SenderId
+from app.models.messaging import ApprovalStatus
 from app.models.sender_authority import (
     CATEGORIES,
     SenderAuthorityComparison,
@@ -712,7 +712,7 @@ def test_production_guards_for_non_local_and_central_authority():
         sender_authority="central",
         sender_sync_enabled=True,
         sender_request_reporting=True,
-        sender_authority_ack=True,
+        sender_authority_ack="a" * 64,
     )
     assert not [p for p in ok.production_problems() if "SENDER_AUTHORITY" in p]
 
@@ -832,13 +832,13 @@ def test_readiness_detects_local_mode_missing_bootstrap_sync_gap_drift_and_uncov
 def test_readiness_requires_ack_in_production_and_freeze_under_central(db, monkeypatch, tmp_path):
     healthy(db, monkeypatch, tmp_path, "central")
     monkeypatch.setattr(settings, "env", "production")
-    monkeypatch.setattr(settings, "sender_authority_ack", False)
+    monkeypatch.setattr(settings, "sender_authority_ack", "")
     assert lv(db, min_samples=3)["production_ack"].level == "FAIL"
-    monkeypatch.setattr(settings, "sender_authority_ack", True)
+    monkeypatch.setattr(settings, "sender_authority_ack", "f" * 64)
     assert (
-        lv(db, min_samples=3)["production_ack"].level == "PASS"
-        and lv(db, min_samples=3)["review_freeze"].level == "PASS"
-    )
+        lv(db, min_samples=3)["production_ack"].level == "FAIL"
+    )  # M10-S5: ACK lidhet me provën, jo me një token të përgjithshëm
+    assert lv(db, min_samples=3)["review_freeze"].level == "PASS"
 
 
 def test_readiness_cli_json_exit_codes_and_no_sender_values(
@@ -888,9 +888,9 @@ def test_rollback_guard_central_to_shadow_is_always_possible_and_to_local_needs_
     lv_ = {c.name: c for c in ar.rollback_checks(db, "shadow")}
     assert lv_["divergence"].level in ("PASS", "WARN") and lv_["data_preserved"].level == "PASS"
     to_local = {c.name: c for c in ar.rollback_checks(db, "local")}
-    assert to_local["divergence"].level == "FAIL"
+    assert to_local["reauthorize_risk"].level == "FAIL"
     assert {c.name: c for c in ar.rollback_checks(db, "local", accept_divergence=True)}[
-        "divergence"
+        "reauthorize_risk"
     ].level == "WARN"
     before = db.scalar(select(func.count()).select_from(SyncedSenderAuthorization))
     assert before == 1  # rikthimi s'prek projeksionin
@@ -930,18 +930,16 @@ def test_dispatch_recheck_foundation_semantics(db, world, fake, monkeypatch):
     )  # boshllëk/ndërprerje: s'shpikim revokim
     mode(monkeypatch, "local")
     lm = send(db, "kl")
-    assert sau.recheck_for_dispatch(db, lm) == sau.DispatchCheck(False, "approved", "local")
-    s = db.get(SenderId, lm.sender_ref)
-    s.status = ApprovalStatus.REVOKED
-    s.approved_key = None
-    db.commit()
-    assert sau.recheck_for_dispatch(db, lm).block
-    lm.sender_ref = None
+    assert sau.recheck_for_dispatch(db, lm) == sau.DispatchCheck(
+        False, "no_central_provenance", "local"
+    )
     lm.sender_authority_source = None
-    assert sau.recheck_for_dispatch(db, lm) == sau.DispatchCheck(False, "no_provenance", "none")
+    assert sau.recheck_for_dispatch(db, lm) == sau.DispatchCheck(
+        False, "no_central_provenance", "none"
+    )
 
 
-def test_recheck_is_not_wired_into_the_send_path_and_costs_bounded_sql(
+def test_recheck_costs_bounded_sql_and_is_not_used_by_submit_or_campaigns(
     db, world, fake, monkeypatch
 ):
     for name in ("messages.py", "campaigns.py"):

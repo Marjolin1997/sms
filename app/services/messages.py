@@ -316,6 +316,13 @@ def process_one(db: Session, now: datetime | None = None) -> Message | None:
         queue.retry(db, m, error="provider_exception", temporary=True, now=now)
         db.commit()
         return m
+    # M10-S5: rikontrolli i sender-it PARA provider-it (dispatch_started_at ende NULL ⇒ dështim
+    # i sigurt, hold-i lirohet). Gara e mbetur: revokim pas këtij leximi nuk pengohet.
+    denied = sender_authority.dispatch_gate(db, m)
+    if denied:
+        _fail(db, m, denied)
+        db.commit()
+        return m
     m.dispatch_started_at = now
     db.commit()  # COMMIT#1b: nga këtu provider-i MUND të jetë thirrur
     result, err, code, ambiguous, temporary = None, None, None, False, False

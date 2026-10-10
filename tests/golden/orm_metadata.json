@@ -5250,6 +5250,132 @@
    "ix_sms_sender_authority_cmp_cat:['category', 'created_at']:False"
   ]
  },
+ "sms_sender_bootstrap_issues": {
+  "columns": {
+   "category": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(40)"
+   },
+   "detected_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "enterprise_id": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "CHAR(32)"
+   },
+   "evidence_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(128)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "identity_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "reason": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(255)"
+   },
+   "report_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "resolution": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(24)"
+   },
+   "resolved_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "resolved_by": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "sender_id": {
+    "default": null,
+    "fks": [
+     "sms_sender_ids.id"
+    ],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "BIGINT"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_sender_bootstrap_issues_category",
+   "CheckConstraint:ck_sms_sender_bootstrap_issues_resolution",
+   "CheckConstraint:ck_sms_sender_bootstrap_issues_resolved_by",
+   "CheckConstraint:ck_sms_sender_bootstrap_issues_resolved_consistency",
+   "ForeignKeyConstraint:fk_sms_sender_bootstrap_issues_sender_id_sms_sender_ids",
+   "PrimaryKeyConstraint:pk_sms_sender_bootstrap_issues"
+  ],
+  "indexes": [
+   "ix_sms_sender_bootstrap_issues_sender:['sender_id', 'category']:False",
+   "uq_sms_sender_bootstrap_issues_open:['sender_id', 'category']:True"
+  ]
+ },
  "sms_sender_bootstrap_state": {
   "columns": {
    "bootstrap_version": {
@@ -5339,6 +5465,145 @@
    "PrimaryKeyConstraint:pk_sms_sender_bootstrap_state"
   ],
   "indexes": []
+ },
+ "sms_sender_cutover_evidence": {
+  "columns": {
+   "actor": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "authority_version": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "INTEGER"
+   },
+   "bootstrap_report_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "canary_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "code_revision": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "created_at": {
+    "default": "callable",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
+   },
+   "environment": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "evidence_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "id": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": true,
+    "server_default": null,
+    "type": "BIGINT"
+   },
+   "kind": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(16)"
+   },
+   "payload": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "JSON"
+   },
+   "readiness_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
+   "readiness_status": {
+    "default": null,
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(8)"
+   },
+   "ref_hash": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   }
+  },
+  "constraints": [
+   "CheckConstraint:ck_sms_sender_cutover_evidence_kind",
+   "CheckConstraint:ck_sms_sender_cutover_evidence_readiness_status",
+   "PrimaryKeyConstraint:pk_sms_sender_cutover_evidence",
+   "UniqueConstraint:uq_sms_sender_cutover_evidence_evidence_hash"
+  ],
+  "indexes": [
+   "ix_sms_sender_cutover_evidence_kind:['kind', 'created_at']:False"
+  ]
  },
  "sms_sender_decisions": {
   "columns": {

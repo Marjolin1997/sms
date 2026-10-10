@@ -1,7 +1,9 @@
 """Bootstrap i senderave ekzistues drejt Central (M10-S4), pjesa Enterprise.
 
     python -m scripts.sender_bootstrap export --out senders.json [--source-revision REV]     # artefakt VETËM-LEXIM për `apps.central.tools.sender_import`
-    python -m scripts.sender_bootstrap reconcile [--record] [--source-revision REV] [--json]  # rakordim lokal-vs-projeksion; --record shënon gjendjen e qëndrueshme
+    python -m scripts.sender_bootstrap reconcile [--record] [--central-report REPORT.json] [--json]   # rakordim lokal-vs-projeksion; --record shënon çështjet + gjendjen
+    python -m scripts.sender_bootstrap resolve --sender-id N --category C --resolution accepted_not_migrated|sender_deactivated --actor A --reason R [--evidence-ref X]
+    python -m scripts.sender_bootstrap issues
 
 Kodi i `reconcile`: 0 nëse asgjë e pazgjidhur · 1 nëse ka të pazgjidhura · 2 gabim i brendshëm."""
 
@@ -23,6 +25,15 @@ def main(argv: list[str] | None = None, factory=None) -> int:
     r.add_argument("--record", action="store_true")
     r.add_argument("--source-revision")
     r.add_argument("--json", action="store_true")
+    r.add_argument("--central-report")
+    z = sub.add_parser("resolve")
+    z.add_argument("--sender-id", type=int, required=True)
+    z.add_argument("--category", required=True)
+    z.add_argument("--resolution", required=True, choices=sb.OPERATOR_RESOLUTIONS)
+    z.add_argument("--actor", required=True)
+    z.add_argument("--reason", required=True)
+    z.add_argument("--evidence-ref")
+    sub.add_parser("issues")
     a = ap.parse_args(argv)
     try:
         with (factory or SessionLocal)() as db:
@@ -33,7 +44,49 @@ def main(argv: list[str] | None = None, factory=None) -> int:
                     json.dump(art, f, sort_keys=True)
                 print(f"exported {len(art['senders'])} sender(s) to {a.out}")  # noqa: T201
                 return 0
-            rep = sb.reconcile(db, record=a.record, source_revision=a.source_revision)
+            if a.cmd == "resolve":
+                try:
+                    sb.resolve(
+                        db,
+                        sender_id=a.sender_id,
+                        category=a.category,
+                        resolution=a.resolution,
+                        actor=a.actor,
+                        reason=a.reason,
+                        evidence_ref=a.evidence_ref,
+                    )
+                except sb.ResolutionError as ex:
+                    db.rollback()
+                    print(f"refused: {ex}", file=sys.stderr)  # noqa: T201
+                    return 1
+                db.commit()
+                print("resolved")  # noqa: T201
+                return 0
+            if a.cmd == "issues":
+                from sqlalchemy import select
+
+                from app.models.sender_authority import SenderBootstrapIssue as Iss
+
+                rows = [
+                    {
+                        "sender_id": i.sender_id,
+                        "category": i.category,
+                        "resolution": i.resolution,
+                        "resolved_by": i.resolved_by,
+                        "open": i.resolved_at is None,
+                    }
+                    for i in db.scalars(select(Iss).order_by(Iss.id))
+                ]
+                db.rollback()
+                print(json.dumps(rows, sort_keys=True))  # noqa: T201
+                return 0
+            central = None
+            if a.central_report:
+                with open(a.central_report, encoding="utf-8") as f:
+                    central = json.load(f)
+            rep = sb.reconcile(
+                db, record=a.record, source_revision=a.source_revision, central_report=central
+            )
             if a.record:
                 db.commit()
             else:
