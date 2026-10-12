@@ -337,6 +337,21 @@ class ControlPlaneClient:
             raise CpProtocolError("sender request response is malformed")
         return d
 
+    def post_sender_ops(self, payload: dict) -> dict:
+        """M11-D2: POST idempotent i snapshot-it operacional (scope `sender:report`); 200/201 = pranuar (accepted|duplicate|ignored_stale).
+        404/409/413/422 dhe 403 `enterprise_not_authorized` ⇒ `CpReportRejected` (permanente). Përgjigjja validohet strikt."""
+        d = self._call(
+            "POST", "/internal/sender/operations", json_body=payload,
+            rejected=(404, 409, 413, 422), max_bytes=2048,
+        )  # fmt: skip
+        if not (
+            isinstance(d, dict)
+            and d.get("status") in ("accepted", "duplicate", "ignored_stale")
+            and d.get("snapshot_id") == payload.get("snapshot_id")
+        ):
+            raise CpProtocolError("sender ops response is malformed")
+        return d
+
     def get_reconciliation(self, enterprise_id: uuid.UUID) -> dict:
         d = self._call(
             "GET", "/internal/money/reconciliation", params={"enterprise_id": str(enterprise_id)}

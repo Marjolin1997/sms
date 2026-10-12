@@ -117,6 +117,9 @@ class Settings(BaseSettings):
     sender_request_reporting: bool = False
     sender_request_interval_seconds: int = Field(30, ge=5, le=3600)
     sender_request_alert_age_seconds: int = Field(900, ge=60, le=604800)
+    # M11-D2: snapshot operacional (`sender.ops.v1`) drejt Central, i asinkron dhe i pavarur nga raportimi i kërkesave (e njëjta proces/lidhje, rrugë kodi dhe numërues të veçantë).
+    sender_ops_reporting: bool = False
+    sender_ops_interval_seconds: int = Field(60, ge=15, le=3600)
     # M10-S4: autoriteti i autorizimit të sender-ave (default `local` = sjellja e sotme; `shadow` krahason me projeksionin pa efekt; `central` = projeksioni vendos).
     sender_authority: Literal["local", "shadow", "central"] = "local"
     # ACK i lidhur me provën (M10-S5): `evidence_hash` (64 hex) i regjistrimit `pre_cutover` nga `scripts.sender_cutover evidence`. Bosh = pa ACK.
@@ -228,6 +231,8 @@ class Settings(BaseSettings):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_SYNC_ENABLED is true")
         if self.sender_request_reporting and not self.cp_base_url.startswith("https://"):
             bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_REQUEST_REPORTING is true")
+        if self.sender_ops_reporting and not self.cp_base_url.startswith("https://"):
+            bad.append("SMS_CP_BASE_URL must be https:// when SMS_SENDER_OPS_REPORTING is true")
         if self.sender_authority != "local":
             if not self.cp_base_url.startswith("https://"):
                 bad.append(

@@ -5,6 +5,7 @@
 - `POST /internal/sender/requests` (M10-S3): kërkesat Enterprise → Central (`sender.request.v1`), skop i dedikuar `sender:report` (nuk lexon feed-in; `sender:read` nuk raporton).
   Enterprise-i i kërkesës duhet të jetë i autorizuar për klientin (kurrë i besuar vetëm nga trupi). Përgjigjja është ACK dorëzimi: Enterprise NUK e pasqyron në gjendjen lokale."""
 
+import json
 import logging
 import uuid
 
@@ -13,7 +14,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from apps.central.api.deps import get_db
-from apps.central.services import sender_requests, sender_sync, service_auth
+from apps.central.services import sender_ops_ingest, sender_requests, sender_sync, service_auth
 
 router = APIRouter(prefix="/internal/sender")
 log = logging.getLogger("central.sender_auth")
@@ -112,3 +113,38 @@ def post_request(
     out = sender_requests.response(res)
     db.commit()
     return JSONResponse(out, status_code=200 if res.duplicate else 201)
+
+
+@router.post("/operations")
+async def post_operations(
+    request: Request,
+    ctx: service_auth.ServiceContext = Depends(report_context),
+    db: Session = Depends(get_db),
+):
+    """M11-D2: snapshot operacional `sender.ops.v1` (skop `sender:report`, i njëjti transport/JTI si kërkesat). 201 = pranuar · 200 = dublikat ose i vjetër (ignoruar, pa mbishkrim) ·
+    409 = i njëjti `snapshot_id` me përmbajtje tjetër · 422 = i pavlefshëm · 403 = klient pa enterprise të autorizuar · 413 = shumë i madh. Ruhet vetëm gjendja e fundit (pa histori)."""
+    limit = sender_ops_ingest.MAX_BODY_BYTES
+    length = request.headers.get("content-length")
+    if length is not None and length.isdigit() and int(length) > limit:
+        raise HTTPException(413, {"code": "too_large", "message": "snapshot is too large"})
+    raw = await request.body()
+    if len(raw) > limit:
+        raise HTTPException(413, {"code": "too_large", "message": "snapshot is too large"})
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        raise HTTPException(
+            422, {"code": "invalid", "message": "snapshot is not valid JSON"}
+        ) from None
+    snap = sender_ops_ingest.parse(payload)
+    _gen, allowed = service_auth.allowed_enterprises(db, ctx.client_pk)
+    if not allowed:
+        raise HTTPException(
+            403, {"code": "enterprise_not_authorized", "message": "enterprise not authorized"}
+        )
+    res = sender_ops_ingest.ingest(db, ctx.client_pk, snap)
+    db.commit()
+    return JSONResponse(
+        {"status": res.status, "snapshot_id": res.snapshot_id},
+        status_code=201 if res.status == "accepted" else 200,
+    )

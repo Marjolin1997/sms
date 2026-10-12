@@ -33,6 +33,7 @@ from apps.central.models.sender import (
     SenderSyncSequence,
 )
 from apps.central.services import sender_central_readiness as readiness
+from apps.central.services import sender_ops_evidence as evidence
 
 PASS, WARN, FAIL, UNKNOWN = "pass", "warn", "fail", "unknown"
 READINESS_TTL_SECONDS = 30.0
@@ -66,17 +67,20 @@ def _iso(d: datetime | None) -> str | None:
 
 
 def _check(code: str, status: str, summary: str, **details) -> dict:
-    return {"code": code, "status": status, "summary": summary, "details": details}
+    return {
+        "code": code, "status": status, "summary": summary, "details": details, "source": "central",
+    }  # fmt: skip
 
 
 def _unknown(code: str) -> dict:
-    return _check(
+    c = _check(
         code,
         UNKNOWN,
         "Not available to Central: this evidence lives on the Enterprise side.",
         source="enterprise",
         tool=ENTERPRISE_ONLY[code],
     )
+    return {**c, "source": "enterprise"}
 
 
 def worst(statuses) -> str:
@@ -282,29 +286,54 @@ _ALERT_CODE = {
     "bootstrap_unresolved": "bootstrap_unresolved",
     "bootstrap_run": "bootstrap_failed",
 }
+_CHECK_ALERT = {code: alert for alert, (_s, code) in evidence.ALERT_CHECKS.items()}
+_NO_ALERT = frozenset({"enterprise_alerts"})  # përmbledhje; alarmet e veta shfaqen veç e veç
 
 
-def _alerts(sections: list[dict], observed_at: str) -> list[dict]:
-    out = []
+def _alerts(sections: list[dict], observed_at: str, snapshot_at: str | None = None) -> list[dict]:
+    """Alarme të bashkuara me burim (`central` | `enterprise`), të deduplikuara sipas (burim, kod)."""
+    out, seen = [], set()
     for s in sections:
         for c in s["checks"]:
-            if c["status"] in (WARN, FAIL) and not (
+            if c["status"] not in (WARN, FAIL) or c["code"] in _NO_ALERT:
+                continue
+            if (
                 c["code"] == "bootstrap_run" and c["status"] == WARN
-            ):  # `running` është gjendje normale gjatë ekzekutimit
+            ):  # `running` është gjendje normale
+                continue
+            src = c.get("source", "central")
+            if src == "enterprise":
+                code = _CHECK_ALERT.get(c["code"], c["code"])
+            else:
                 code = _ALERT_CODE.get(
                     c["code"], "readiness_fail" if s["code"] == "central_readiness" else c["code"]
                 )
-                out.append(
-                    {
-                        "code": code,
-                        "severity": "critical" if c["status"] == FAIL else "warning",
-                        "check": c["code"],
-                        "section": s["code"],
-                        "summary": c["summary"],
-                        "observed_at": observed_at,
-                    }
-                )
+            if (src, code) in seen:
+                continue
+            seen.add((src, code))
+            out.append(
+                {
+                    "code": code,
+                    "severity": "critical" if c["status"] == FAIL else "warning",
+                    "check": c["code"],
+                    "section": s["code"],
+                    "source": src,
+                    "summary": c["summary"],
+                    "observed_at": (snapshot_at or observed_at)
+                    if src == "enterprise"
+                    else observed_at,
+                }
+            )
     return out
+
+
+def _merge(sections: list[dict], ev: dict) -> None:
+    """Zëvendëson stub-et `unknown` të Enterprise me provën e snapshot-it dhe shton kontrollet e prejardhura (në vend; seksionet e Central s'preken)."""
+    by = {s["code"]: s for s in sections}
+    for code, new in ev["checks"].items():
+        s = by[code]
+        replaced = {c["code"] for c in new}
+        s["checks"] = [c for c in s["checks"] if c["code"] not in replaced] + new
 
 
 def snapshot(db: Session, *, now: datetime | None = None, mono: float | None = None) -> dict:
@@ -330,6 +359,26 @@ def snapshot(db: Session, *, now: datetime | None = None, mono: float | None = N
             ],
         },
     ]
+    ev = evidence.build(db, now, boot_m.get("latest"))
+    meta = ev["meta"]
+    if ev["checks"]:
+        _merge(sections, ev)
+    else:  # pa snapshot / skemë e pambështetur: unknown, kurrë gabim
+        why = (
+            "The Enterprise snapshot uses an unsupported version."
+            if meta.get("present")
+            else "No Enterprise snapshot has been received (reporter disabled or not connected)."
+        )
+        sections[4]["checks"].insert(
+            0,
+            {
+                "code": "enterprise_snapshot",
+                "status": UNKNOWN,
+                "summary": why,
+                "details": {},
+                "source": "enterprise",
+            },
+        )
     for s in sections:
         s["status"] = worst(c["status"] for c in s["checks"])
     return {
@@ -344,6 +393,8 @@ def snapshot(db: Session, *, now: datetime | None = None, mono: float | None = N
             "sync": sync_m,
             "requests": req_m,
             "bootstrap": boot_m,
+            "enterprise_snapshot": meta,
+            "enterprise": ev["metrics"],
         },
-        "alerts": _alerts(sections, n),
+        "alerts": _alerts(sections, n, meta.get("generated_at")),
     }

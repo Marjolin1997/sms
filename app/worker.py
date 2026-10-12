@@ -321,10 +321,12 @@ def run_money_usage_reporter(once: bool = False) -> int:
 
 
 def run_sender_request_reporter(once: bool = False) -> int:
-    """Raportuesi i kërkesave të sender-ave drejt Central (M10-S3): rol i VEÇANTË nga konsumatori `sender_control_plane` (push ≠ pull; domene dështimi të ndara). `SMS_SENDER_REQUEST_REPORTING=false` ⇒ proces boshe.
-    Dështimi i tij nuk prek kërkesën e klientit (veprimi është tashmë i commit-uar në outbox). Scope Ed25519: `sender:report`. NJË aktiv për DB (kyç advisory)."""
+    """Raportuesi i sender-ave drejt Central: (1) kërkesat e outbox-it (M10-S3) dhe (2) snapshot-i operacional `sender.ops.v1` (M11-D2). Rol i VEÇANTË nga konsumatori `sender_control_plane`
+    (push ≠ pull). `SMS_SENDER_REQUEST_REPORTING=false` dhe `SMS_SENDER_OPS_REPORTING=false` ⇒ proces boshe. Dy rrugë kodi me numërues të veçantë: dështimi i snapshot-it NUK prek kërkesat
+    (as rezultatin e ciklit) dhe anasjelltas; asnjëra s'prek kërkesën e klientit. Scope Ed25519: `sender:report`. NJË aktiv për DB (kyç advisory)."""
     from app.core.db import engine
     from app.services import control_plane_poller as poller
+    from app.services import sender_ops_snapshot as ops
     from app.services import sender_request_outbox as outbox
     from app.services.control_plane_client import (
         SENDER_REPORT_SCOPE,
@@ -336,8 +338,9 @@ def run_sender_request_reporter(once: bool = False) -> int:
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
-    if not settings.sender_request_reporting:
-        log.info("SMS_SENDER_REQUEST_REPORTING=false: sender request reporter idle")
+    requests_on, ops_on = settings.sender_request_reporting, settings.sender_ops_reporting
+    if not (requests_on or ops_on):
+        log.info("sender reporting disabled (requests and ops): idle")
         while not stop.is_set():
             heartbeat()
             stop.wait(30)
@@ -345,16 +348,24 @@ def run_sender_request_reporter(once: bool = False) -> int:
     try:
         client = ControlPlaneClient(config_from_settings(settings), scope=SENDER_REPORT_SCOPE)
     except ConfigError as e:
-        log.critical("sender request reporter misconfigured: %s", e)
+        log.critical("sender reporter misconfigured: %s", e)
         return 2
     lock = poller.PollerLock(engine, key=outbox.LOCK_KEY)
 
     def tick(factory, cl, **_):
-        try:
-            return outbox.run_once(factory, cl)
-        except Exception:  # noqa: BLE001  (një cikël i keq s'e vret procesin)
-            log.exception("sender request cycle failed")
-            return outbox.DeliveryOutcome(kind="protocol_error", detail="cycle failed")
+        out = outbox.DeliveryOutcome()  # kërkesat joaktive ⇒ cikël "ok"
+        if requests_on:
+            try:
+                out = outbox.run_once(factory, cl)
+            except Exception:  # noqa: BLE001  (një cikël i keq s'e vret procesin)
+                log.exception("sender request cycle failed")
+                out = outbox.DeliveryOutcome(kind="protocol_error", detail="cycle failed")
+        if ops_on:  # rrugë e veçantë: asnjë përjashtim/dështim këtu nuk ndryshon `out`
+            try:
+                ops.report_once(factory, cl, force=once)
+            except Exception:  # noqa: BLE001
+                log.exception("sender ops snapshot cycle failed")
+        return out
 
     try:
         if once:

@@ -1,6 +1,6 @@
 import { t } from "../i18n.jsx";
 import { Empty, Table } from "../ui.jsx";
-import { CheckList, OpsPage, SectionCard, Stamp, Status, alertLabel, checkLabel, sectionLabel } from "../ops/components.jsx";
+import { CheckList, OpsPage, SectionCard, Stamp, Status, alertLabel, checkLabel, sectionLabel, sourceLabel } from "../ops/components.jsx";
 import { section } from "../ops/model.js";
 
 export default function OpsAlerts() {
@@ -11,10 +11,11 @@ export default function OpsAlerts() {
         const enterpriseAlerts = ent.checks.filter((c) => c.code === "enterprise_alerts");
         return (
           <>
-            <SectionCard title={t("Central-side alerts")} status={o.alerts.length ? (o.alerts.some((a) => a.severity === "critical") ? "fail" : "warn") : "pass"}>
-              {o.alerts.length === 0 ? <Empty title={t("No active alerts")}>{t("Every Central-side check that Central can evaluate is currently healthy.")}</Empty> : (
-                <Table rows={o.alerts.map((a, i) => ({ ...a, id: `${a.code}-${i}` }))} cols={[
+            <SectionCard title={t("Sender alerts")} status={o.alerts.length ? (o.alerts.some((a) => a.severity === "critical") ? "fail" : "warn") : "pass"}>
+              {o.alerts.length === 0 ? <Empty title={t("No active alerts")}>{t("No check currently reports a warning or failure.")}</Empty> : (
+                <Table rows={o.alerts.map((a, i) => ({ ...a, id: `${a.source}-${a.code}-${i}` }))} cols={[
                   { label: t("Severity"), render: (a) => <Status status={a.severity} /> },
+                  { label: t("Source"), render: (a) => sourceLabel(a.source) },
                   { label: t("Alert"), render: (a) => <b>{alertLabel(a.code)}</b> },
                   { label: t("Check"), hideSm: true, render: (a) => checkLabel(a.check) },
                   { label: t("Section"), hideSm: true, render: (a) => sectionLabel(a.section) },

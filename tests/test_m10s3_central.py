@@ -538,7 +538,9 @@ def _drift(ctx):
     return [
         d
         for d in compare_metadata(ctx, Base.metadata)
-        if "central_alembic_version" not in repr(d) and "sender_bootstrap_runs" not in repr(d)
+        if "central_alembic_version" not in repr(d)
+        and "sender_bootstrap_runs" not in repr(d)
+        and "sender_ops_snapshots" not in repr(d)
     ]
 
 

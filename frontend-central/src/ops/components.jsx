@@ -23,11 +23,32 @@ export const CHECKS = {
   bootstrap_run: { label: T("Bootstrap run"), action: T("Inspect the bootstrap report and re-run the dry-run before applying again.") },
   bootstrap_unresolved: { label: T("Bootstrap unresolved items"), action: T("Resolve the listed categories on the Enterprise side; cutover stays blocked until none remain.") },
   bootstrap_issue_categories: { label: T("Bootstrap issue categories"), action: null },
-  shadow_evidence: { label: T("Shadow comparison and drift"), action: null },
-  cutover_evidence: { label: T("Cutover evidence"), action: null },
+  shadow_evidence: { label: T("Shadow comparison and drift"), action: T("Review the drift categories on the Enterprise side before any cutover; do not enable Central authority.") },
+  cutover_evidence: { label: T("Cutover evidence"), action: T("Check the cutover acknowledgement and evidence on the Enterprise side.") },
   enterprise_alerts: { label: T("Enterprise sender alerts"), action: null },
+  enterprise_snapshot: { label: T("Enterprise snapshot"), action: T("Check that the sender-report worker on Enterprise is running with SMS_SENDER_OPS_REPORTING enabled and can reach Central.") },
+  enterprise_sync_lag: { label: T("Enterprise sync lag"), action: T("Inspect the Enterprise sender-sync worker; the cursor is behind Central.") },
+  enterprise_sync_age: { label: T("Enterprise sync age"), action: T("The last successful sync is old; inspect the sender-sync worker and connectivity.") },
+  enterprise_sync_gap_recoveries: { label: T("Enterprise sync gap recoveries"), action: T("A feed gap was recovered by snapshot; check why the cursor fell behind.") },
+  enterprise_projection_stale: { label: T("Enterprise projection freshness"), action: T("The Enterprise projection hasn't synced recently; inspect the sender-sync worker.") },
+  enterprise_request_age: { label: T("Oldest open sender request"), action: T("Requests are waiting too long; inspect the Enterprise sender-report worker.") },
+  enterprise_request_failures: { label: T("Permanently failed sender requests"), action: T("Inspect the failed requests on the Enterprise side; they are not retried automatically.") },
+  enterprise_bootstrap_unresolved: { label: T("Enterprise bootstrap unresolved items"), action: T("Resolve the open bootstrap issues on the Enterprise side before cutover.") },
+  bootstrap_evidence_agreement: { label: T("Bootstrap evidence agreement"), action: T("Re-run the bootstrap dry-run and compare the Central and Enterprise reports before continuing.") },
+  shadow_critical_drift: { label: T("Critical shadow drift"), action: T("Investigate the critical drift categories before any cutover.") },
+  central_deny_ratio: { label: T("Central deny ratio"), action: T("Many sends would be denied by Central; review policies before cutover.") },
+  dispatch_recheck_blocked: { label: T("Dispatch rechecks that blocked sends"), action: T("Sends were blocked after a Central decision; this is expected after revocations, review if unexpected.") },
+  policy_readiness: { label: T("Enterprise policy readiness"), action: T("Run the Enterprise sender policy readiness tool and resolve its failing checks.") },
 };
-export const ALERTS = { readiness_fail: T("Central readiness check failed"), sync_gap: T("Sync feed gap"), bootstrap_unresolved: T("Bootstrap items unresolved"), bootstrap_failed: T("Bootstrap run failed") };
+export const ALERTS = {
+  readiness_fail: T("Central readiness check failed"), sync_gap: T("Sync feed gap"), bootstrap_unresolved: T("Bootstrap items unresolved"), bootstrap_failed: T("Bootstrap run failed"),
+  enterprise_snapshot: T("Enterprise snapshot is not fresh"), bootstrap_evidence_agreement: T("Bootstrap evidence disagrees"),
+  sender_sync_lag: T("Enterprise sync lag"), sender_sync_age_seconds: T("Enterprise sync age"), sender_sync_gap_recoveries_total: T("Enterprise sync gap recoveries"), sender_projection_stale: T("Enterprise projection stale"),
+  sender_request_oldest_age_seconds: T("Sender request backlog"), sender_request_permanent_failures: T("Sender request permanent failures"), sender_bootstrap_unresolved: T("Enterprise bootstrap unresolved"),
+  sender_shadow_critical_drift: T("Critical shadow drift"), sender_central_deny_ratio: T("Central deny spike"), sender_dispatch_recheck_blocked_1h: T("Dispatch recheck blocked sends"), sender_policy_readiness_fail: T("Enterprise policy readiness failing"),
+};
+export const SOURCES = { central: T("Central"), enterprise: T("Enterprise") };
+export const sourceLabel = (src) => t(SOURCES[src] || SOURCES.central);
 const SECTIONS = { central_readiness: T("Central readiness"), sync: T("Sync"), requests: T("Requests"), bootstrap: T("Bootstrap"), enterprise_evidence: T("Enterprise evidence") };
 export const sectionLabel = (code) => (SECTIONS[code] ? t(SECTIONS[code]) : code);
 export const checkLabel = (code) => (CHECKS[code] ? t(CHECKS[code].label) : code);
@@ -75,7 +96,7 @@ export function CheckRow({ check }) {
   const details = Object.entries(check.details).filter(([k]) => k !== "source" && k !== "tool");
   return (
     <li className="check" data-status={check.status}>
-      <div className="row wrap"><Status status={check.status} /><b>{checkLabel(check.code)}</b></div>
+      <div className="row wrap"><Status status={check.status} /><b>{checkLabel(check.code)}</b><span className="badge muted">{sourceLabel(check.source)}</span></div>
       <div className="muted">{unavailable(check) ? t("Not connected to Central: evidence unavailable here.") : check.summary}</div>
       {unavailable(check) && check.details.tool && <small className="muted">{t("Read it on the Enterprise host with")} <code>python -m {check.details.tool}</code></small>}
       {details.length > 0 && <small className="muted">{details.map(([k, v]) => `${k}: ${String(v)}`).join(" · ")}</small>}
@@ -90,3 +111,30 @@ export function SectionCard({ title, status, children }) {
 }
 
 export { Card, DetailList, DetailRow };
+
+/** Kohëzgjatje e lexueshme nga sekonda të dhëna nga serveri (pa pragje këtu). */
+export function duration(sec) {
+  if (sec == null) return "-";
+  if (sec < 90) return t("{n} s", { n: sec });
+  if (sec < 5400) return t("{n} min", { n: Math.round(sec / 60) });
+  return t("{n} h", { n: Math.round(sec / 3600) });
+}
+export const val = (v) => (v === null || v === undefined ? "-" : typeof v === "boolean" ? (v ? t("Yes") : t("No")) : String(v));
+
+/** Blloku i freskisë së snapshot-it Enterprise: gjendja/mosha vijnë nga serveri; "pa snapshot" ≠ i shëndetshëm. */
+export function SnapshotFreshness({ meta, status }) {
+  if (!meta.present) return <p className="muted"><Status status="unknown" /> {t("No Enterprise snapshot has been received (reporter disabled or not connected).")}</p>;
+  if (!meta.supported) return <p className="muted"><Status status="unknown" /> {t("The Enterprise snapshot uses an unsupported version.")}</p>;
+  return (
+    <DetailList>
+      <DetailRow label={t("Snapshot status")}><Status status={status} /> <span className="muted">{t(meta.state || "unknown")}</span></DetailRow>
+      <DetailRow label={t("Received")}><Stamp value={meta.receivedAt} /></DetailRow>
+      <DetailRow label={t("Generated by Enterprise")}><Stamp value={meta.generatedAt} /></DetailRow>
+      <DetailRow label={t("Snapshot age")}>{duration(meta.ageSeconds)}</DetailRow>
+      <DetailRow label={t("Stale after")}>{duration(meta.staleAfter)}</DetailRow>
+      <DetailRow label={t("Reporter")}>{meta.reporter}</DetailRow>
+      <DetailRow label={t("Enterprise revision")}>{meta.sourceRevision}</DetailRow>
+      {meta.deployments > 1 && <DetailRow label={t("Reporting deployments")}>{meta.deployments}</DetailRow>}
+    </DetailList>
+  );
+}

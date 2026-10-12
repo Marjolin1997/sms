@@ -23,6 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     event,
+    inspect,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -305,3 +306,31 @@ class SenderBootstrapRun(Base):
         Index("ix_sender_bootstrap_runs_artifact", "artifact_hash", "started_at"),
         CheckConstraint("status in ('running', 'completed', 'failed')", name="status"),
     )
+
+
+class SenderOpsSnapshot(Base):
+    """M11-D2: snapshot-i i FUNDIT operacional (`sender.ops.v1`) i raportuar nga një deployment Enterprise. NJË rresht për klient shërbimi (PK = `client_pk`, i pandryshueshëm):
+    ingest-i e mbishkruan idempotentisht dhe asnjëherë me snapshot më të vjetër. Pa histori (qëllim: dukshmëri operacionale, jo analitikë). `payload` = dokumenti i validuar (pa PII)."""
+
+    __tablename__ = "sender_ops_snapshots"
+
+    client_pk: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("service_clients.id", ondelete="RESTRICT"), primary_key=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    schema_version: Mapped[str] = mapped_column(String(24))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    source_revision: Mapped[str | None] = mapped_column(String(64))
+    content_hash: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+
+    __table_args__ = (
+        CheckConstraint("schema_version in ('sender.ops.v1')", name="schema_version"),
+    )
+
+
+@event.listens_for(SenderOpsSnapshot, "before_update")
+def _ops_identity_immutable(_mapper, _conn, target) -> None:
+    if inspect(target).attrs.client_pk.history.has_changes():
+        raise SenderImmutableError("sender_ops_snapshots.client_pk is immutable")

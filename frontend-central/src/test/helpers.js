@@ -66,3 +66,39 @@ export const allPass = () => {
   const b = opsBody();
   return { ...b, status: "pass", sections: b.sections.map((s) => ({ ...s, status: "pass", checks: s.checks.map((c) => ({ ...c, status: "pass", details: {} })) })) };
 };
+
+// ---- Operations + Enterprise snapshot (M11-D2): formë e njëjtë me përgjigjen e backend-it pas bashkimit ----
+export const eChk = (code, status = "pass", summary = "ok", details = {}) => ({ code, status, summary, details, source: "enterprise" });
+export const ENT = () => ({
+  sync: { enabled: true, initialized: true, cursor_seq: 40, latest_central_seq: 45, lag: 5, last_success_age_seconds: 30, snapshot_age_seconds: 600, failure_count: 2, gap_recoveries: 1, drift_repairs: 0, policy_count: 2, authorization_count: 5, withdrawn_count: 1, projection_stale: false, last_error_age_seconds: null },
+  requests: { enabled: true, pending: 3, retry: 2, sending: 1, failed: 4, sent: 90, stuck_sending: 0, oldest_open_age_seconds: 600, last_sent_age_seconds: 45, attempts_max: 3, failed_by_category: { http_422: 3, transport: 1 } },
+  shadow: { mode: "shadow", window_hours: null, min_samples: 100, comparisons_total: 250, match_total: 240, match_rate: 0.96, critical_total: 7, local_allow_central_deny: 4, local_deny_central_allow: 2, central_missing: 3, policy_mismatch: 1, identity_mismatch: 2, projection_stale: 0, by_category: { match_allowed: 240, central_missing: 3 } },
+  bootstrap: { state: { completed: true, version: 1, completed_at: NOW, tenant_count: 2, sender_count: 10, unresolved_count: 2, report_hash: "abcdef012345" }, issues: { open: 3, resolved: 1, open_by_category: { identity_conflict: 2, brand_new_category: 1 } } },
+  cutover: { authority_mode: "shadow", dispatch_recheck: true, ack_configured: true, ack_valid: false, evidence_count: 2, latest_evidence: { kind: "pre_cutover", hash: "0123456789ab", readiness_status: "WARN", created_at: NOW, authority_version: 1 } },
+  alerts: { items: [], evaluated_age_seconds: 3 },
+});
+export const META = (o = {}) => ({ present: true, supported: true, schema_version: "sender.ops.v1", generated_at: NOW, received_at: NOW, state: "fresh", age_seconds: 12, stale_after_seconds: 300, deployments: 1, reporter: "ent-prod", source_revision: "8c820ff", ...o });
+export const replaceChecks = (body, code, checks) => ({ ...body, sections: body.sections.map((s) => (s.code === code ? { ...s, checks: [...s.checks.filter((c) => !checks.some((n) => n.code === c.code)), ...checks] } : s)) });
+export const withEnterprise = (base, { state = "fresh", ent = ENT(), meta = {}, status } = {}) => {
+  let b = { ...base, metrics: { ...base.metrics, enterprise: ent, enterprise_snapshot: META({ state, age_seconds: state === "fresh" ? 12 : 900, ...meta }) } };
+  const snapStatus = state === "fresh" ? "pass" : state === "stale" ? "warn" : "fail";
+  const keep = (s) => (state === "fresh" ? s : s === "pass" ? "unknown" : s);
+  b = replaceChecks(b, "enterprise_evidence", [
+    eChk("enterprise_snapshot", snapStatus, state === "fresh" ? "The Enterprise snapshot is fresh." : "The Enterprise snapshot is stale.", { age_seconds: b.metrics.enterprise_snapshot.age_seconds }),
+    eChk("shadow_evidence", keep("fail"), "7 critical drift comparison(s).", { critical_total: 7 }),
+    eChk("cutover_evidence", keep("warn"), "The configured cutover acknowledgement is not valid.", { ack_valid: false }),
+    eChk("enterprise_alerts", keep("pass"), "0 critical, 0 warning, 11 ok."),
+  ]);
+  b = replaceChecks(b, "sync", [eChk("enterprise_sync_runtime", keep("pass"), "Enterprise cursor 40 of Central 45 (lag 5).", { cursor_seq: 40, lag: 5 }), eChk("enterprise_sync_lag", keep("pass"), "sender_sync_lag: value=5, threshold=1000", { value: 5, threshold: 1000 })]);
+  b = replaceChecks(b, "requests", [eChk("enterprise_request_outbox", keep("fail"), "pending 3, retry 2, sending 1, failed 4.", { pending: 3, failed: 4 })]);
+  b = replaceChecks(b, "bootstrap", [eChk("bootstrap_issue_categories", keep("warn"), "3 open and 1 resolved bootstrap issue(s).", { open: 3, open_identity_conflict: 2, open_other: 1 }), eChk("bootstrap_evidence_agreement", keep("warn"), "Central and Enterprise bootstrap evidence disagree.", { central_senders: 10, enterprise_senders: 12 })]);
+  const sectionStatus = (s) => ["fail", "warn", "unknown", "pass"].find((x) => s.checks.some((c) => c.status === x)) || "unknown";
+  b = { ...b, sections: b.sections.map((s) => ({ ...s, status: sectionStatus(s) })) };
+  b.status = status || ["fail", "warn", "unknown", "pass"].find((x) => b.sections.some((s) => s.status === x));
+  b.alerts = [
+    ...(b.alerts || []),
+    { code: "sender_shadow_critical_drift", severity: "critical", check: "shadow_evidence", section: "enterprise_evidence", source: "enterprise", summary: "7 critical drift comparison(s).", observed_at: NOW },
+    { code: "bootstrap_evidence_agreement", severity: "warning", check: "bootstrap_evidence_agreement", section: "bootstrap", source: "enterprise", summary: "Central and Enterprise bootstrap evidence disagree.", observed_at: NOW },
+  ];
+  return b;
+};

@@ -211,6 +211,8 @@ def test_central_has_only_health_routes_and_no_docs():
         "/internal/sender/state", "/internal/sender/changes", "/internal/sender/snapshot",
         # M10-S3: kërkesat Enterprise → Central (skop sender:report)
         "/internal/sender/requests",
+        # M11-D: pamja operacionale read-only (admin/operator) · M11-D2: snapshot operacional Enterprise → Central (skop sender:report)
+        "/admin/operations/sender", "/internal/sender/operations",
     }  # fmt: skip
 
 
@@ -240,8 +242,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0030_next.py").write_text(
-        'revision = "0030"\ndown_revision = "0029"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0031_next.py").write_text(
+        'revision = "0031"\ndown_revision = "0030"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)
@@ -312,6 +314,7 @@ def test_central_uses_its_own_version_table_and_only_central_tables(make_db):
         "sender_sync_outbox",
         "sender_request_operations",
         "sender_bootstrap_runs",
+        "sender_ops_snapshots",
         "registration_products",
         "product_registration_policy",
     }
@@ -376,6 +379,7 @@ def test_central_metadata_is_independent_from_enterprise_metadata():
         "sender_sync_outbox",
         "sender_request_operations",
         "sender_bootstrap_runs",
+        "sender_ops_snapshots",
         "registration_products",
         "product_registration_policy",
     }
@@ -448,6 +452,7 @@ def test_enterprise_and_central_databases_do_not_affect_each_other(make_db):
         "sender_sync_outbox",
         "sender_request_operations",
         "sender_bootstrap_runs",
+        "sender_ops_snapshots",
         "registration_products",
         "product_registration_policy",
     }
@@ -539,6 +544,7 @@ def test_central_settings_are_isolated_from_enterprise_settings():
         "trusted_proxy_hops",
         "money_report_fresh_seconds",
         "money_report_stale_seconds",
+        "sender_ops_stale_seconds",
         "money_cursor_lag_grace_seconds",
         "money_cursor_stale_warn_seconds",
         "money_cursor_stale_fail_seconds",

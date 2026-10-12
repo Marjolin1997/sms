@@ -15,6 +15,8 @@ import os
 import sys
 import uuid
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,7 @@ from apps.central.models.enterprise import Enterprise
 from apps.central.models.sender import SenderRequestOperation
 from apps.central.models.user import CentralUser
 from apps.central.services import senders as svc
+from apps.central.services import service_auth
 from apps.central.tools import create_admin
 
 
@@ -70,6 +73,26 @@ def main(out: str) -> None:
                 status_after="pending",
             )
         )
+        # kredencial real i raportuesit Enterprise (Ed25519): çelësi privat shkruhet VETËM te E2E_KEY_OUT (jashtë repo-s), ID-të e jashtme në out.json
+        priv = Ed25519PrivateKey.generate()
+        pem = priv.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+        pub = (
+            priv.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+            .decode()
+        )
+        service_auth.create_client(db, "ent-e2e", ["sender:report", "sender:read"], [e1.id, e2.id])
+        service_auth.add_key(db, "ent-e2e", "k1", pub)
+        ids["service_client"], ids["service_kid"] = "ent-e2e", "k1"
+        with open(os.environ["E2E_KEY_OUT"], "wb") as kf:
+            kf.write(pem)
+        os.chmod(os.environ["E2E_KEY_OUT"], 0o600)
         db.commit()
     with open(out, "w") as fh:
         json.dump(ids, fh)

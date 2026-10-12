@@ -385,12 +385,156 @@ def ops_flow(b):
     q.context.close()
 
 
+def run_report(scenario):
+    """Raportuesi Enterprise REAL (e2e/ops_report.py) kundër DB-së Enterprise të përkohshme dhe Central API real."""
+    import subprocess
+    import sys
+
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+        "SMS_ENV": "development",
+        "SMS_DATABASE_URL": f"sqlite:///{os.environ['E2E_ENT_DB']}",
+        "SMS_CP_BASE_URL": os.environ["E2E_CENTRAL_URL"],
+        "SMS_CP_CLIENT_ID": IDS["service_client"],
+        "SMS_CP_KEY_ID": IDS["service_kid"],
+        "SMS_CP_PRIVATE_KEY_PATH": os.environ["E2E_KEY"],
+        "SMS_PII_HMAC_KEY": "e2e-hmac-key-0123456789abcdef0123456789abcdef",
+        "SMS_SENDER_AUTHORITY": "local",
+    }
+    r = subprocess.run(
+        [sys.executable, "e2e/ops_report.py", scenario],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    check(
+        r.returncode == 0 and "report: ok" in r.stdout,
+        f"Enterprise reporter ({scenario}) delivered the snapshot: {r.stdout[-200:]} {r.stderr[-300:]}",
+    )
+    return r.stdout
+
+
+def age_central_snapshot(seconds):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from apps.central.core.db import make_engine
+    from apps.central.models.sender import SenderOpsSnapshot
+
+    with Session(make_engine()) as db:
+        db.scalar(select(SenderOpsSnapshot)).received_at = datetime.now(UTC) - timedelta(
+            seconds=seconds
+        )
+        db.commit()
+
+
+def overall_text(p):
+    return p.locator("[aria-label='Overall sender governance health'] .badge").inner_text().lower()
+
+
+def ops_enterprise_flow(b):
+    p = new_page(b)
+    login(p, "admin@e2e.test", ADMIN_PW)
+    go(p, "#ops-sync", "text=Central → Enterprise sync feed")
+    check(
+        has("Not connected to Central", text(p)),
+        "before any report: Enterprise sync evidence is unavailable",
+    )
+    run_report("base")
+    p.reload()
+    p.wait_for_selector("dt:has-text('Enterprise cursor')")
+    row = lambda label: p.locator(f"dt:has-text('{label}') + dd").first.inner_text()  # noqa: E731
+    check(
+        row("Enterprise cursor") == "40"
+        and row("Latest Central sequence known") == "45"
+        and row("Lag") == "5",
+        "sync: real cursor / Central seq / lag from the Enterprise reporter",
+    )
+    check(
+        row("Pending") == "1"
+        and row("Failed") == "0"
+        and has("None open", row("Oldest open request")) is False,
+        "request reporter: real backlog (1 pending, 0 failed)",
+    )
+    go(p, "#ops-bootstrap", "text=Shadow comparison (reported snapshot)")
+    check(
+        has("120 of", row("Sample progress")) and row("Critical drift") == "0",
+        "shadow: real sample progress, no critical drift",
+    )
+    check(
+        p.locator("li:has-text('Bootstrap evidence agreement') .badge.good").count() == 1,
+        "Central and Enterprise bootstrap evidence agree",
+    )
+    check(has("Identity conflict", text(p)), "Enterprise bootstrap issue category shown")
+    go(p, "#ops", "text=Enterprise snapshot")
+    p.wait_for_selector("dt:has-text('Snapshot status')")
+    check(
+        has("fresh", p.locator("dt:has-text('Snapshot status') + dd").inner_text()),
+        "snapshot freshness is fresh",
+    )
+    check(p.locator("a[aria-label='Enterprise snapshot: pass']").count() == 1, "snapshot card PASS")
+    # snapshot i vjetruar (sipas serverit)
+    age_central_snapshot(400)
+    p.click("button:has-text('Refresh')")
+    p.wait_for_selector("a[aria-label='Enterprise snapshot: warn']", timeout=8000)
+    check(
+        has("stale", p.locator("dt:has-text('Snapshot status') + dd").inner_text()),
+        "stale snapshot flagged by the server",
+    )
+    check(
+        p.locator("li:has-text('Enterprise sync runtime') .badge.good").count() == 0,
+        "stale evidence is not shown as pass",
+    )
+    # shpërndarje kritike
+    run_report("drift")
+    p.click("button:has-text('Refresh')")
+    p.wait_for_selector("a[aria-label='Enterprise snapshot: pass']", timeout=8000)
+    p.wait_for_selector("a[aria-label='Critical drift: fail']", timeout=8000)
+    check("fail" in overall_text(p), "critical drift makes the overall health FAIL")
+    go(p, "#ops-alerts", "text=Critical shadow drift")
+    check(
+        p.locator("tbody tr:has-text('Critical shadow drift') td:has-text('Enterprise')").count()
+        >= 1,
+        "alert is sourced from Enterprise",
+    )
+    p.set_viewport_size({"width": 390, "height": 800})
+    for page_ in ("#ops", "#ops-sync", "#ops-bootstrap", "#ops-alerts"):
+        go(p, page_, "text=Generated")
+        check(
+            not p.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"),
+            f"no horizontal scroll at 390px on {page_}",
+        )
+    p.context.close()
+    q = new_page(b)
+    login(q, "operator@e2e.test", OP_PW)
+    go(q, "#ops", "text=Overall sender governance health")
+    q.wait_for_function(
+        "document.querySelector(\"[aria-label='Overall sender governance health'] .badge\").textContent.includes('fail')",
+        timeout=8000,
+    )
+    check(
+        set(q.locator("main button:visible").all_inner_texts()) == {"Refresh"},
+        "operator sees the same data, read-only",
+    )
+    go(q, "#ops-bootstrap", "text=Shadow comparison (reported snapshot)")
+    check(
+        q.locator("dt:has-text('Critical drift') + dd").first.inner_text() == "6",
+        "operator sees the real drift count",
+    )
+    q.context.close()
+
+
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(executable_path=CHROME)
         admin_flow(b)
         operator_flow(b)
         ops_flow(b)
+        ops_enterprise_flow(b)
         b.close()
     # skenarët negativë të qëllimshëm: hyrje e gabuar, token i prishur, 404 për sender-in/rrugën e panjohur, shkrim i operatorit
     uniq = sorted(set(re.sub(r"/[0-9a-f-]{36}", "/<id>", e) for e in http_errors))

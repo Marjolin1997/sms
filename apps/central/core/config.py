@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     # Mosha e raportit (nga marrja): ≤ fresh = OK · ≤ stale = WARN · më shumë = FAIL.
     money_report_fresh_seconds: int = Field(default=600, ge=60, le=86400)
     money_report_stale_seconds: int = Field(default=1800, ge=60, le=604800)
+    # M11-D2: mosha e snapshot-it operacional të sender-ave nga Enterprise (nga marrja): ≤ stale = e freskët · ≤ 6×stale = WARN (e vjetruar) · më shumë = FAIL (skaduar).
+    sender_ops_stale_seconds: int = Field(default=300, ge=30, le=86400)
     # Grant/reversal i dhënë por jo ende i konsumuar (kursori pas): WARN brenda grace, FAIL pas saj.
     money_cursor_lag_grace_seconds: int = Field(default=900, ge=60, le=86400)
     # Kursori i parave i Enterprise pa sukses të ri (në çastin e raportit): WARN / FAIL.

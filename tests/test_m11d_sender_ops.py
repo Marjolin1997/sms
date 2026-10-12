@@ -117,7 +117,7 @@ def test_empty_state_is_unknown_not_pass_and_schema_is_stable(api):
     for s in body["sections"]:
         assert s["status"] in ("pass", "warn", "fail", "unknown")
         for ch in s["checks"]:
-            assert set(ch) == {"code", "status", "summary", "details"} and isinstance(
+            assert set(ch) == {"code", "status", "summary", "details", "source"} and isinstance(
                 ch["details"], dict
             )
     assert sections(body)["central_readiness"]["status"] == "pass"

@@ -48,6 +48,7 @@ from apps.central.models.sender import (  # noqa: F401
     CountrySenderPolicy,
     SenderBootstrapRun,
     SenderDecision,
+    SenderOpsSnapshot,
     SenderRegistry,
     SenderRequestOperation,
 )
