@@ -114,6 +114,15 @@ def main(b):
         any(r.headers.get("content-type") == "application/pdf" for r in pdfs),
         "HTTP response is application/pdf",
     )
+    # M11-E2.1: lëshuesi është snapshot-i i krijimit (Alfa); API-ja po punon tani me konfigurim tjetër (Beta) dhe faturat e vjetra s'ndryshojnë
+    check(
+        "Alfa Sh.p.k. – Tiranë" in text and "K11111111A" in text,
+        "PDF issuer is the persisted snapshot (config A)",
+    )
+    check(
+        "Beta GmbH" not in text and "DE999" not in text,
+        "current issuer config (B) does not leak into the historical PDF",
+    )
     # cross-tenant: kërkesa të drejtpërdrejta me çelësin e A drejt faturës së B
     h = {"Authorization": f"Bearer {IDS['key_a']}"}
     for suffix in ("", "/pdf", "/html"):
@@ -125,6 +134,17 @@ def main(b):
     check(r.status in (401, 403), f"no key ⇒ {r.status}")
     # fushat e brendshme nuk ekspozohen
     inv = p.request.get(f"{BASE}/v1/billing/invoices/{IDS['invoice_a']}", headers=h).json()
+    check(
+        inv["issuer"]
+        == {
+            "name": "Alfa Sh.p.k. – Tiranë",
+            "address": "Rruga e Durrësit 1, Tiranë",
+            "tax_id": "K11111111A",
+        },
+        "API detail issuer = snapshot",
+    )
+    html = p.request.get(f"{BASE}/v1/billing/invoices/{IDS['invoice_a']}/html", headers=h).text()
+    check("Alfa Sh.p.k." in html and "Beta GmbH" not in html, "HTML issuer = snapshot, same as PDF")
     check(
         set(inv)
         <= {
@@ -142,6 +162,7 @@ def main(b):
             "paid_via",
             "period_start",
             "period_end",
+            "issuer",
             "lines",
         },
         f"no internal fields: {sorted(inv)}",

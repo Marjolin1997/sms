@@ -31,6 +31,8 @@ def _diff(conn):
         for d in compare_metadata(ctx, Base.metadata)
         for i in (d if isinstance(d, list) else [d])
         if any(t in repr(i) for t in TOUCHED)
+        and "ix_invoices_issued_at" not in repr(i)  # 0031 (M11-E2)
+        and "ix_invoices_number_prefix" not in repr(i)
     ]
 
 

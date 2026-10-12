@@ -1,11 +1,16 @@
 # ruff: noqa: F811
 """M9-g2 — migrimet aditive: Enterprise 0027 (prova + outbox) dhe Central 0023 (raportet + prova e deltës); up/down/up, metadata, trigger-at PG."""
 
+import re
+
 import pytest
 from sqlalchemy import create_engine, inspect, text
 
 from tests.test_central import IS_PG, central_alembic, enterprise_alembic, make_db  # noqa: F401
 
+_LATER_INDEXES = re.compile(
+    r"ix_invoices_(issued_at|number_prefix)|issuer"
+)  # 0031 (M11-E2) / 0033 (M11-E2.1)
 ENT_TABLES = {"sms_email_billable_events", "sms_billing_usage_reports"}
 
 
@@ -21,7 +26,7 @@ def _diff_for(conn, metadata, version_table, tables):
         items = d if isinstance(d, list) else [d]
         for it in items:
             blob = repr(it)
-            if any(t in blob for t in tables):
+            if any(t in blob for t in tables) and not _LATER_INDEXES.search(blob):
                 out.append(blob)
     return out
 
@@ -77,7 +82,7 @@ def test_central_0023_is_additive_reversible_and_matches_metadata(make_db):
             )
             == []
         )
-        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0029"
+        assert c.execute(text("select version_num from central_alembic_version")).scalar() == "0031"
     central_alembic(url, "downgrade", "0022")
     assert "billing_usage_reports" not in inspect(eng).get_table_names()
     assert {c["name"] for c in inspect(eng).get_columns("billing_periods")} == cols_before

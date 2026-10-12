@@ -135,6 +135,8 @@ class Invoice(TenantOwned, Base):
     )
     # Fotografi e profilit në çastin e lëshimit; profili i ri s'ndryshon faturat e vjetra.
     bill_to: Mapped[str] = mapped_column(Text)  # JSON i profilit në çastin e lëshimit
+    # M11-E2.1: lëshuesi në krijim (JSON name/address/tax_id); NULL = legacy (fallback eksplicit)
+    issuer: Mapped[str | None] = mapped_column(Text)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -213,7 +215,7 @@ class InvoiceImmutableError(RuntimeError):
 
 
 _FROZEN = ("number", "owner_ref", "period_start", "period_end", "currency", "subtotal",
-           "vat_rate", "tax", "total", "bill_to", "issued_at")  # fmt: skip
+           "vat_rate", "tax", "total", "bill_to", "issuer", "issued_at")  # fmt: skip
 
 
 @event.listens_for(Invoice, "before_update")

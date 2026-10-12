@@ -124,6 +124,7 @@ def test_pdf_failure_is_clean_and_logged(setup, monkeypatch, caplog, db):
 def test_pdf_renders_the_stored_total_even_when_unusual():
     inv = SimpleNamespace(number="INV-X-1", status=InvoiceStatus.OPEN, currency="EUR", issued_at=datetime(2030, 1, 1, tzinfo=UTC), due_at=datetime(2030, 1, 15, tzinfo=UTC),
                           period_start=datetime(2029, 12, 1, tzinfo=UTC), period_end=datetime(2030, 1, 1, tzinfo=UTC), bill_to='{"legal_name": "B"}',
+        issuer=None,
                           subtotal=D("5"), vat_rate=D("0.2"), tax=D("1"), total=D("1234567.89"), paid_at=None)  # fmt: skip
     line = SimpleNamespace(description="one", quantity=D("1"), unit_price=D("1"), amount=D("1"))
     t = text_of(invoice_document.render(inv, [line])[0])

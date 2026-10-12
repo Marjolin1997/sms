@@ -37,7 +37,7 @@ from app.models.billing import (
 )
 from app.models.email import Email, EmailStatus
 from app.models.wallet import Wallet
-from app.services import billing_authority, events, pricing
+from app.services import billing_authority, events, invoice_issuer, pricing
 from app.services import wallet as wallets
 from app.services.wallet import InvalidAmount
 
@@ -288,6 +288,7 @@ def generate_invoice(
                 "legal_name": prof.legal_name, "address": prof.address, "country": prof.country,
                 "tax_id": prof.tax_id, "email": prof.email,
             }),
+            issuer=invoice_issuer.snapshot_json(),
             issued_at=now, due_at=now + timedelta(days=settings.invoice_due_days),
         )  # fmt: skip
         db.add(inv)

@@ -30,8 +30,7 @@ shfaqen si datë në UTC.
 - **Fontet:** DejaVu Sans (regular + bold) të bashkangjitura në `packages/invoice_pdf/fonts/` (licenca përfshirë). Shqipja, gjermanishtja, ë/ç/ß/ü/ö etj. printohen njëlloj kudo; asnjë font i makinës.
 - **Pa rillogaritje:** renderuesi merr tekste të gatshme (shumat janë stringjet dhjetore të ruajtura); formatimi i vetëm është grupimi i mijëshave. Test me total të pazakontë (`≠ nëntotal + tatim`) e provon.
 - **Snapshot historik:** Central përdor `issuer`/`bill_to` të ruajtur në faturë (ndryshimi i profilit s'e ndryshon PDF-në; e njëjta faturë = të njëjtat bajte, `invariant=1`).
-  **Kufizim Enterprise:** tabela `sms_invoices` ruan snapshot vetëm të `bill_to`; lëshuesi (emër/adresë/ID tatimore) vjen nga konfigurimi aktual `SMS_ISSUER_*`, njëlloj si faqja HTML ekzistuese.
-  Një snapshot i lëshuesit kërkon ndryshim skeme në Enterprise — mbetet debt.
+  Enterprise: shih M11-E2.1 (`docs/M11_E2_1_ENTERPRISE_ISSUER_SNAPSHOT.md`) — lëshuesi tani ruhet si snapshot te fatura.
 - **Siguria:** Enterprise — vetëm fatura e tenant-it (e huaj ⇒ 404, `owner_ref` s'e ngre klientin); Central — admin|operator. Emri i skedarit sanitizohet (`invoice-[A-Za-z0-9._-]{1,48}.pdf`), asnjë shteg/hyrje skedari nga klienti,
   `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`. Dështim renderimi ⇒ log `invoice pdf render failed` + 500 JSON `pdf_render_failed` pa tekst të brendshëm; buffer-i ndërtohet i plotë para përgjigjes (asnjë PDF i pjesshëm).
 - `?inline=true` kthen `Content-Disposition: inline`; parazgjedhja është `attachment`.

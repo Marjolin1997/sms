@@ -2749,6 +2749,15 @@
     "server_default": null,
     "type": "DATETIME"
    },
+   "issuer": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "TEXT"
+   },
    "number": {
     "default": null,
     "fks": [],

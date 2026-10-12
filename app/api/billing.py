@@ -21,6 +21,7 @@ from app.models.billing import (
 from app.services import billing as svc
 from app.services import invoice_document, invoice_render, payments
 from app.services.audit import audit
+from app.services.invoice_issuer import issuer_of
 
 router = APIRouter(prefix="/v1")
 log = logging.getLogger("billing_api")
@@ -173,7 +174,8 @@ def get_invoice(
     lines = [{"description": ln.description, "quantity": str(ln.quantity.normalize()),
               "unit_price": str(ln.unit_price), "amount": str(ln.amount)}
              for ln in svc.invoice_lines(db, inv.id)]  # fmt: skip
-    return {**_inv_out(inv), "lines": lines}
+    issuer, _source = issuer_of(inv)  # snapshot i ruajtur; provenienca s'ekspozohet te klienti
+    return {**_inv_out(inv), "issuer": issuer, "lines": lines}
 
 
 @router.get("/billing/invoices/{invoice_id}/html", response_class=HTMLResponse)
