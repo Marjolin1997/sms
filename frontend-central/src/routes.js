@@ -17,6 +17,16 @@ export const NAV = [
     { id: "ops-bootstrap", label: T("Bootstrap & Cutover"), icon: "⏻", load: () => import("./pages/OpsBootstrap.jsx"), desc: T("Bootstrap runs, shadow evidence and cutover state. Read-only.") },
     { id: "ops-alerts", label: T("Alerts"), icon: "!", load: () => import("./pages/OpsAlerts.jsx"), desc: T("Sender alerts that Central can evaluate.") },
   ] },
+  { group: T("Commercial"), items: [
+    { id: "com", label: T("Commercial Overview"), icon: "€", load: () => import("./pages/ComOverview.jsx"), desc: T("Credit, payments, invoices and reconciliation at a glance. Read-only, straight from the server.") },
+    { id: "com-credit", label: T("Credit & Grants"), icon: "◎", detail: true, load: () => import("./pages/ComCredit.jsx"), desc: T("Credit accounts, grants and the append-only ledger.") },
+    { id: "com-payments", label: T("Payments"), icon: "⇆", load: () => import("./pages/ComPayments.jsx"), desc: T("Credit payments and invoice payments, with who recorded and decided them.") },
+    { id: "com-pricing", label: T("Pricing"), icon: "%", detail: true, load: () => import("./pages/ComPricing.jsx"), desc: T("Price books, versions, rules and which enterprise is assigned to which book.") },
+    { id: "com-subs", label: T("Subscriptions"), icon: "↻", detail: true, load: () => import("./pages/ComSubscriptions.jsx"), desc: T("Plans, subscriptions, billing profiles and billing periods.") },
+    { id: "com-invoices", label: T("Invoices"), icon: "▤", detail: true, load: () => import("./pages/ComInvoices.jsx"), desc: T("Invoices, their lines, settlement and credit notes.") },
+    { id: "com-recon", label: T("Reconciliation"), icon: "≈", load: () => import("./pages/ComRecon.jsx"), desc: T("Usage reports and the server's reconciliation of credit and settlement.") },
+    { id: "com-ready", label: T("Financial Readiness"), icon: "✔", load: () => import("./pages/ComReadiness.jsx"), desc: T("Financial, pricing and billing readiness, computed by the server.") },
+  ] },
 ];
 
 export const canWrite = (me) => !!me && me.role === "admin";

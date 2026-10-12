@@ -167,7 +167,8 @@ export const Stat = ({ label, value, sub, tone }) => (
 export const STATUS_TONES = {
   delivered: "good", completed: "good", verified: "good", active: "good", succeeded: "good", ok: "good", approved: "good", paid: "good", confirmed: "good", published: "good", synchronized: "good", allowed: "good", pass: "good", warn: "warn", fail: "bad", critical: "bad", warning: "warn",
   sent: "info", running: "info", queued: "info", scheduled: "info", preparing: "info", sending: "info", open: "info", processing: "info",
-  pending: "warn", paused: "warn", suspended: "warn", unpaid: "warn", not_synchronized: "warn", stale: "warn",
+  pending: "warn", paused: "warn", suspended: "warn", unpaid: "warn", not_synchronized: "warn", stale: "warn", partially_settled: "warn", scheduled_cancel: "warn", reconciliation_required: "bad",
+  settled: "good", invoiced: "good", credited: "info", reversed: "muted", no_charge: "muted", unknown: "muted",
   draft: "muted", cancelled: "muted", skipped: "muted", expired: "muted", void: "muted", retired: "muted", not_applicable: "muted",
   failed: "bad", bounced: "bad", complained: "bad", disabled: "bad", opted_out: "bad", rejected: "bad", revoked: "bad", overdue: "bad", policy_denied: "bad", denied: "bad", explicit: "info", default: "muted",
 };

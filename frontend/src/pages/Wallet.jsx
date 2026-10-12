@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { api } from "../api.js";
 import { T, t } from "../i18n.jsx";
-import { Badge, Button, Card, ErrorBox, Field, Stat, Table, Tabs, Time, money, useAction, useLoad } from "../ui.jsx";
+import { Badge, Button, Card, ErrorBox, Field, Stat, Table, Tabs, Time, useAction, useLoad } from "../ui.jsx";
+import { amt } from "../money.js";
 
 const TYPE = { topup: T("Top-up"), hold: T("Reserved for a message"), capture: T("Charged"), release: T("Returned (not sent)"), refund: T("Refunded"), adjustment: T("Correction by us"), invoice: T("Invoice payment") };
 
 const Delta = ({ v }) => {
   const n = Number(v);
   if (!n) return <span className="muted">-</span>;
-  return <b style={{ color: n > 0 ? "var(--good)" : "var(--bad)" }}>{n > 0 ? "+" : ""}{money(n)}</b>;
+  return <b style={{ color: n > 0 ? "var(--good)" : "var(--bad)" }}>{n > 0 ? "+" : ""}{amt(v)}</b>;
 };
 
 function Ledger({ wallet }) {
@@ -18,7 +19,7 @@ function Ledger({ wallet }) {
     <Table rows={items} loading={led.loading} emptyTitle={t("No movements yet")} empty={t("Top-ups and charges show up here, newest first.")}
       cols={[{ label: t("What happened"), render: (r) => (TYPE[r.entry_type] ? t(TYPE[r.entry_type]) : r.entry_type) },
         { label: t("Available"), num: true, render: (r) => <Delta v={r.available_delta} /> }, { label: t("Reserved"), num: true, render: (r) => <Delta v={r.held_delta} /> },
-        { label: t("Balance after"), num: true, render: (r) => money(r.available_after) }, { label: t("Ref"), render: (r) => <small className="muted">{r.ref_id ? String(r.ref_id).slice(0, 12) : ""}</small> }]} />
+        { label: t("Balance after"), num: true, render: (r) => amt(r.available_after) }, { label: t("Ref"), render: (r) => <small className="muted">{r.ref_id ? String(r.ref_id).slice(0, 12) : ""}</small> }]} />
   );
 }
 
@@ -74,15 +75,15 @@ export default function Wallet() {
       {w && (
         <>
           <div className="grid stats">
-            <Stat label={t("Available to spend")} value={`${money(w.available)} ${w.currency}`} tone={Number(w.available) < 5 ? "warn" : "good"} sub={Number(w.available) < 5 ? t("Running low") : undefined} />
-            <Stat label={t("Reserved")} value={`${money(w.held)} ${w.currency}`} sub={t("Held for messages being sent. Returned if they fail.")} />
+            <Stat label={t("Available to spend")} value={`${amt(w.available)} ${w.currency}`} tone={Number(w.available) < 5 ? "warn" : "good"} sub={Number(w.available) < 5 ? t("Running low") : undefined} />
+            <Stat label={t("Reserved")} value={`${amt(w.held)} ${w.currency}`} sub={t("Held for messages being sent. Returned if they fail.")} />
           </div>
           <LowBalance key={`${w.id}:${w.low_balance_threshold}`} wallet={w} onDone={wallets.reload} />
           <TopUp wallet={w} onDone={() => { pays.reload(); tops.reload(); }} />
           <Card title={t("Movements")} subtitle={t("Every change to your balance, newest first. Nothing on this list can be edited or deleted.")}><Ledger wallet={w} /></Card>
           <div className="grid two">
-            <Card title={t("Top-ups")}><Table rows={tops.data || []} loading={tops.loading} empty={t("No top-ups yet.")} cols={[{ label: t("Amount"), render: (r) => `${money(r.amount)} ${w.currency}` }, { label: t("How"), render: (r) => t(r.method) }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> }, { label: t("When"), render: (r) => <Time value={r.created_at} /> }]} /></Card>
-            <Card title={t("Online payments")}><Table rows={pays.data || []} loading={pays.loading} empty={t("No online payments yet.")} cols={[{ label: t("For"), render: (r) => t(r.purpose) }, { label: t("Amount"), render: (r) => `${money(r.amount)} ${r.currency}` }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> }, { label: t("Note"), render: (r) => r.failure_reason || "" }]} /></Card>
+            <Card title={t("Top-ups")}><Table rows={tops.data || []} loading={tops.loading} empty={t("No top-ups yet.")} cols={[{ label: t("Amount"), render: (r) => `${amt(r.amount)} ${w.currency}` }, { label: t("How"), render: (r) => t(r.method) }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> }, { label: t("When"), render: (r) => <Time value={r.created_at} /> }]} /></Card>
+            <Card title={t("Online payments")}><Table rows={pays.data || []} loading={pays.loading} empty={t("No online payments yet.")} cols={[{ label: t("For"), render: (r) => t(r.purpose) }, { label: t("Amount"), render: (r) => `${amt(r.amount)} ${r.currency}` }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> }, { label: t("Note"), render: (r) => r.failure_reason || "" }]} /></Card>
           </div>
         </>
       )}

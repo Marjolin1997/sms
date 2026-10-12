@@ -25,4 +25,9 @@ export default {
   "Your keys": "Çelësat tuaj", "No keys yet.": "Ende pa çelësa.", "Starts with": "Fillon me", "Last used": "Përdorur së fundi", "never": "kurrë",
   "Revoke “{name}”?": "Ta revokoj “{name}”?", "Anything using this key stops working immediately. This can't be undone.": "Çdo gjë që përdor këtë çelës ndalon menjëherë. Kjo nuk mund të zhbëhet.", "Revoke key": "Revoko çelësin", "Key revoked": "Çelësi u revokua", "Revoke": "Revoko",
   "client": "klient", "finance": "financë", "pricing": "çmime", "approver": "miratues", "support": "mbështetje", "superadmin": "superadmin",
+  // M11-E: detajet e faturës
+  "Invoice details": "Detajet e faturës", "Issued": "Lëshuar", "Paid": "Paguar", "Paid via": "Paguar përmes", "Subtotal": "Nëntotali", "VAT": "TVSH",
+  "This invoice has no lines.": "Kjo faturë nuk ka rreshta.", "Description": "Përshkrimi", "Quantity": "Sasia", "Unit price": "Çmimi për njësi",
+  "Amounts are shown exactly as issued. Use “View / print” for the official document.": "Shumat shfaqen saktësisht siç janë lëshuar. Për dokumentin zyrtar përdorni “Shiko / printo”.",
+  "Details of invoice {n}": "Detajet e faturës {n}",
 };

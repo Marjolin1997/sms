@@ -269,3 +269,5 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .summary-card .stat-s { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .overall { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .overall .badge { font-size: 15px; padding: 5px 14px; }
+.mono-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kvlist dd { overflow-wrap: anywhere; }

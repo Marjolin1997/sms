@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { api, openHtml } from "../api.js";
 import { T, t, locale } from "../i18n.jsx";
-import { Badge, Button, Card, ErrorBox, Field, Stat, Table, Time, dateOnly, money, useAction, useLoad, useUi, when } from "../ui.jsx";
+import { Badge, Button, Card, DetailList, DetailRow, ErrorBox, ErrorState, Field, Skeleton, Stat, Table, Time, dateOnly, money, useAction, useLoad, useUi, when } from "../ui.jsx";
+import { accountingDate, amt, qty } from "../money.js";
 
 const FAILURE = { invoice_already_settled: T("Invoice was already paid, so this went to your wallet"), amount_mismatch: T("Amount didn't match, being checked by us"), timeout: T("Expired") };
 
@@ -12,9 +13,9 @@ function Subscription({ sub }) {
   return (
     <Card title={t("Your plan")} actions={<Badge>{sub.status}</Badge>}>
       <div className="grid stats">
-        <Stat label={t("Plan")} value={sub.plan.name} sub={t("{price} {currency} per month", { price: money(sub.plan.monthly_fee), currency: sub.plan.currency })} />
+        <Stat label={t("Plan")} value={sub.plan.name} sub={t("{price} {currency} per month", { price: amt(sub.plan.monthly_fee), currency: sub.plan.currency })} />
         <Stat label={t("This period ends")} value={dateOnly(sub.period_end)} sub={t("started {date}", { date: dateOnly(sub.period_start) })} />
-        <Stat label={t("Extra emails so far")} value={`${money(u.overage_amount)} ${sub.plan.currency}`} tone={u.overage ? "warn" : "good"} sub={u.overage ? t("{n} above your included emails", { n: u.overage }) : t("Within your included emails")} />
+        <Stat label={t("Extra emails so far")} value={`${amt(u.overage_amount)} ${sub.plan.currency}`} tone={u.overage ? "warn" : "good"} sub={u.overage ? t("{n} above your included emails", { n: u.overage }) : t("Within your included emails")} />
       </div>
       <Field label={t("Emails this period: {n} of {total} included", { n: u.emails.toLocaleString(locale()), total: u.included.toLocaleString(locale()) })}><div className="bar"><div className={`fill ${pct >= 100 ? "failed" : ""}`} style={{ width: `${pct}%` }} /></div></Field>
       {sub.pending_plan && <div className="alert warn"><span>{t("You'll move to")} <b>{sub.pending_plan.name}</b> {t("when this period ends.")}</span></div>}
@@ -47,7 +48,40 @@ function Profile({ profile, reload }) {
   );
 }
 
+function InvoiceDetail({ id, onClose }) {
+  const d = useLoad((signal) => api.get(`/v1/billing/invoices/${id}`, {}, { signal }), [id]);
+  return (
+    <Card title={t("Invoice details")} actions={<Button onClick={onClose}>{t("Close")}</Button>}>
+      {d.error && !d.data ? <ErrorState error={d.error} retry={d.reload} /> : !d.data ? <Skeleton rows={4} /> : (
+        <>
+          <DetailList>
+            <DetailRow label={t("Invoice")}><b>{d.data.number}</b></DetailRow>
+            <DetailRow label={t("Status")}><Badge>{d.data.status}</Badge></DetailRow>
+            <DetailRow label={t("Period")}>{accountingDate(d.data.period_start)} – {accountingDate(d.data.period_end)}</DetailRow>
+            <DetailRow label={t("Issued")}>{accountingDate(d.data.issued_at)}</DetailRow>
+            <DetailRow label={t("Due")}>{accountingDate(d.data.due_at)}</DetailRow>
+            {d.data.paid_at && <DetailRow label={t("Paid")}>{when(d.data.paid_at)}</DetailRow>}
+            {d.data.paid_via && <DetailRow label={t("Paid via")}>{d.data.paid_via}</DetailRow>}
+            <DetailRow label={t("Subtotal")}>{amt(d.data.subtotal)} {d.data.currency}</DetailRow>
+            <DetailRow label={t("VAT rate")}>{d.data.vat_rate}</DetailRow>
+            <DetailRow label={t("VAT")}>{amt(d.data.tax)} {d.data.currency}</DetailRow>
+            <DetailRow label={t("Total")}><b>{amt(d.data.total)} {d.data.currency}</b></DetailRow>
+          </DetailList>
+          <Table rows={d.data.lines.map((l, i) => ({ ...l, id: i }))} empty={t("This invoice has no lines.")} cols={[
+            { label: t("Description"), key: "description" },
+            { label: t("Quantity"), num: true, render: (l) => qty(l.quantity) },
+            { label: t("Unit price"), num: true, render: (l) => amt(l.unit_price) },
+            { label: t("Amount"), num: true, render: (l) => amt(l.amount) },
+          ]} />
+          <small className="muted">{t("Amounts are shown exactly as issued. Use “View / print” for the official document.")}</small>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function Invoices({ reloadAll }) {
+  const [open, setOpen] = useState(null);
   const { toast } = useUi();
   const inv = useLoad(() => api.get("/v1/billing/invoices"), []);
   const a = useAction();
@@ -61,15 +95,17 @@ function Invoices({ reloadAll }) {
       <ErrorBox error={a.error || inv.error} retry={inv.reload} />
       <Table rows={inv.data || []} loading={inv.loading} emptyTitle={t("No invoices yet")} empty={t("Your first invoice is issued when your first billing period ends.")} cols={[
         { label: t("Invoice"), render: (r) => <b>{r.number}</b> },
-        { label: t("Period"), render: (r) => `${dateOnly(r.period_start)} – ${dateOnly(r.period_end)}` },
-        { label: t("Total"), num: true, render: (r) => `${money(r.total)} ${r.currency}` }, { label: t("of which VAT"), num: true, render: (r) => money(r.tax) },
-        { label: t("Due"), render: (r) => dateOnly(r.due_at) }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> },
+        { label: t("Period"), render: (r) => `${accountingDate(r.period_start)} – ${accountingDate(r.period_end)}` },
+        { label: t("Total"), num: true, render: (r) => `${amt(r.total)} ${r.currency}` }, { label: t("of which VAT"), num: true, render: (r) => amt(r.tax) },
+        { label: t("Due"), render: (r) => accountingDate(r.due_at) }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> },
         { label: "", render: (r) => (
           <div className="row wrap">
+            <Button className="small" aria-label={t("Details of invoice {n}", { n: r.number })} onClick={() => setOpen(open === r.id ? null : r.id)}>{t("Details")}</Button>
             <Button className="small" onClick={() => a.run(() => openHtml(`/v1/billing/invoices/${r.id}/html`))}>{t("View / print")}</Button>
             {r.status === "open" && <Button className="small" busy={a.busy} onClick={() => pay(r, "wallet")}>{t("Pay from wallet")}</Button>}
             {r.status === "open" && <Button className="small" variant="primary" busy={a.busy} onClick={() => pay(r, "online")}>{t("Pay online")}</Button>}
           </div>) }]} />
+      {open && <InvoiceDetail key={open} id={open} onClose={() => setOpen(null)} />}
     </Card>
   );
 }
@@ -111,7 +147,7 @@ export default function Billing({ me }) {
       <Subscription sub={sub.data} />
       <Invoices reloadAll={reloadAll} />
       {canEditProfile && !prof.loading && <Profile key={JSON.stringify(prof.data)} profile={prof.data} reload={reloadAll} />}
-      <Card title={t("Online payments")}><Table rows={pays.data || []} loading={pays.loading} empty={t("No online payments yet.")} cols={[{ label: t("For"), render: (r) => t(r.purpose) }, { label: t("Amount"), render: (r) => `${money(r.amount)} ${r.currency}` }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> }, { label: t("Note"), render: (r) => (FAILURE[r.failure_reason] ? t(FAILURE[r.failure_reason]) : r.failure_reason || "") }, { label: t("Created"), render: (r) => <Time value={r.created_at} /> }]} /></Card>
+      <Card title={t("Online payments")}><Table rows={pays.data || []} loading={pays.loading} empty={t("No online payments yet.")} cols={[{ label: t("For"), render: (r) => t(r.purpose) }, { label: t("Amount"), render: (r) => `${amt(r.amount)} ${r.currency}` }, { label: t("Status"), render: (r) => <Badge>{r.status}</Badge> }, { label: t("Note"), render: (r) => (FAILURE[r.failure_reason] ? t(FAILURE[r.failure_reason]) : r.failure_reason || "") }, { label: t("Created"), render: (r) => <Time value={r.created_at} /> }]} /></Card>
       {staff && <Staff reloadAll={reloadAll} />}
     </>
   );

@@ -464,6 +464,11 @@ def test_api_end_to_end(db, world, raw_client):  # noqa: F811
     assert c.get(f"/v1/billing/invoices/{inv.id}", headers=h2).status_code == 404
     det = c.get(f"/v1/billing/invoices/{inv.id}", headers=h1).json()
     assert det["lines"][0]["description"] == "Gold - monthly fee" and det["tax"] == "2.000000"
+    # M11-E: faturat e klientit nuk ekspozojnë asnjë fushë të brendshme (Central, ledger, wallet, ofrues)
+    assert set(det) == {"id", "number", "status", "currency", "subtotal", "vat_rate", "tax", "total",
+                        "issued_at", "due_at", "paid_at", "paid_via", "period_start", "period_end",
+                        "lines"}  # fmt: skip
+    assert set(det["lines"][0]) == {"description", "quantity", "unit_price", "amount"}
     page = c.get(f"/v1/billing/invoices/{inv.id}/html", headers=h1)
     assert page.status_code == 200 and "&lt;script&gt;" in page.text and "<script>" not in page.text
     csps = [v for k, v in page.headers.items() if k.lower() == "content-security-policy"]

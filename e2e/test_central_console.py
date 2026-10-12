@@ -528,13 +528,233 @@ def ops_enterprise_flow(b):
     q.context.close()
 
 
+def commercial_flow(b):
+    """M11-E: Commercial / Billing, vetëm-lexim, me të dhëna reale nga shërbimet (shih e2e/commercial_seed.py)."""
+    p = new_page(b)
+    login(p, "admin@e2e.test", ADMIN_PW)
+    mutating = []
+    p.on(
+        "request",
+        lambda r: (
+            mutating.append(f"{r.method} {r.url}")
+            if r.method not in ("GET", "HEAD") and "/auth/" not in r.url
+            else None
+        ),
+    )
+    nav = p.locator("nav[aria-label='Main navigation']")
+    check(
+        nav.get_by_text("Commercial", exact=True).count() == 1, "Commercial group in the navigation"
+    )
+    for label in (
+        "Commercial Overview",
+        "Credit & Grants",
+        "Payments",
+        "Pricing",
+        "Subscriptions",
+        "Invoices",
+        "Reconciliation",
+        "Financial Readiness",
+    ):
+        check(nav.get_by_role("link", name=re.compile(label)).count() == 1, f"nav link {label}")
+    # overview
+    go(p, "#com", "text=Billing authority")
+    p.wait_for_selector("text=Central invoices")
+    p.wait_for_selector("text=Pending invoice payments")
+    check(
+        has("local", text(p)) and has("Central invoices: 2", text(p)),
+        "overview shows the billing authority mode and counts from the server",
+    )
+    check(
+        p.get_by_role("main")
+        .get_by_role("link", name="Overdue open invoices")
+        .inner_text()
+        .replace("\n", " ")
+        .count("1")
+        >= 1,
+        "overview shows the server's overdue count",
+    )
+    # credit
+    go(p, "#com-credit", "text=Available to grant")
+    check(
+        has("2,500.50", text(p)) or has("2.500,50", text(p)),
+        "funds shown exactly (2500.50 less outstanding grant handled by server)",
+    )
+    p.locator("tbody tr a:has-text('Details')").first.click()
+    p.wait_for_selector("text=Append-only history")
+    p.wait_for_selector("text=grant issued")
+    check(
+        has("payment credit", text(p)) and has("grant issued", text(p)),
+        "ledger entries are visible",
+    )
+    check(has("500.25", text(p)) or has("500,25", text(p)), "grant amount exact")
+    check(
+        not p.get_by_role(
+            "button",
+            name=re.compile(r"^(new grant|issue|grant credit|adjust|reverse|approve|reject)", re.I),
+        ).count(),
+        "no credit write controls",
+    )
+    # grants tab
+    go(p, "#com-credit?tab=grants", "text=Credit grants")
+    p.get_by_role("button", name=re.compile("Details for grant")).first.click()
+    check(has("welcome credit", p.get_by_role("dialog").inner_text()), "grant detail")
+    p.keyboard.press("Escape")
+    # payments
+    go(p, "#com-payments", "text=Credit payments")
+    p.wait_for_selector("text=BANK-2026-001")
+    check(has("BANK-2026-001", text(p)) and has("BANK-2026-002", text(p)), "credit payments listed")
+    check(has("pending", text(p)) and has("approved", text(p)), "payment statuses")
+    p.get_by_role("button", name=re.compile("Details for payment")).first.click()
+    d = p.get_by_role("dialog").inner_text()
+    check(has("Created by", d) and has("Approved by", d), "payment detail has maker/checker")
+    p.keyboard.press("Escape")
+    go(p, "#com-payments?tab=invoice", "text=Invoice payments")
+    p.wait_for_selector("text=INV-PAY-77")
+    check(has("INV-PAY-77", text(p)), "invoice payment listed")
+    # pricing
+    go(p, "#com-pricing", "text=Price books")
+    p.wait_for_selector("text=Standard")
+    check(has("std", text(p)), "price book listed")
+    p.locator("tbody tr a:has-text('Details')").first.click()
+    p.wait_for_selector("text=Selection reason")
+    p.get_by_role("button", name=re.compile("Rules of version")).first.click()
+    p.wait_for_selector("text=Price rules")
+    p.wait_for_selector("text=355")
+    check(has("0.045", text(p)) and has("0.1", text(p)), "rule unit prices as sent by the server")
+    go(p, "#com-pricing?tab=assignments", "text=Price assignments")
+    p.wait_for_selector("tbody tr")
+    check(p.locator("tbody tr").count() == 1, "assignment listed")
+    go(p, "#com-pricing?tab=preview", "text=Price preview")
+    p.fill("input >> nth=0", IDS["enterprise_acme"]) if False else None
+    p.get_by_label("Enterprise ID").fill(IDS["enterprise_acme"])
+    p.get_by_label("Product ID").fill(IDS["product"])
+    p.get_by_label("Number").fill("35569123")
+    p.get_by_role("button", name="Ask the server").click()
+    p.wait_for_selector("text=EUR")
+    check(
+        has("0.045", text(p)) and has("EUR", text(p)),
+        "server-side price preview (no JS rule matching)",
+    )
+    # subscriptions
+    go(p, "#com-subs", "text=Subscriptions")
+    p.wait_for_selector("tbody tr")
+    check(p.locator("tbody tr").count() == 2, "two subscriptions")
+    go(p, f"#com-subs/{IDS['enterprise_acme']}", "text=Billing profile")
+    p.wait_for_selector("text=Acme Sh.p.k.")
+    p.wait_for_selector("text=Monthly fee")
+    p.wait_for_selector("td:has-text('invoiced')")
+    check(has("1,000.00 EUR", text(p)) or has("1.000,00 EUR", text(p)), "plan version fee exact")
+    check(has("invoiced", text(p)), "billing period invoiced")
+    # invoices
+    go(p, "#com-invoices", "text=Invoices")
+    p.wait_for_selector(f"text={IDS['invoice_paid_number']}")
+    check(p.locator("tbody tr").count() == 2, "two invoices")
+    go(p, "#com-invoices?status=paid")
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 1")
+    check(has(IDS["invoice_paid_number"], text(p)), "status filter applied by the server")
+    p.locator("tbody tr a:has-text('View')").first.click()
+    p.wait_for_selector("text=Invoice lines")
+    p.wait_for_selector("text=goodwill discount")
+    body = text(p)
+    check(has("1,200.00 EUR", body) or has("1.200,00 EUR", body), "invoice total exact")
+    check(has("Settlement", body) and has("INV-PAY-77", body), "settlement panel with the payment")
+    check(
+        has("goodwill discount", body) and (has("1,150.00 EUR", body) or has("1.150,00 EUR", body)),
+        "credit note and server-computed net amount",
+    )
+    check(has("Platform", body) or has("Billed to", body), "issuer / bill-to snapshots")
+    go(p, f"#com-invoices/{IDS['invoice_open']}", "text=No payment allocated")
+    go(p, "#com-invoices?tab=credit-notes", "text=Credit notes")
+    p.wait_for_selector("td:has-text('goodwill discount')")
+    check(has("goodwill discount", text(p)), "credit note listed")
+    # reconciliation + readiness
+    go(p, "#com-recon", "text=Reconciliation result")
+    p.wait_for_selector("text=Invoice settlement summary")
+    p.wait_for_selector("text=Reconciled keys")
+    go(p, "#com-ready", "text=Financial readiness")
+    p.wait_for_selector("text=Billing readiness")
+    p.wait_for_function("document.querySelectorAll('.badge').length > 3")
+    check(has("Pricing readiness", text(p)), "three readiness sources")
+    # zero write controls on every commercial page; only GETs sent
+    for h in (
+        "#com",
+        "#com-credit",
+        "#com-payments",
+        "#com-pricing",
+        "#com-subs",
+        "#com-invoices",
+        "#com-recon",
+        "#com-ready",
+    ):
+        go(p, h)
+        p.wait_for_timeout(400)
+        names = " | ".join(p.locator("main button:visible").all_inner_texts())
+        check(
+            not re.search(
+                r"^(approve|reject|void|issue|publish|assign|resume|save|allocate|reverse|adjust|create)",
+                names,
+                re.I,
+            ),
+            f"no financial write control on {h}: {names}",
+        )
+    check(mutating == [], f"no non-GET request: {mutating}")
+    # responsive
+    p.set_viewport_size({"width": 390, "height": 800})
+    for h in (
+        "#com",
+        "#com-credit",
+        "#com-payments",
+        "#com-pricing",
+        "#com-subs",
+        "#com-invoices",
+        f"#com-invoices/{IDS['invoice_paid']}",
+        "#com-recon",
+        "#com-ready",
+    ):
+        go(p, h)
+        p.wait_for_timeout(500)
+        check(
+            not p.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"),
+            f"no horizontal scroll at 390px on {h}",
+        )
+    p.context.close()
+    # operator: i njëjti lexim, pa shkrim
+    q = new_page(b)
+    login(q, "operator@e2e.test", OP_PW)
+    ops_seen = []
+    q.on(
+        "request",
+        lambda r: (
+            ops_seen.append(r.method) if r.method != "GET" and "/auth/" not in r.url else None
+        ),
+    )
+    go(q, "#com-invoices", "text=Invoices")
+    q.wait_for_selector(f"text={IDS['invoice_paid_number']}")
+    go(q, f"#com-invoices/{IDS['invoice_paid']}", "text=Invoice lines")
+    check(has("Settlement", text(q)), "operator reads the invoice detail")
+    go(q, "#com-payments", "text=Credit payments")
+    check(has("Read-only access", q.inner_text("body")), "operator is told it is read-only")
+    check(
+        not q.get_by_role(
+            "button", name=re.compile(r"^(approve|reject|grant credit|new grant|void|issue)", re.I)
+        ).count(),
+        "operator sees no financial write control",
+    )
+    check(ops_seen == [], "operator sent no mutation")
+    q.context.close()
+
+
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(executable_path=CHROME)
-        admin_flow(b)
-        operator_flow(b)
-        ops_flow(b)
-        ops_enterprise_flow(b)
+        if os.environ.get("E2E_ONLY") == "commercial":
+            commercial_flow(b)
+        else:
+            admin_flow(b)
+            operator_flow(b)
+            ops_flow(b)
+            ops_enterprise_flow(b)
+            commercial_flow(b)
         b.close()
     # skenarët negativë të qëllimshëm: hyrje e gabuar, token i prishur, 404 për sender-in/rrugën e panjohur, shkrim i operatorit
     uniq = sorted(set(re.sub(r"/[0-9a-f-]{36}", "/<id>", e) for e in http_errors))

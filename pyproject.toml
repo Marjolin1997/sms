@@ -45,6 +45,7 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "app/services/sender_alerts.py" = ["E501"]
 "e2e/central_seed.py" = ["E501", "E702"]
 "e2e/ops_report.py" = ["E501"]
+"e2e/commercial_seed.py" = ["E501"]
 "app/services/sender_ops_snapshot.py" = ["E501"]
 "apps/central/services/sender_ops_evidence.py" = ["E501"]
 "apps/central/services/sender_ops_ingest.py" = ["E501"]
