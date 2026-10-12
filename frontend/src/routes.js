@@ -8,6 +8,7 @@ export const DEFAULT_ROUTE = "dashboard";
 export const STAFF_GROUP = "Staff";
 
 // perm: string ose "a|b" (mjafton një); global: faqe pa llogari të zgjedhur (staf)
+// detail: faqja ka nën-rrugë detaji (#senders/12) që hapet edhe pa llogari të zgjedhur nga stafi (serveri e gjen pronarin)
 // load: import dinamik (code splitting); faqja ngarkohet vetëm kur hapet.
 export const NAV = [
   { group: "", items: [{ id: "dashboard", label: T("Overview"), icon: "◧", perm: null, load: () => import("./pages/Dashboard.jsx"), desc: T("Where things stand right now.") }] },
@@ -22,7 +23,7 @@ export const NAV = [
     { id: "contacts", label: T("Contacts"), icon: "☰", perm: "contacts:read", load: () => import("./pages/Contacts.jsx"), desc: T("Your people, their lists and what they agreed to receive.") },
   ] },
   { group: T("Setup"), items: [
-    { id: "senders", label: T("Sender IDs & templates"), icon: "✦", perm: "sender:request", load: () => import("./pages/Senders.jsx"), desc: T("The name people see, and reusable message templates. Both are reviewed by us.") },
+    { id: "senders", label: T("Sender IDs & templates"), icon: "✦", perm: "sender:request", detail: true, load: () => import("./pages/Senders.jsx"), desc: T("The name people see, and reusable message templates. Both are reviewed by us.") },
     { id: "email", label: T("Email domains"), icon: "@", perm: "email:read", load: () => import("./pages/EmailDomains.jsx"), desc: T("Prove you own your domain so mail lands in the inbox.") },
     { id: "webhooks", label: T("Webhooks & events"), icon: "↯", perm: "events:read", load: () => import("./pages/Webhooks.jsx"), desc: T("Get delivery updates pushed to your own system.") },
   ] },

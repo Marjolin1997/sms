@@ -88,7 +88,7 @@ function Shell({ me, onLogout }) {
   const resolved = useMemo(() => resolveRoute(me, hash), [me, hash]);
   const { groups, route } = resolved;
   const ok = resolved.status === "ok";
-  const needsAccount = ok && isStaff && !route.global && route.id !== "dashboard" && !effectiveOwner;
+  const needsAccount = ok && isStaff && !route.global && route.id !== "dashboard" && !effectiveOwner && !(route.detail && resolved.rest.length);
   // Faqet globale të stafit (miratime, tarifa...) s'duhet të filtrohen nga llogaria e zgjedhur më parë.
   setOwner(ok && route.global ? "" : effectiveOwner);
   const Page = ok ? pageOf(route) : null;
@@ -131,7 +131,7 @@ function Shell({ me, onLogout }) {
         ) : (
           <ErrorBoundary resetKey={`${route.id}:${effectiveOwner}`}>
             <Suspense fallback={<Skeleton rows={4} />}>
-              <Page key={`${route.id}:${effectiveOwner}`} me={me} owner={effectiveOwner} pick={(o) => { setOwnerState(o); location.hash = "dashboard"; }} />
+              <Page key={`${route.id}:${effectiveOwner}`} me={me} owner={effectiveOwner} rest={resolved.rest} pick={(o) => { setOwnerState(o); location.hash = "dashboard"; }} />
             </Suspense>
           </ErrorBoundary>
         )}

@@ -145,12 +145,14 @@ export const currentOwner = () => owner;
 let totpPrompt = null;
 export const setTotpPrompt = (fn) => (totpPrompt = fn);
 
-async function request(method, path, { params = {}, body, headers = {}, attempt = 0, signal, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+// noOwner: endpoint-e me skemë strikte (extra=forbid) që NUK pranojnë owner_ref (p.sh. vendimet mbi sender) — mos e injekto.
+async function request(method, path, { params = {}, body, headers = {}, attempt = 0, signal, timeoutMs = REQUEST_TIMEOUT_MS, noOwner = false } = {}) {
+  const scope = owner && !noOwner ? owner : "";
   const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries({ ...(owner ? { owner_ref: owner } : {}), ...params }))
+  for (const [k, v] of Object.entries({ ...(scope ? { owner_ref: scope } : {}), ...params }))
     if (v !== undefined && v !== null && v !== "") qs.set(k, v);
   const url = qs.toString() ? `${path}?${qs}` : path;
-  const payload = body && owner && !Array.isArray(body) ? { owner_ref: owner, ...body } : body;
+  const payload = body && scope && !Array.isArray(body) ? { owner_ref: scope, ...body } : body;
   const ctl = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs);
@@ -180,7 +182,7 @@ async function request(method, path, { params = {}, body, headers = {}, attempt 
     const ra = Number(res.headers?.get?.("Retry-After"));
     if ((code === "totp_required" || code === "totp_invalid") && totpPrompt && attempt < 3) {
       const otp = await totpPrompt(code === "totp_invalid");
-      if (otp) return request(method, path, { params, body, headers: { ...headers, "X-TOTP": otp }, attempt: attempt + 1 });
+      if (otp) return request(method, path, { params, body, headers: { ...headers, "X-TOTP": otp }, attempt: attempt + 1, signal, timeoutMs, noOwner });
     }
     const err = new ApiError(res.status, code, msg, { fields: fieldErrors(d), retryAfter: Number.isFinite(ra) && ra > 0 ? ra : null });
     if (res.status === 401 && onSessionExpired && getKey()) onSessionExpired(err); // 403 NUK e mbyll sesionin: s'ka leje

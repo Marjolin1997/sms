@@ -96,3 +96,18 @@ Ndryshimi i vetëm i planifikuar: te Sender IDs shtohen kolonat *effective statu
 5. Routing me hash; librari routing nuk u fut (rrezik/rishkrim pa nevojë). Rivlerësohet kur Central të ketë detaje të thella.
 6. Pa testet e shfletuesit (e2e Playwright ekziston vetëm për API/console të thjeshtë).
 7. Aplikacioni Central nuk ekziston dhe paketa e përbashkët `ui` nuk është nxjerrë.
+
+## 12. M11-B — Sender IDs (Enterprise): sjellja dhe kufizimet e API-së
+**Fusha të serverit që UI shfaq (asnjë nuk rillogaritet):** `effective_status` (shenja kryesore), `authority_mode`, `sync_status`, `can_resubmit`, `can_review_locally`; vetëm staf: `central_status`, `drift`, `cp_revision`, `policy_revision`, `bootstrap_issues`.
+- **Lista** (`senders/components.jsx` `SenderList`): Sender, Country, Type, Status (efektiv; stafit i shtohet "Local record: …" kur ndryshon), Sync, Authority, Requested, veprime. Në mobile fshihen Type/Sync/Authority/Requested (`hideSm`).
+- **Detaji** `#senders/<id>` (`SenderDetail`); stafi e hap pa zgjedhur llogari (route `detail: true`). Klienti nuk sheh diagnostikën.
+- **Ridërgim**: vetëm `can_resubmit`; POST `/v1/sender-ids` me `owner_ref` të rreshtit; lista rikërkohet nga serveri para njoftimit të suksesit.
+- **Shqyrtim lokal** (`SenderReviewActions`): vetëm staf (pa `owner_ref`, leje `sender:review`) dhe vetëm kur `can_review_locally`; në `central` shfaqet "Sender approvals are managed centrally." Cili veprim (approve/reject kundrejt revoke) zgjidhet nga statusi LOKAL (`pending` / `approved`) sepse vendimet lokale veprojnë mbi rekordin lokal; serveri rikontrollon tranzicionin. Veprimet dërgohen me `noOwner` (skema strikte `extra=forbid`). 409 (`sender_authority_frozen`/konflikt) → njoftim miqësor + rikërkim.
+- **Forma e kërkesës**: API pranon vetëm `country` + `value` (lloji nnxirret nga serveri; nuk ka fushë `kind`/`evidence`). Validim vetëm `≥3` karaktere; gabimet 422 `err.fields` dhe `invalid_sender` shfaqen te fusha me fokus; të tjerat si gabim i përgjithshëm.
+- **Njoftimi sync**: `not_synchronized` paralajmëron vetëm kur `effective_status` është `not_synchronized`; `stale` vetëm në autoritet `central`. Në local/shadow `sync_status` është diagnostikë e stafit.
+
+**Kufizime të API-së Enterprise (të dokumentuara, jo të zgjidhura me hile në frontend):**
+1. `GET /v1/sender-ids` kthen max 300 rreshta, pa faqosje, pa kërkim, pa filtër shteti/lloji; `status` filtron statusin LOKAL. UI filtron (kërkim, status EFEKTIV, shtet, lloj) dhe faqoson 20/faqe vetëm mbi rreshtat e ngarkuar dhe e thotë kur arrihet kufiri.
+2. `GET /v1/sender-ids/{id}` nuk ka `created_at`/`reviewed_by` (vetëm lista); detaji i merr nga lista e ngarkuar së fundi, përndryshe "-". Nuk ka `updated_at` askund.
+3. Nuk ka endpoint të historikut të vendimeve lokale (`SenderDecision` ekziston në DB, jo në API); historiku Central është në `/admin/senders/{id}/history`. `AuditTimeline` përdoret në M11-C.
+4. Filtrim sipas autoritetit/sync në server nuk ekziston.

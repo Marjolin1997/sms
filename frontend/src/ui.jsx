@@ -154,10 +154,11 @@ export const STATUS_TONES = {
 const TONES = STATUS_TONES;
 export const statusTone = (status) => TONES[String(status).toLowerCase()] || "muted";
 const GLYPH = { good: "✓", info: "●", warn: "◔", bad: "✕", muted: "–" };
+// Teksti i statusit: përkthimi shqip, ose (anglisht/pa përkthim) çelësi pa "_": "not_synchronized" → "not synchronized".
+export const statusText = (status) => { const key = String(status).toLowerCase(); const label = t(key); return label === key ? key.replace(/_/g, " ") : label; };
 export const StatusBadge = ({ children }) => {
-  const key = String(children).toLowerCase();
-  const tone = statusTone(key);
-  return <span className={`badge ${tone}`}><i aria-hidden>{GLYPH[tone]}</i>{t(key)}</span>; // statuset përkthehen këtu
+  const tone = statusTone(children);
+  return <span className={`badge ${tone}`}><i aria-hidden>{GLYPH[tone]}</i>{statusText(children)}</span>;
 };
 export const Badge = StatusBadge; // emri i vjetër (përdoret nga faqet ekzistuese)
 
@@ -253,12 +254,12 @@ export function Table({ cols, rows, empty = t("Nothing here yet."), loading, emp
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr>{cols.map((c) => <th key={c.key || c.label} className={c.num ? "num" : ""}>{c.label}</th>)}</tr></thead>
+        <thead><tr>{cols.map((c) => <th key={c.key || c.label} className={`${c.num ? "num" : ""} ${c.hideSm ? "hide-sm" : ""}`.trim()}>{c.label}</th>)}</tr></thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={r.id ?? i} onClick={r._onClick} className={r._onClick ? "click" : ""} tabIndex={r._onClick ? 0 : undefined}
               onKeyDown={r._onClick ? (e) => e.key === "Enter" && r._onClick() : undefined}>
-              {cols.map((c) => <td key={c.key || c.label} className={c.num ? "num" : ""} data-label={c.label}>{c.render ? c.render(r) : r[c.key]}</td>)}
+              {cols.map((c) => <td key={c.key || c.label} className={`${c.num ? "num" : ""} ${c.hideSm ? "hide-sm" : ""}`.trim()} data-label={c.label}>{c.render ? c.render(r) : r[c.key]}</td>)}
             </tr>
           ))}
         </tbody>

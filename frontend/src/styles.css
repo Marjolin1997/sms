@@ -244,3 +244,6 @@ textarea { resize: vertical; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brand, #4f46e5); outline-offset: 2px; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 @media (prefers-reduced-motion: reduce) { .skeleton div, .spin, .toast, .dialog { animation: none; } }
+@media (max-width: 800px) { .hide-sm { display: none !important; } }
+.sender-note { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

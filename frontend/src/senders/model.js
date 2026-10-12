@@ -45,6 +45,7 @@ export function adaptSender(raw) {
     canReviewLocally: raw.can_review_locally === undefined ? mode !== "central" : bool(raw.can_review_locally),
     reason: str(raw.reason),
     createdAt: str(raw.created_at),
+    reviewedBy: str(raw.reviewed_by),
     // vetëm admin (sender:review) — mungojnë për klientin:
     drift: str(raw.drift),
     cpRevision: Number.isInteger(raw.cp_revision) ? raw.cp_revision : null,
