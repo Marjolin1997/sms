@@ -405,4 +405,5 @@ def test_central_schema_has_no_owner_ref_anywhere():
         "0028_sender_requests_s3.py",
         "0029_sender_bootstrap_s4.py",
         "0030_sender_ops_snapshot.py",
+        "0031_invoice_list_indexes.py",
     ]

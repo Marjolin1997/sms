@@ -90,6 +90,29 @@ def main(path: str) -> None:
             sub = billing.assign_plan(db, a1, ent, ver.id, now=PAST)
             res = billing.process_period(db, sub.id, AFTER)
             invoices[key] = res.invoice
+        # M11-E2: 26 faturat shtesë me data të ndryshme (faqosje > 25 + filtra datash); çdo enterprise ka abonimin e vet
+        from apps.central.services import enterprises
+
+        extra = []
+        for i in range(26):
+            after = _NOW - timedelta(days=50 + 3 * i)
+            ent = enterprises.create(db, f"Bulk {i:02d} Sh.p.k.").id
+            billing.set_profile(
+                db,
+                a1,
+                ent,
+                f"Bulk {i:02d} Sh.p.k.",
+                "Rr. Bulk 1, Tiranë",
+                "al",
+                f"b{i}@example.test",
+                "K12345678A",
+                "0.2",
+            )
+            sub = billing.assign_plan(db, a1, ent, ver.id, now=after - timedelta(days=40))
+            extra.append(billing.process_period(db, sub.id, after).invoice)
+        ids["invoice_bulk_oldest"] = str(extra[-1].id)
+        ids["bulk_issue_day"] = (_NOW - timedelta(days=50 + 3 * 25)).strftime("%Y-%m-%d")
+        ids["acme_issue_day"] = AFTER.strftime("%Y-%m-%d")
         paid = invoices["acme"]
         ip = invoice_payments.create(
             db, paid.id, str(paid.total), actor=a1, external_reference="INV-PAY-77", now=AFTER

@@ -17,6 +17,7 @@ from app.models.contacts import Contact, ContactStatus
 from app.models.email import DomainStatus, Email, EmailDomain, EmailStatus
 from app.models.events import EndpointStatus, WebhookEndpoint
 from app.models.messaging import ApprovalStatus, SenderId, Template, TemplateVersion
+from app.models.money_authority import UNRESOLVED, MoneyGrant
 from app.models.rates import Rate, RateCard, RateCardVersion
 from app.models.sending import AccountPlan, Message, MessageStatus
 from app.models.wallet import EntryType, LedgerEntry, Topup, TopupStatus, Wallet
@@ -282,13 +283,23 @@ def list_wallets(
 ):
     owner = tenant(db, p, owner_ref)
     out = []
-    for w in db.scalars(select(Wallet).where(owned(Wallet, owner)).order_by(Wallet.id)):
+    ws = list(db.scalars(select(Wallet).where(owned(Wallet, owner)).order_by(Wallet.id)))
+    # M11-E2: një pyetje për të gjitha wallet-et (jo N+1); vetëm shfaqje, s'prek bilancin/shpenzimin
+    pending = set(
+        db.scalars(
+            select(MoneyGrant.wallet_id)
+            .where(MoneyGrant.wallet_id.in_([w.id for w in ws]), MoneyGrant.status.in_(UNRESOLVED))
+            .distinct()
+        )
+    ) if ws else set()  # fmt: skip
+    for w in ws:
         avail, held = wallets.balances(db, w.id)
         out.append({
             "id": w.id, "currency": w.currency, "available": str(avail), "held": str(held),
             "low_balance_threshold": str(w.low_balance_threshold)
             if w.low_balance_threshold is not None else None,
             "low_balance": bool(w.low_balance_notified),
+            "has_pending_recalculation": w.id in pending,
         })  # fmt: skip
     return out
 

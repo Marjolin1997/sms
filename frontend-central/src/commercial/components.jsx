@@ -42,7 +42,7 @@ export function TabBar({ route, tabs, query }) {
 
 /**
  * Listë e faqosur nga serveri me filtra në URL. Asnjë faqosje në klient: çdo faqe është një kërkesë.
- * `filters`: [{ name, label, options? }] — pa options ⇒ input teksti; emrat që mbarojnë me `_id` kërkojnë UUID.
+ * `filters`: [{ name, label, options?, type?, maxLength?, upper? }] — pa options ⇒ input (text|date); emrat me `_id` kërkojnë UUID.
  */
 export function ServerList({ route, rest = [], tab, query, path, filters = [], params = {}, cols, title, emptyTitle, emptyText, poll = 0 }) {
   const limit = SIZES.includes(Number(query.limit)) ? Number(query.limit) : 50;
@@ -54,6 +54,7 @@ export function ServerList({ route, rest = [], tab, query, path, filters = [], p
   const list = useLoad(async (signal) => ({ key, page: await api.page(path, { limit, offset, ...applied, ...params }, { signal }) }), [key], poll);
   const [draft, setDraft] = useState(applied);
   const [bad, setBad] = useState({});
+  const fieldErrors = list.error?.kind === "validation" ? list.error.fields || {} : {};
   const page = list.data?.page;
   const pending = list.data && list.data.key !== key;
   const filtering = Object.values(applied).some(Boolean);
@@ -63,9 +64,11 @@ export function ServerList({ route, rest = [], tab, query, path, filters = [], p
     const clean = {};
     for (const f of filters) {
       const v = (draft[f.name] || "").trim();
-      if (v && f.name.endsWith("_id") && !UUID.test(v)) errs[f.name] = true;
-      clean[f.name] = v;
+      if (v && f.name.endsWith("_id") && !UUID.test(v)) errs[f.name] = t("Enter a valid ID (UUID).");
+      clean[f.name] = f.upper ? v.toUpperCase() : v;
     }
+    // Intervali i datave: gabim i dukshëm, kurrë këmbim i heshtur (serveri e refuzon po ashtu me 422)
+    if (clean.issued_from && clean.issued_to && clean.issued_from > clean.issued_to) errs.issued_to = t("The end date must not be before the start date.");
     setBad(errs);
     if (Object.keys(errs).length === 0) go({ ...clean, limit: limit === 50 ? "" : limit });
   };
@@ -79,7 +82,8 @@ export function ServerList({ route, rest = [], tab, query, path, filters = [], p
               <option value="">{t("All")}</option>{f.options.map((o) => <option key={o} value={o}>{t(o)}</option>)}
             </select>
           ) : (
-            <input key={f.name} aria-label={f.label} placeholder={f.label} aria-invalid={bad[f.name] || undefined} value={draft[f.name] || ""} onChange={(e) => setDraft({ ...draft, [f.name]: e.target.value })} />
+            <input key={f.name} type={f.type || "text"} aria-label={f.label} placeholder={f.label} maxLength={f.maxLength} aria-invalid={bad[f.name] || fieldErrors[f.name] ? true : undefined}
+              value={draft[f.name] || ""} onChange={(e) => setDraft({ ...draft, [f.name]: e.target.value })} />
           ))}
           {filters.length > 0 && <Button variant="primary">{t("Apply filters")}</Button>}
           {filtering && <Button type="button" onClick={clear}>{t("Clear filters")}</Button>}
@@ -87,7 +91,9 @@ export function ServerList({ route, rest = [], tab, query, path, filters = [], p
             {SIZES.map((n) => <option key={n} value={n}>{t("{n} per page", { n })}</option>)}
           </select>
         </FilterBar>
-        {Object.keys(bad).length > 0 && <div className="alert warn" role="alert">{t("Enter a valid ID (UUID).")}</div>}
+        {Object.keys({ ...bad, ...fieldErrors }).length > 0 && (
+          <div className="alert warn" role="alert">{Object.entries({ ...fieldErrors, ...bad }).map(([k, msg]) => <div key={k}>{filters.find((f) => f.name === k)?.label || k}: {msg}</div>)}</div>
+        )}
       </form>
       {list.error && !page ? <ErrorState error={list.error} retry={list.reload} /> : list.loading && !page ? <Skeleton rows={5} /> : (
         <div aria-busy={pending || undefined} style={{ opacity: pending ? 0.55 : 1 }}>

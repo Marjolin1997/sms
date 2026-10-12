@@ -41,7 +41,7 @@ export default function ComPayments({ query }) {
           ]} />
       ) : (
         <ServerList key="cr" route="com-payments" query={query} path="/admin/money/payments" title={t("Credit payments")} emptyTitle={t("No credit payments yet")} emptyText={t("Payments that fund a credit account appear here.")}
-          filters={[{ name: "account_id", label: t("Account ID") }, { name: "status", label: t("Status"), options: STATUSES }]}
+          filters={[{ name: "enterprise_id", label: t("Enterprise ID") }, { name: "account_id", label: t("Account ID") }, { name: "status", label: t("Status"), options: STATUSES }]}
           cols={[
             { label: t("Payment"), render: (p) => <span className="mono">{shortId(p.id)}</span> },
             { label: t("Enterprise"), render: (p) => <EntLink id={p.enterprise_id} /> },

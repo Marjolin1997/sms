@@ -175,7 +175,7 @@ describe("payments", () => {
     const before = f.calls.length;
     await userEvent.type(screen.getByLabelText("Invoice ID"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
-    expect(await screen.findByText("Enter a valid ID (UUID).")).toBeInTheDocument();
+    expect(await screen.findByText(/Enter a valid ID \(UUID\)\./)).toBeInTheDocument();
     expect(f.calls.length).toBe(before);
   });
 });

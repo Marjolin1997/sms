@@ -71,7 +71,7 @@ function fieldErrors(detail) {
       if (key && !out[key]) out[key] = x.msg;
     }
   } else if (detail && detail.code === "invalid" && typeof detail.message === "string") {
-    for (const f of ["requires_approval", "evidence_ref", "reason", "country", "sender_kind"]) {
+    for (const f of ["requires_approval", "evidence_ref", "reason", "country", "sender_kind", "issued_from", "issued_to"]) {
       if (detail.message.includes(f)) { out[f] = serverMessage(detail.message); break; }
     }
   }
@@ -82,7 +82,7 @@ let onSessionExpired = null;
 export const setSessionExpiredHandler = (fn) => (onSessionExpired = fn);
 export const REQUEST_TIMEOUT_MS = 30000;
 
-async function request(method, path, { params = {}, body, signal, timeoutMs = REQUEST_TIMEOUT_MS, auth = true } = {}) {
+async function request(method, path, { params = {}, body, signal, timeoutMs = REQUEST_TIMEOUT_MS, auth = true, blob = false } = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") qs.set(k, v);
   const url = qs.toString() ? `${path}?${qs}` : path;
@@ -106,6 +106,7 @@ async function request(method, path, { params = {}, body, signal, timeoutMs = RE
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);
   }
+  if (blob && res.ok) return res; // trupi binar (PDF): thirrësi e lexon si blob; gabimet mbeten JSON dhe kalojnë më poshtë
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     const d = data && data.detail;
@@ -118,6 +119,15 @@ async function request(method, path, { params = {}, body, signal, timeoutMs = RE
   return data;
 }
 
+// Ruan një blob si skedar (anchor me object URL, i revokuar pas pak). Emri vjen nga serveri dhe lejohet vetëm [A-Za-z0-9._-].
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.rel = "noopener"; a.style.display = "none";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 export function normalizePage(data, limit = 50, offset = 0) {
   return { items: (data && data.items) || [], hasMore: !!(data && data.has_more), limit: data?.limit ?? limit, offset: data?.offset ?? offset };
 }
@@ -125,6 +135,14 @@ export function normalizePage(data, limit = 50, offset = 0) {
 export const api = {
   get: (p, params, opts = {}) => request("GET", p, { params, ...opts }),
   post: (p, body, opts = {}) => request("POST", p, { body, ...opts }),
+  /** PDF zyrtar nga serveri → skedar. Vetëm application/pdf jo bosh pranohet; 401/403/404/5xx kalojnë si ApiError. */
+  downloadPdf: async (p, fallbackName = "invoice.pdf", opts = {}) => {
+    const res = await request("GET", p, { blob: true, ...opts });
+    const blob = await res.blob();
+    if (!/^application\/pdf/i.test(res.headers?.get?.("Content-Type") || "") || blob.size === 0) throw new ApiError(502, "bad_document", t("The server returned an unexpected document."));
+    const m = /filename="([A-Za-z0-9._-]{1,80})"/.exec(res.headers.get("Content-Disposition") || "");
+    saveBlob(blob, m ? m[1] : fallbackName);
+  },
   page: async (p, { limit = 50, offset = 0, ...filters } = {}, opts = {}) => normalizePage(await request("GET", p, { params: { limit, offset, ...filters }, ...opts }), limit, offset),
 };
 

@@ -454,6 +454,8 @@ def test_central_0030_is_additive_reversible_and_matches_metadata(make_db):
                 d
                 for d in compare_metadata(ctx, Base.metadata)
                 if "central_alembic_version" not in repr(d)
+                and "ix_invoices_issued_at" not in repr(d)  # 0031 (M11-E2)
+                and "ix_invoices_number_prefix" not in repr(d)
             ]
 
     url = make_db()

@@ -1,19 +1,22 @@
 """API admin e faturimit periodik (M9-g1). Admin = shkrim, operator = lexim. Pa DELETE; pa API klienti (faturat Central janë vetëm admin
 deri në M11); pa ekzekutim faturimi përmes HTTP (punonjësi/mjeti vjen në g2). Shumat janë string dhjetorë (kurrë float)."""
 
+import logging
 import re
 import uuid
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AfterValidator, BaseModel, Field, StrictInt, StrictStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.central.api.admin_common import STRICT, Currency, Reason, iso, money_str, page
 from apps.central.api.admin_settlement import settlement_out
 from apps.central.api.deps import get_db, require_role
-from apps.central.core.errors import NotFound
+from apps.central.core.errors import Invalid, NotFound
 from apps.central.models.billing import (
     BillingPeriod,
     BillingProfile,
@@ -22,8 +25,11 @@ from apps.central.models.billing import (
     Invoice,
     PlanVersion,
 )
+from apps.central.models.settlement import CreditNote
 from apps.central.models.user import CentralUser, Role
-from apps.central.services import billing, billing_closure, billing_plans
+from apps.central.services import billing, billing_closure, billing_plans, invoice_document
+
+log = logging.getLogger("central.billing_api")
 
 router = APIRouter(prefix="/admin/billing")
 READ = require_role(Role.ADMIN, Role.OPERATOR)
@@ -370,19 +376,59 @@ def list_periods(enterprise_id: uuid.UUID | None = None, subscription_id: uuid.U
     return page(rows, limit, offset, period_out)
 
 
+_NUMBER = r"^[A-Za-z0-9._-]+$"
+
+
+def _day_start(d: date) -> datetime:
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
+
+
 @router.get("/invoices")
 def list_invoices(enterprise_id: uuid.UUID | None = None, status: str | None = Query(None, pattern="^(open|paid|void)$"),
+                  number: str | None = Query(None, min_length=1, max_length=24, pattern=_NUMBER),
+                  issued_from: date | None = None, issued_to: date | None = None,
                   limit: int = Query(50, ge=1, le=MAX_PAGE), offset: int = Query(0, ge=0), db: Session = Depends(get_db),
                   _: CentralUser = Depends(READ)):  # fmt: skip
+    """Filtra në server, të kompozueshëm. `number` = PARAFYTYRË (hyrja bëhet me shkronja të mëdha; numrat e sistemit janë `INV-<vit>-<n>`),
+    `issued_from`/`issued_to` = DATA kalendarike UTC, të dyja përfshirëse (issued_at >= from 00:00Z dhe < (to+1) 00:00Z).
+    from > to ⇒ 422 (nuk këmbehen në heshtje). Rendi i qëndrueshëm: issued_at DESC, id DESC. Çdo faturë ka `credit_note_count`/`credited_total`
+    nga NJË pyetje e grupuar për faqen (jo N+1)."""
+    if issued_from and issued_to and issued_from > issued_to:
+        raise Invalid("issued_from must be on or before issued_to")
     q = select(Invoice)
     if enterprise_id:
         q = q.where(Invoice.enterprise_id == enterprise_id)
     if status:
         q = q.where(Invoice.status == status)
+    if number:
+        pfx = number.upper().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        q = q.where(Invoice.number.like(pfx + "%", escape="\\"))
+    if issued_from:
+        q = q.where(Invoice.issued_at >= _day_start(issued_from))
+    if issued_to:
+        q = q.where(Invoice.issued_at < _day_start(issued_to + timedelta(days=1)))
     rows = list(
-        db.scalars(q.order_by(Invoice.issued_at.desc(), Invoice.id).limit(limit + 1).offset(offset))
+        db.scalars(
+            q.order_by(Invoice.issued_at.desc(), Invoice.id.desc()).limit(limit + 1).offset(offset)
+        )
     )
-    return page(rows, limit, offset, invoice_out)
+    ids = [r.id for r in rows[:limit]]
+    notes: dict = {}
+    if ids:
+        notes = {
+            iid: (n, total)
+            for iid, n, total in db.execute(
+                select(CreditNote.invoice_id, func.count(), func.sum(CreditNote.amount))
+                .where(CreditNote.invoice_id.in_(ids))
+                .group_by(CreditNote.invoice_id)
+            )
+        }
+
+    def out(i: Invoice) -> dict:
+        n, total = notes.get(i.id, (0, Decimal(0)))
+        return {**invoice_out(i), "credit_note_count": int(n), "credited_total": money_str(total)}
+
+    return page(rows, limit, offset, out)
 
 
 @router.get("/invoices/{invoice_id}")
@@ -394,6 +440,24 @@ def get_invoice(
         **invoice_out(inv, billing.lines_of(db, inv.id)),
         "settlement": settlement_out(db, inv),
     }  # M9-g3
+
+
+@router.get("/invoices/{invoice_id}/pdf")
+def invoice_pdf(invoice_id: uuid.UUID, inline: bool = False, db: Session = Depends(get_db),
+                _: CentralUser = Depends(READ)):  # fmt: skip
+    """Fatura zyrtare PDF nga snapshot-i i ruajtur (vetëm lexim, admin|operator). Gabim renderimi ⇒ 500 i pastër, pa përgjigje të pjesshme."""
+    inv = billing.get_invoice(db, invoice_id)
+    try:
+        data, name = invoice_document.render(db, inv)
+    except Exception:  # noqa: BLE001 - dështimi i renderuesit s'duhet të rrjedhë te klienti
+        log.exception("invoice pdf render failed invoice=%s", invoice_id)
+        raise HTTPException(
+            500, {"code": "pdf_render_failed", "message": "the invoice PDF could not be generated"}
+        ) from None
+    db.rollback()
+    return Response(data, media_type="application/pdf", headers={
+        "Content-Disposition": f'{"inline" if inline else "attachment"}; filename="{name}"',
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Length": str(len(data))})  # fmt: skip
 
 
 @router.post("/invoices/{invoice_id}/void")

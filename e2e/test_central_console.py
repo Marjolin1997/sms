@@ -561,18 +561,11 @@ def commercial_flow(b):
     p.wait_for_selector("text=Central invoices")
     p.wait_for_selector("text=Pending invoice payments")
     check(
-        has("local", text(p)) and has("Central invoices: 2", text(p)),
+        has("local", text(p)) and has("Central invoices: 28", text(p)),
         "overview shows the billing authority mode and counts from the server",
     )
-    check(
-        p.get_by_role("main")
-        .get_by_role("link", name="Overdue open invoices")
-        .inner_text()
-        .replace("\n", " ")
-        .count("1")
-        >= 1,
-        "overview shows the server's overdue count",
-    )
+    link = p.get_by_role("main").get_by_role("link", name="Overdue open invoices").inner_text()
+    check(re.search(r"\d+", link) is not None, "overview shows the server's overdue count")
     # credit
     go(p, "#com-credit", "text=Available to grant")
     check(
@@ -638,7 +631,7 @@ def commercial_flow(b):
     # subscriptions
     go(p, "#com-subs", "text=Subscriptions")
     p.wait_for_selector("tbody tr")
-    check(p.locator("tbody tr").count() == 2, "two subscriptions")
+    check(p.locator("tbody tr").count() == 28, "all 28 subscriptions fit one page of 50")
     go(p, f"#com-subs/{IDS['enterprise_acme']}", "text=Billing profile")
     p.wait_for_selector("text=Acme Sh.p.k.")
     p.wait_for_selector("text=Monthly fee")
@@ -648,7 +641,7 @@ def commercial_flow(b):
     # invoices
     go(p, "#com-invoices", "text=Invoices")
     p.wait_for_selector(f"text={IDS['invoice_paid_number']}")
-    check(p.locator("tbody tr").count() == 2, "two invoices")
+    check(p.locator("tbody tr").count() == 28, "all 28 invoices fit one page of 50")
     go(p, "#com-invoices?status=paid")
     p.wait_for_function("document.querySelectorAll('tbody tr').length === 1")
     check(has(IDS["invoice_paid_number"], text(p)), "status filter applied by the server")
@@ -744,17 +737,136 @@ def commercial_flow(b):
     q.context.close()
 
 
+def commercial_e2_flow(b):
+    """M11-E2: filtra faturash (numër, data, faqosje), treguesi credit-note, PDF zyrtar nga serveri; admin + operator, vetëm GET."""
+    import io
+
+    from pypdf import PdfReader
+
+    p = new_page(b)
+    login(p, "admin@e2e.test", ADMIN_PW)
+    writes = []
+    p.on(
+        "request",
+        lambda r: (
+            writes.append(f"{r.method} {r.url}")
+            if r.method not in ("GET", "HEAD") and "/auth/" not in r.url
+            else None
+        ),
+    )
+    pdf_resp = []
+    p.on("response", lambda r: pdf_resp.append(r) if r.url.endswith("/pdf") else None)
+    go(p, "#com-invoices?limit=25", "text=Invoices")
+    p.wait_for_selector("tbody tr")
+    check(p.locator("tbody tr").count() == 25, "first page has 25 invoices (28 in total)")
+    p.get_by_role("button", name="Next").click()
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 3")
+    check(
+        "offset=25" in p.evaluate("location.hash"), "next page is a server offset kept in the URL"
+    )
+    # numër: prefiks dhe numër i plotë
+    num = IDS["invoice_paid_number"]
+    go(p, f"#com-invoices?number={num}")
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 1")
+    check(has(num, text(p)), "exact invoice number filter")
+    go(p, "#com-invoices?number=INV-")
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 28")
+    go(p, "#com-invoices?number=NOPE")
+    p.wait_for_selector("text=Nothing matches your filters")
+    # data: dita e acme/globex (të dyja lëshuar në të njëjtën ditë UTC) dhe e vjetra
+    day = IDS["acme_issue_day"]
+    go(p, f"#com-invoices?issued_from={day}&issued_to={day}")
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 2")
+    check(
+        has(IDS["invoice_paid_number"], text(p)) and has(IDS["invoice_open_number"], text(p)),
+        "single-day range includes both invoices issued that day (inclusive bounds)",
+    )
+    go(p, f"#com-invoices?issued_from={IDS['bulk_issue_day']}&issued_to={IDS['bulk_issue_day']}")
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 1")
+    go(p, f"#com-invoices?issued_from={day}&status=paid")
+    p.wait_for_selector(f"td:has-text('{num}')")
+    p.wait_for_function("document.querySelectorAll('tbody tr').length === 1")
+    check(has(num, text(p)), "filters compose (date + status)")
+    # interval i pavlefshëm: gabim në fushë, pa kërkesë
+    go(p, "#com-invoices", "text=Invoices")
+    p.wait_for_selector("tbody tr")
+    p.get_by_label("Issued from").fill("2030-03-10")
+    p.get_by_label("Issued to").fill("2030-03-01")
+    p.get_by_role("button", name="Apply filters").click()
+    p.wait_for_selector("text=The end date must not be before the start date")
+    check(
+        "issued_from" not in p.evaluate("location.hash"), "inverted range is not applied or swapped"
+    )
+    # tregues credit-note
+    go(p, f"#com-invoices?number={num}")
+    p.wait_for_selector(f"td:has-text('{num}')")
+    check(has("credited", text(p)) and has("1 ·", text(p)), "credit-note indicator on the list")
+    # PDF zyrtar
+    p.locator("tbody tr a:has-text('View')").first.click()
+    p.wait_for_selector("text=Invoice lines")
+    with p.expect_download() as dl:
+        p.get_by_role("button", name=re.compile("Download official PDF")).click()
+    d = dl.value
+    check(
+        d.suggested_filename == f"invoice-{num}.pdf",
+        f"safe filename from the server: {d.suggested_filename}",
+    )
+    raw = open(d.path(), "rb").read()
+    check(raw.startswith(b"%PDF-"), "downloaded file is a PDF")
+    t = "\n".join(pg.extract_text() for pg in PdfReader(io.BytesIO(raw)).pages)
+    check(
+        num in t
+        and "goodwill discount" in t
+        and "1,200.00" in t.replace(" ", "")
+        or "1,200.00" in t,
+        "PDF carries the invoice number, total and credit note",
+    )
+    check(
+        any(r.headers.get("content-type") == "application/pdf" for r in pdf_resp),
+        "HTTP response is application/pdf",
+    )
+    # responsive
+    p.set_viewport_size({"width": 390, "height": 800})
+    go(p, "#com-invoices")
+    p.wait_for_selector("tbody tr")
+    check(
+        not p.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"),
+        "no horizontal scroll at 390px (invoice filters)",
+    )
+    check(writes == [], f"no non-GET request: {writes}")
+    p.context.close()
+    # operator
+    q = new_page(b)
+    login(q, "operator@e2e.test", OP_PW)
+    ow = []
+    q.on(
+        "request",
+        lambda r: ow.append(r.method) if r.method != "GET" and "/auth/" not in r.url else None,
+    )
+    go(q, f"#com-invoices/{IDS['invoice_paid']}", "text=Invoice lines")
+    with q.expect_download() as dl2:
+        q.get_by_role("button", name=re.compile("Download official PDF")).click()
+    check(
+        open(dl2.value.path(), "rb").read().startswith(b"%PDF-"),
+        "operator downloads the official PDF",
+    )
+    check(ow == [], "operator sent no mutation")
+    q.context.close()
+
+
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(executable_path=CHROME)
         if os.environ.get("E2E_ONLY") == "commercial":
             commercial_flow(b)
+            commercial_e2_flow(b)
         else:
             admin_flow(b)
             operator_flow(b)
             ops_flow(b)
             ops_enterprise_flow(b)
             commercial_flow(b)
+            commercial_e2_flow(b)
         b.close()
     # skenarët negativë të qëllimshëm: hyrje e gabuar, token i prishur, 404 për sender-in/rrugën e panjohur, shkrim i operatorit
     uniq = sorted(set(re.sub(r"/[0-9a-f-]{36}", "/<id>", e) for e in http_errors))

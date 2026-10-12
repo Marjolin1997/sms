@@ -1,7 +1,8 @@
+import logging
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,10 +19,11 @@ from app.models.billing import (
     Subscription,
 )
 from app.services import billing as svc
-from app.services import invoice_render, payments
+from app.services import invoice_document, invoice_render, payments
 from app.services.audit import audit
 
 router = APIRouter(prefix="/v1")
+log = logging.getLogger("billing_api")
 _STATUS = {
     "not_found": 404,
     "conflict": 409,
@@ -187,6 +189,35 @@ def invoice_page(
         headers={
             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; "
             "frame-ancestors 'none'"
+        },
+    )
+
+
+@router.get("/billing/invoices/{invoice_id}/pdf")
+def invoice_pdf(
+    invoice_id: int,
+    inline: bool = False,
+    owner_ref: str | None = None,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("billing:read")),
+):
+    """PDF zyrtar nga rreshtat e ruajtur (lexim). E huaj ⇒ 404; dështim ⇒ 500 i pastër."""
+    inv = _own_invoice(db, invoice_id, p, owner_ref)
+    try:
+        data, name = invoice_document.render(inv, svc.invoice_lines(db, inv.id))
+    except Exception:  # noqa: BLE001 - dështimi i renderuesit s'duhet të rrjedhë te klienti
+        log.exception("invoice pdf render failed invoice=%s", invoice_id)
+        raise HTTPException(
+            500, {"code": "pdf_render_failed", "message": "the invoice PDF could not be generated"}
+        ) from None
+    return Response(
+        data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'{"inline" if inline else "attachment"}; filename="{name}"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Length": str(len(data)),
         },
     )
 

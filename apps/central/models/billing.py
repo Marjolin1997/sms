@@ -235,6 +235,11 @@ class Invoice(Base):
         UniqueConstraint("subscription_id", "period_start", name="uq_invoices_sub_period_start"),
         Index("ix_invoices_enterprise", "enterprise_id", "issued_at"),
         Index("ix_invoices_status_due", "status", "due_at"),
+        # M11-E2: renditja e listës (issued_at DESC, id DESC = skanim prapa) dhe filtri i datave; parafytyra e numrit (LIKE 'INV-…%') pavarësisht kolacionit
+        Index("ix_invoices_issued_at", "issued_at", "id"),
+        Index(
+            "ix_invoices_number_prefix", "number", postgresql_ops={"number": "varchar_pattern_ops"}
+        ),
         CheckConstraint("status in ('open', 'paid', 'void')", name="status"),
         CheckConstraint("subtotal >= 0 AND tax >= 0 AND total = subtotal + tax", name="arithmetic"),
         CheckConstraint("vat_rate >= 0 AND vat_rate <= 1", name="vat_range"),

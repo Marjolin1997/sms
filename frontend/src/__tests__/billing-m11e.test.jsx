@@ -89,3 +89,113 @@ describe("wallet balance (Enterprise)", () => {
     expect(stat.textContent).toContain("EUR");
   });
 });
+
+// ---------------- M11-E2 ----------------
+import { vi } from "vitest";
+
+const pdfResponse = (name = "invoice-INV-000007.pdf") =>
+  new Response("%PDF-1.4 test", { status: 200, headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${name}"` } });
+
+function spyDownload() {
+  const saved = [];
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:x"), revokeObjectURL: vi.fn() }));
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () { saved.push({ href: this.href, name: this.download }); });
+  return { saved, click };
+}
+
+describe("Enterprise official PDF (M11-E2)", () => {
+  it("downloads the server-generated PDF with the server's safe filename", async () => {
+    const { saved } = spyDownload();
+    const f = mockFetch(routes({ "GET /v1/billing/invoices/7/pdf": () => pdfResponse() }));
+    wrap(<Billing me={me} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Download official PDF of invoice INV-000007" }));
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].name).toBe("invoice-INV-000007.pdf");
+    expect(f.calls.find((c) => c.path === "/v1/billing/invoices/7/pdf").method).toBe("GET");
+    expect(f.calls.every((c) => c.method === "GET")).toBe(true);
+  });
+  it("shows a loading state and ignores a second click while the PDF is being fetched", async () => {
+    spyDownload();
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const f = mockFetch(routes({ "GET /v1/billing/invoices/7/pdf": async () => { await gate; return pdfResponse(); } }));
+    wrap(<Billing me={me} />);
+    const btn = await screen.findByRole("button", { name: "Download official PDF of invoice INV-000007" });
+    await userEvent.click(btn);
+    await waitFor(() => expect(btn).toBeDisabled());
+    expect(btn).toHaveTextContent("Preparing…");
+    await userEvent.click(btn);
+    release();
+    await waitFor(() => expect(btn).not.toBeDisabled());
+    expect(f.calls.filter((c) => c.path === "/v1/billing/invoices/7/pdf")).toHaveLength(1);
+  });
+  it("another tenant's invoice (404) shows a clean error and saves nothing", async () => {
+    const { saved } = spyDownload();
+    mockFetch(routes({ "GET /v1/billing/invoices/7/pdf": errorResponse(404, "not_found", "invoice not found") }));
+    wrap(<Billing me={me} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Download official PDF of invoice INV-000007" }));
+    expect(await screen.findByText(/Couldn't download the document/)).toBeInTheDocument();
+    expect(saved).toHaveLength(0);
+  });
+  it("a 500 is sanitized; a non-PDF 200 is rejected", async () => {
+    const { saved } = spyDownload();
+    mockFetch(routes({ "GET /v1/billing/invoices/7/pdf": errorResponse(500, "pdf_render_failed", "Traceback boom /srv") }));
+    wrap(<Billing me={me} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Download official PDF of invoice INV-000007" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(/Something went wrong on our side/));
+    expect(document.body.textContent).not.toMatch(/Traceback|\/srv/);
+    expect(saved).toHaveLength(0);
+  });
+  it("rejects an unexpected content type", async () => {
+    const { saved } = spyDownload();
+    mockFetch(routes({ "GET /v1/billing/invoices/7/pdf": () => new Response("<html>", { status: 200, headers: { "Content-Type": "text/html" } }) }));
+    wrap(<Billing me={me} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Download official PDF of invoice INV-000007" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(/Something went wrong on our side/));
+    expect(saved).toHaveLength(0);
+  });
+  it("the detail panel offers the same PDF and 'View / print' is labelled as a printable page", async () => {
+    mockFetch(routes());
+    wrap(<Billing me={me} />);
+    expect(await screen.findByRole("button", { name: "View / print" })).toHaveAttribute("title", expect.stringMatching(/not|official/i));
+    await userEvent.click(screen.getByRole("button", { name: "Details of invoice INV-000007" }));
+    const card = (await screen.findByText("Invoice details")).closest("section");
+    expect(await within(card).findByRole("button", { name: /Download official PDF/ })).toBeInTheDocument();
+  });
+  it("EN/SQ: the PDF controls and the pending banner are translated", async () => {
+    const { t } = await import("../i18n.jsx");
+    const sq = (await import("../locales/sq/index.js")).default;
+    for (const k of ["Download PDF", "Preparing…", "Pending recalculation", "Download official PDF of invoice {n}", "The server returned an unexpected document."]) expect(sq[k], k).toBeTruthy();
+    expect(t("Download PDF")).toBeTruthy();
+  });
+});
+
+describe("pending recalculation on the wallet (M11-E2)", () => {
+  const W = (o = {}) => ({ id: 1, currency: "EUR", available: "12.340000", held: "0.000000", low_balance_threshold: null, low_balance: false, has_pending_recalculation: false, ...o });
+  const wr = (w) => ({ "GET /v1/wallets": [w], "GET /v1/wallets/1/topups": [], "GET /v1/wallets/1/ledger": [], "GET /v1/billing/payments": [] });
+  it("normal balance: no pending banner and the amount is exactly the server's", async () => {
+    mockFetch(wr(W()));
+    wrap(<Wallet />);
+    const stat = (await screen.findByText("Available to spend")).closest(".stat");
+    expect(stat.textContent).toMatch(/12[.,]34 EUR/);
+    expect(screen.queryByText("Pending recalculation")).toBeNull();
+    expect(screen.queryByTestId("pending-recalculation")).toBeNull();
+  });
+  it("pending: labelled 'Pending recalculation', amount still shown but not presented as final", async () => {
+    mockFetch(wr(W({ has_pending_recalculation: true })));
+    wrap(<Wallet />);
+    const stat = (await screen.findByText("Available to spend")).closest(".stat");
+    expect(stat).toHaveTextContent("Pending recalculation");
+    expect(stat.textContent).toMatch(/12[.,]34 EUR/);
+    expect(stat.className).toMatch(/warn/);
+    expect(stat.className).not.toMatch(/good/);
+    const banner = await screen.findByTestId("pending-recalculation");
+    expect(banner).toHaveTextContent(/isn't final yet/);
+  });
+  it("the client never infers pending from anything but the server flag", async () => {
+    mockFetch(wr(W({ available: "0.000000", held: "99.000000", low_balance: true })));
+    wrap(<Wallet />);
+    await screen.findByText("Available to spend");
+    expect(screen.queryByTestId("pending-recalculation")).toBeNull();
+  });
+});

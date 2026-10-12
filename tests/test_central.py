@@ -194,6 +194,7 @@ def test_central_has_only_health_routes_and_no_docs():
         "/admin/billing/periods",
         "/admin/billing/invoices",
         "/admin/billing/invoices/{invoice_id}",
+        "/admin/billing/invoices/{invoice_id}/pdf",
         "/admin/billing/invoices/{invoice_id}/void",
         # M9-g3: shlyerja (pagesa fature, alokime vetëm-lexim, credit notes, përmbledhje)
         "/admin/billing/invoice-payments", "/admin/billing/invoice-payments/{payment_id}",
@@ -242,8 +243,8 @@ def test_readyz_is_503_when_schema_is_behind_a_newer_head(make_db, tmp_path):
     shutil.copytree(
         ROOT / "apps/central/migrations", scripts, ignore=shutil.ignore_patterns("__pycache__")
     )
-    (scripts / "versions" / "0031_next.py").write_text(
-        'revision = "0031"\ndown_revision = "0030"\nbranch_labels = None\ndepends_on = None\n\n\n'
+    (scripts / "versions" / "0032_next.py").write_text(
+        'revision = "0032"\ndown_revision = "0031"\nbranch_labels = None\ndepends_on = None\n\n\n'
         "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
     )
     eng = create_engine(url)

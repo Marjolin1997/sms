@@ -48,12 +48,20 @@ def get(db: Session, payment_id, *, lock: bool = False) -> Payment:
 
 
 def list_payments(
-    db: Session, *, account_id=None, status: str | None = None, limit: int = 100, offset: int = 0
+    db: Session,
+    *,
+    account_id=None,
+    enterprise_id=None,
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[Payment]:
     """M9-g3: vetëm pagesat `purpose=credit` (pagesat e faturave shihen te `invoice_payments`)."""
     q = select(Payment).where(Payment.purpose == PURPOSE_CREDIT)
     if account_id is not None:
         q = q.where(Payment.account_id == money_common.uid(account_id, "account id"))
+    if enterprise_id is not None:
+        q = q.where(Payment.enterprise_id == money_common.uid(enterprise_id, "enterprise id"))
     if status is not None:
         q = q.where(Payment.status == status)
     q = q.order_by(Payment.created_at, Payment.id)

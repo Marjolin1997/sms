@@ -16,6 +16,7 @@ dependencies = [
   "dnspython>=2.4",
   "argon2-cffi>=23.1",
   "PyJWT>=2.8",
+  "reportlab>=4.2,<5",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,13 @@ ignore = ["B008", "UP042"]  # Depends() në default është idioma e FastAPI
 "e2e/central_seed.py" = ["E501", "E702"]
 "e2e/ops_report.py" = ["E501"]
 "e2e/commercial_seed.py" = ["E501"]
+"e2e/enterprise_billing_seed.py" = ["E501"]
+"e2e/test_enterprise_billing.py" = ["E501"]
+"packages/invoice_pdf/render.py" = ["E501"]
+"tests/test_m11e2_central.py" = ["E731", "E501"]
+"tests/test_m11e2_enterprise.py" = ["E731", "E501"]
+"app/services/invoice_document.py" = ["E501"]
+"apps/central/services/invoice_document.py" = ["E501"]
 "app/services/sender_ops_snapshot.py" = ["E501"]
 "apps/central/services/sender_ops_evidence.py" = ["E501"]
 "apps/central/services/sender_ops_ingest.py" = ["E501"]

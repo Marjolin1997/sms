@@ -75,9 +75,15 @@ export default function Wallet() {
       {w && (
         <>
           <div className="grid stats">
-            <Stat label={t("Available to spend")} value={`${amt(w.available)} ${w.currency}`} tone={Number(w.available) < 5 ? "warn" : "good"} sub={Number(w.available) < 5 ? t("Running low") : undefined} />
+            <Stat label={t("Available to spend")} value={`${amt(w.available)} ${w.currency}`} tone={w.has_pending_recalculation ? "warn" : Number(w.available) < 5 ? "warn" : "good"}
+              sub={w.has_pending_recalculation ? t("Pending recalculation") : Number(w.available) < 5 ? t("Running low") : undefined} />
             <Stat label={t("Reserved")} value={`${amt(w.held)} ${w.currency}`} sub={t("Held for messages being sent. Returned if they fail.")} />
           </div>
+          {w.has_pending_recalculation && (
+            <div className="alert warn" role="status" data-testid="pending-recalculation">
+              <span><b>{t("Pending recalculation")}</b> — {t("Your balance is being reconciled with a recent change and isn't final yet. The amount shown is the last confirmed one; you can keep sending. We'll update it once the check is done.")}</span>
+            </div>
+          )}
           <LowBalance key={`${w.id}:${w.low_balance_threshold}`} wallet={w} onDone={wallets.reload} />
           <TopUp wallet={w} onDone={() => { pays.reload(); tops.reload(); }} />
           <Card title={t("Movements")} subtitle={t("Every change to your balance, newest first. Nothing on this list can be edited or deleted.")}><Ledger wallet={w} /></Card>

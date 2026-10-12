@@ -237,4 +237,32 @@ export async function openHtml(path) {
   window.open(url, "_blank", "noopener");
 }
 
+// PDF zyrtar (M11-E2): gjenerohet nga serveri nga fatura e ruajtur; merret me Authorization dhe ruhet si skedar (jo nga DOM-i).
+// Gabimet kalojnë te ApiError (401/403/404/5xx) pa tekst të papërpunuar të serverit; përgjigjja e pjesshme/jo-PDF refuzohet.
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.rel = "noopener"; a.style.display = "none";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+export async function downloadPdf(path, fallbackName = "invoice.pdf") {
+  let res;
+  try {
+    res = await fetch(owner ? `${path}?owner_ref=${encodeURIComponent(owner)}` : path, { headers: { Authorization: `Bearer ${getKey()}` } });
+  } catch {
+    throw new ApiError(0, "network", t("Can't reach the server. Check your connection and try again."));
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const code = data && data.detail && data.detail.code;
+    throw new ApiError(res.status, code === "pdf_render_failed" ? "pdf_render_failed" : "error", t("Couldn't download the document (HTTP {status})", { status: res.status }));
+  }
+  const blob = await res.blob();
+  if (!/^application\/pdf/i.test(res.headers.get("Content-Type") || "") || blob.size === 0) throw new ApiError(502, "error", t("The server returned an unexpected document."));
+  const m = /filename="([A-Za-z0-9._-]{1,80})"/.exec(res.headers.get("Content-Disposition") || "");
+  saveBlob(blob, m ? m[1] : fallbackName);
+}
+
 export const uuid = () => crypto.randomUUID();

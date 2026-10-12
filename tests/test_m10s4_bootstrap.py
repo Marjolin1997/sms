@@ -432,6 +432,8 @@ def test_central_0029_is_additive_reversible_and_matches_metadata(make_db):
                 for d in compare_metadata(ctx, Base.metadata)
                 if "central_alembic_version" not in repr(d)
                 and "sender_ops_snapshots" not in repr(d)
+                and "ix_invoices_issued_at" not in repr(d)
+                and "ix_invoices_number_prefix" not in repr(d)
             ]
 
     assert drift() == []

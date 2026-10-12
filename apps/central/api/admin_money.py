@@ -204,6 +204,7 @@ def account_ledger(
 @router.get("/payments")
 def list_payments(
     account_id: uuid.UUID | None = None,
+    enterprise_id: uuid.UUID | None = None,
     status: str | None = Query(None, pattern="^(pending|approved|rejected)$"),
     limit: int = Query(50, ge=1, le=MAX_PAGE),
     offset: int = Query(0, ge=0),
@@ -211,7 +212,12 @@ def list_payments(
     _: CentralUser = Depends(READ),
 ):
     rows = payments.list_payments(
-        db, account_id=account_id, status=status, limit=limit + 1, offset=offset
+        db,
+        account_id=account_id,
+        enterprise_id=enterprise_id,
+        status=status,
+        limit=limit + 1,
+        offset=offset,
     )
     return page(rows, limit, offset, payment_out)
 

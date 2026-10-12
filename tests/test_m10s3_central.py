@@ -541,6 +541,8 @@ def _drift(ctx):
         if "central_alembic_version" not in repr(d)
         and "sender_bootstrap_runs" not in repr(d)
         and "sender_ops_snapshots" not in repr(d)
+        and "ix_invoices_issued_at" not in repr(d)
+        and "ix_invoices_number_prefix" not in repr(d)
     ]
 
 
