@@ -43,25 +43,40 @@ select c.client_id, c.status, c.scopes, c.auth_generation, (select count(*) from
 ```
 Identitete të pavlefshme legacy: pjesë e dry-run-it (`invalid_legacy_identity`), jo e SQL-it.
 
-## 2. Boshllëk i gjetur në deployment (kërkon ndryshim konfigurimi — NUK u aplikua)
-`docker-compose.prod.yml` **nuk ka shërbime** për rolet `sender_control_plane` dhe `sender_request_reporter` (ka vetëm cp/money/billing/pricing). Pa to, projeksioni nuk sinkronizohet dhe kërkesat nuk dërgohen. Propozim (profile opsionale, si të tjerët; një aktiv për DB nga kyçi advisory):
-```yaml
-  sender-sync:
-    <<: *app
-    profiles: ["sender"]
-    command: python -m app.worker --role sender_control_plane
-    environment: { SMS_ENV: production, SMS_DATABASE_URL: "postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms", SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key }
-    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
-    healthcheck: { test: ["CMD","python","-m","scripts.worker_health","180"], interval: 30s, start_period: 30s }
-  sender-report:
-    <<: *app
-    profiles: ["sender"]
-    command: python -m app.worker --role sender_request_reporter
-    environment: { SMS_ENV: production, SMS_DATABASE_URL: "postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms", SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key }
-    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
-    healthcheck: { test: ["CMD","python","-m","scripts.worker_health","180"], interval: 30s, start_period: 30s }
+## 2. Wiring i punonjësve sender në `docker-compose.prod.yml` (M10-PROD-1; vetëm repo — asgjë në prodhim)
+Shtuar dy shërbime, të dyja me `profiles: ["sender"]` (s'nisin me `up -d` të zakonshëm), të njëjtat konventa si `cp-sync`/`money-sync`/`pricing-sync` (anchor `*app`: i njëjti imazh, `env_file: .env`, `read_only`, `cap_drop: ALL`, `no-new-privileges`, `restart: unless-stopped`, `depends_on: db + migrate`):
+| Shërbimi | Komanda | Roli | Aktivizohet nga | Healthcheck |
+|---|---|---|---|---|
+| `sender-sync` | `python -m app.worker --role sender_control_plane` | konsumator `cp.sender.v1` | `SMS_SENDER_SYNC_ENABLED=true` (përndryshe boshe) | `scripts.worker_health 180` (heartbeat) |
+| `sender-report` | `python -m app.worker --role sender_request_reporter` | outbox S3 → Central | `SMS_SENDER_REQUEST_REPORTING=true` (përndryshe boshe) | `scripts.worker_health 180` |
+- Pa port të publikuar, pa `privileged`, pa `container_name`; vetëm mount i çelësit Ed25519 `./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro` (si rolet e tjera). Asnjë kredencial në compose; `SMS_CP_BASE_URL`/`SMS_CP_CLIENT_ID`/`SMS_CP_KEY_ID` vijnë nga `.env`.
+- Nisja NUK varet nga Central (vetëm `db` + `migrate`): kur Central s'përgjigjet, sync-u ruan projeksionin (fail-static) dhe reporter-i riprovon me backoff.
+- **Kopje (replicas):** mos e vendos `scale > 1`. Të dyja përdorin kyç advisory (`PollerLock`) — një aktiv për DB, kopjet e tjera presin; reporter-i gjithashtu claim `FOR UPDATE SKIP LOCKED` + `operation_id` idempotent te Central, prandaj edhe një kopje e dytë aksidentale nuk prodhon dërgim të dyfishtë.
+- Variablat M10 janë dokumentuar në `.env.example` (emra të saktë nga `Settings`; parazgjedhje të sigurta: `SMS_SENDER_AUTHORITY=local`, `SMS_SENDER_SYNC_ENABLED=false`, `SMS_SENDER_REQUEST_REPORTING=false`, `SMS_SENDER_DISPATCH_RECHECK=true`). Shënim: emrat reale kanë prefiksin `SMS_` (p.sh. `SMS_SENDER_SYNC_ENABLED`, jo `SENDER_SYNC_ENABLED`).
+- Siguria: `docker compose … config` RENDER-on përmbajtjen e `.env` (përfshirë sekretet) — mos e ngjit daljen askund; përdor `config --services` ose filtro.
+- Validimi i kryer në sandbox: YAML/interpolim (`config` pa dhe me `--profile sender`), komanda → rol i vërtetë (smoke), `tests/test_compose_prod.py`.
+
+### Komandat që operatori do t'i ekzekutojë më vonë (NUK janë ekzekutuar)
+```bash
+# 1. validim (pa e shfaqur daljen e plotë: përmban sekrete nga .env)
+docker compose -f docker-compose.prod.yml --env-file .env config --services                         # pa sender
+docker compose -f docker-compose.prod.yml --env-file .env --profile sender config --services       # me sender-sync sender-report
+# 2. nis workerat sender ndërsa autoriteti mbetet local (SMS_SENDER_AUTHORITY=local në .env)
+docker compose -f docker-compose.prod.yml --env-file .env --profile sender up -d sender-sync sender-report
+# 3. logje / gjendje
+docker compose -f docker-compose.prod.yml --profile sender ps sender-sync sender-report
+docker compose -f docker-compose.prod.yml --profile sender logs --tail=100 sender-sync sender-report
+# 4. gatishmëria (vetëm-lexim)
+docker compose -f docker-compose.prod.yml exec api python -m scripts.sender_sync_readiness --json
+docker compose -f docker-compose.prod.yml exec api python -m scripts.sender_request_readiness --json
+docker compose -f docker-compose.prod.yml exec api python -m scripts.sender_policy_readiness --json --target central
+# 5. ndalo workerat sender
+docker compose -f docker-compose.prod.yml --profile sender stop sender-sync sender-report
+# 6. rikthim i compose-it (heq shërbimet; asnjë ndryshim te DB/autoriteti)
+docker compose -f docker-compose.prod.yml --profile sender rm -sf sender-sync sender-report
 ```
-Kredenciali Ed25519 i klientit duhet të ketë **të dy** skopet `sender:read` dhe `sender:report` dhe enterprise-et e autorizuara (`apps.central.tools.create_service_credential --scope sender:read --scope sender:report …`).
+### Rendi operacional i ardhshëm (mos e ndrysho)
+1. deploy kod/compose (autoriteti mbetet `local`) → 2. krijo kredencialin Ed25519 me skopet `sender:read` + `sender:report` dhe autorizim për enterprise-et (`apps.central.tools.create_service_credential`) → 3. vendos `SMS_CP_BASE_URL`/`CLIENT_ID`/`KEY_ID` + çelësin te `./secrets/cp_private_key.pem` → 4. `SMS_SENDER_SYNC_ENABLED=true` → 5. `SMS_SENDER_REQUEST_REPORTING=true` → 6. nis `--profile sender` → 7. verifiko shëndetin S2/S3 (readiness më sipër) → 8. bootstrap dry-run → 9. vetëm më pas shqyrto shadow. **Workerat që punojnë NUK janë arsye për shadow.**
 
 ## 3. Plani i shadow (NUK ekzekutohet pa miratim)
 1. Konfigurim (`.env`): `SMS_SENDER_SYNC_ENABLED=true`, `SMS_SENDER_REQUEST_REPORTING=true`, `SMS_SENDER_AUTHORITY=local` (ende), `SMS_CP_BASE_URL=https://…`. Nis `sender-sync` dhe `sender-report` (`docker compose --profile sender up -d sender-sync sender-report`). Prit snapshot-in; `scripts.sender_sync_readiness` PASS.

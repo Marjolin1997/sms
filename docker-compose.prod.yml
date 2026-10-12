@@ -144,6 +144,43 @@ services:
       interval: 30s
       start_period: 30s
 
+  # M10 (opsional, `docker compose --profile sender up -d sender-sync sender-report`): VETËM kur nisen shprehimisht; asnjë nga të dyja s'nis me `up -d` të zakonshëm.
+  # Autoriteti i sender-ave NUK ndryshon këtu (SMS_SENDER_AUTHORITY mbetet `local` derisa të vendoset shprehimisht). Çelësi Ed25519 vetëm si mount sekret (read-only);
+  # kredenciali duhet të ketë skopet `sender:read` (sender-sync) dhe `sender:report` (sender-report) + autorizim për enterprise-et. Pa port të publikuar.
+  # Askush nuk varet nga Central në nisje: kur Central s'përgjigjet punonjësi riprovon/ruan projeksionin ekzistues (fail-static). Shih docs/M10_PROD_OPERATIONS.md.
+  #
+  # sender-sync: konsumatori i `cp.sender.v1` (projeksioni lokal). Boshe kur SMS_SENDER_SYNC_ENABLED=false. NJË aktiv për DB (kyç advisory) — mos e shkallëzo >1 pa nevojë;
+  # kopjet shtesë janë të sigurta (qëndrojnë në pritje), por s'shtojnë kapacitet.
+  sender-sync:
+    <<: *app
+    profiles: ["sender"]
+    command: python -m app.worker --role sender_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # sender-report: raportuesi i kërkesave të sender-ave drejt Central (outbox S3). Boshe kur SMS_SENDER_REQUEST_REPORTING=false. NJË aktiv për DB (kyç advisory +
+  # claim me SKIP LOCKED); kopjet shtesë janë të sigurta, s'ka dërgim të dyfishtë (operation_id idempotent te Central).
+  sender-report:
+    <<: *app
+    profiles: ["sender"]
+    command: python -m app.worker --role sender_request_reporter
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
   web:
     build:
       context: .
