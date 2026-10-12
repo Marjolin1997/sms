@@ -38,3 +38,31 @@ export const policy = (o = {}) => ({ id: uid(), country: "AL", sender_kind: "alp
   reason: "initial", content_hash: "abc123", created_by_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", created_at: "2026-01-01T00:00:00+00:00", ...o });
 export const effective = (o = {}) => ({ country: "AL", sender_kind: "alphanumeric", source: "default", allowed: true, requires_approval: true, policy_id: null, revision: null, effective_from: null, effective_to: null, ...o });
 export const pageOf = (items, o = {}) => ({ items, limit: 50, offset: 0, has_more: false, ...o });
+
+// ---- Operations (M11-D) ----
+export const NOW = "2026-03-01T10:00:00+00:00";
+export const chk = (code, status = "pass", summary = "ok", details = {}) => ({ code, status, summary, details });
+export const entChk = (code, tool) => chk(code, "unknown", "Not available to Central: this evidence lives on the Enterprise side.", { source: "enterprise", tool });
+export const opsBody = (o = {}) => ({
+  status: "unknown", generated_at: NOW, readiness_computed_at: NOW, readiness_cached: false, readiness_ttl_seconds: 30,
+  sections: [
+    { code: "central_readiness", status: "pass", checks: [chk("registry_states_valid", "pass", "12 sender(s)"), chk("approved_key_unique", "pass", "unique")] },
+    { code: "sync", status: "unknown", checks: [chk("sync_sequence_consistent", "pass", "Feed tail present in the outbox.", { last_seq: 7, floor_seq: 0 }), entChk("enterprise_sync_runtime", "scripts.sender_sync_readiness")] },
+    { code: "requests", status: "unknown", checks: [chk("request_ingest", "pass", "Sender requests from Enterprise are being received.", { total: 3 }), entChk("enterprise_request_outbox", "scripts.sender_request_readiness")] },
+    { code: "bootstrap", status: "unknown", checks: [chk("bootstrap_run", "pass", "The latest bootstrap run completed."), chk("bootstrap_unresolved", "pass", "The latest run reported no unresolved items."), entChk("bootstrap_issue_categories", "scripts.sender_bootstrap")] },
+    { code: "enterprise_evidence", status: "unknown", checks: [entChk("shadow_evidence", "scripts.sender_authority_readiness"), entChk("cutover_evidence", "scripts.sender_policy_readiness"), entChk("enterprise_alerts", "scripts.sender_alerts")] },
+  ],
+  metrics: {
+    registry: { senders_by_status: { approved: 8, pending: 4 }, senders_total: 12, policy_scopes: 2 },
+    sync: { epoch: "ab12cd34", last_seq: 7, floor_seq: 0, retained_events: 7, last_event_at: NOW, oldest_retained_at: "2026-02-28T10:00:00+00:00" },
+    requests: { total: 3, by_outcome: { created: 3 }, by_auto: { not_applicable: 3 }, last_received_at: NOW, received_24h: 2 },
+    bootstrap: { runs: { completed: 1 }, latest: { status: "completed", started_at: NOW, completed_at: NOW, tenant_count: 2, sender_count: 10, imported_count: 7, unresolved_count: 0, artifact_hash: "aaaaaaaaaaaa", report_hash: "bbbbbbbbbbbb", source_revision: "8c820ff" } },
+  },
+  alerts: [],
+  ...o,
+});
+export const withSection = (body, code, patch) => ({ ...body, sections: body.sections.map((s) => (s.code === code ? { ...s, ...patch } : s)) });
+export const allPass = () => {
+  const b = opsBody();
+  return { ...b, status: "pass", sections: b.sections.map((s) => ({ ...s, status: "pass", checks: s.checks.map((c) => ({ ...c, status: "pass", details: {} })) })) };
+};

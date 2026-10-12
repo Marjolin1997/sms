@@ -11,6 +11,12 @@ export const NAV = [
     { id: "senders", label: T("Sender Registry"), icon: "✦", detail: true, load: () => import("./pages/Senders.jsx"), desc: T("Every sender ID across all accounts, with its decision history.") },
     { id: "policies", label: T("Country Policies"), icon: "§", detail: true, load: () => import("./pages/Policies.jsx"), desc: T("Which sender kinds are allowed per country, and whether they need approval.") },
   ] },
+  { group: T("Operations"), items: [
+    { id: "ops", label: T("Sender Readiness"), icon: "✔", load: () => import("./pages/OpsOverview.jsx"), desc: T("Overall health and Central consistency checks, straight from the server.") },
+    { id: "ops-sync", label: T("Sync & Requests"), icon: "⇄", load: () => import("./pages/OpsSync.jsx"), desc: T("The sender feed to Enterprise and the requests coming back.") },
+    { id: "ops-bootstrap", label: T("Bootstrap & Cutover"), icon: "⏻", load: () => import("./pages/OpsBootstrap.jsx"), desc: T("Bootstrap runs, shadow evidence and cutover state. Read-only.") },
+    { id: "ops-alerts", label: T("Alerts"), icon: "!", load: () => import("./pages/OpsAlerts.jsx"), desc: T("Sender alerts that Central can evaluate.") },
+  ] },
 ];
 
 export const canWrite = (me) => !!me && me.role === "admin";

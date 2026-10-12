@@ -133,3 +133,24 @@ Aplikacion i veçantë (React + Vite): hyrje, rrugë, API client, build dhe port
 **URL state:** filtrat/faqja në hash (`#senders?status=pending&offset=50`), pa vlera sender; ID-të e detajit vetëm UUID.
 **Kufizime të API-së Central (të dokumentuara):** (1) nuk ka kërkim me tekst/emër sender-i dhe nuk ka emër ndërmarrjeje (vetëm UUID; filtri `enterprise_id`); (2) readiness/drift i sender-ave është vetëm CLI (`sender_central_readiness`) — "Overview" tregon vetëm numërime nga endpoint-et ekzistuese (kufizuar në 200), HTTP readiness për M11-D; (3) `GET /admin/sender-policies` nuk shënon "më e fundit" — shfaqet me `latest_only` (shënim "active") ose si listë e plotë pa shënim; (4) nuk ka numërues "sa sender do të revokohen" para ndryshimit — UI paralajmëron dhe shfaq `revoked_senders` të kthyer pas ruajtjes; (5) Central nuk është ende në `docker-compose`/nginx, ndaj shërbimi statik i `dist/` nga i njëjti origin është punë deployment-i.
 **Siguri/UX:** token në `sessionStorage` (jo URL/log/DOM), fjalëkalimi nuk ruhet; revoke dhe `allowed=false` shpjegojnë se mesazhet e dorëzuara tashmë te ofruesi nuk kthehen mbrapsht; konflikti i unicitetit global shfaq "already approved for another account" pa identitet tjetër.
+
+## 14. M11-D — Operations / Sender Readiness (Central)
+**Endpoint i vetëm (READ-ONLY):** `GET /admin/operations/sender` (`apps/central/api/admin_operations.py`, shërbimi `apps/central/services/sender_operations.py`). Admin dhe operator; 401 pa token/token të pavlefshëm/përdorues i çaktivizuar; POST/PUT/PATCH/DELETE ⇒ 405. Pa skemë të re, pa shkrim, pa rresht auditi për lexim, pa rrjet, pa thirrje nga shtigjet SMS (submit, campaigns, process_one, dispatch, para, çmime, outbox).
+
+**Kontrata:** `{status, generated_at, readiness_computed_at, readiness_cached, readiness_ttl_seconds, sections[{code,status,checks[{code,status,summary,details}]}], metrics{registry,sync,requests,bootstrap}, alerts[{code,severity,check,section,summary,observed_at}]}` me statuse `pass|warn|fail|unknown` (gjithsej/seksion: fail > warn > unknown > pass). Frontend-i vetëm shfaq; status i panjohur/mungues ⇒ `unknown`.
+
+**Hartë karte → burim → endpoint**
+| Seksioni UI | Burimi në backend |
+|---|---|
+| Central readiness (9 kontrolle) | `sender_central_readiness.checks` (i njëjti kod si CLI; mapim 1:1, test krahasimi) |
+| Sync feed | `sender_sync_sequence` (epoch, floor, last) + 2 kërkime PK në `sender_sync_outbox`; kontroll `sync_sequence_consistent` |
+| Kërkesat e pranuara | agregate mbi `sender_request_operations` (rezultat, automatik, e fundit, 24 h) |
+| Bootstrap | `sender_bootstrap_runs` (e fundit + numërim sipas statusit; hash-e të shkurtuara 12 shenja; `source_revision` vetëm nëse duket si ID rishikimi) |
+| Alarme Central | projeksion nga kontrollet `warn/fail` (readiness_fail, sync_gap, bootstrap_unresolved, bootstrap_failed); `running` nuk alarmon |
+| **Enterprise runtime** (kursori/lag, outbox i kërkesave, kategoritë e çështjeve bootstrap, shadow/drift, cutover, `sender_alerts`) | **Nuk është e dukshme nga Central** ⇒ kontrolle `unknown` me `source:"enterprise"` dhe komandën read-only (`scripts.sender_sync_readiness`, `…_request_readiness`, `…_authority_readiness`, `…_policy_readiness`, `…_alerts`, `…_bootstrap`) |
+Opsioni i zgjedhur: **A** (vetëm Central-local + shpjegim i qartë). B (endpoint Enterprise + klient Central) do të fuste varësi të re Central→Enterprise dhe kredenciale që arkitektura s'i ka sot; C (agregim i vonuar) mbetet propozim M11-E.
+
+**Cache:** vetëm kontrollet e plota të konsistencës (lexojnë gjithë regjistrin) ruhen në proces `READINESS_TTL_SECONDS=30`; pjesa tjetër lexohet live. Pa invalidim (TTL e shkurtër; `readiness_computed_at`/`readiness_cached` shfaqen). Instanca të shumta kanë cache të veçantë. Nuk ruhet asnjë gjendje autorizimi të SMS.
+**Performancë (SQLite, 2000 sender-a):** i ftohtë 178 ms (17 pyetje me auth), i ngrohtë 8–14 ms (12 pyetje me auth, të pavarura nga numri i sender-ave: test), ~3.4 KB.
+**Frontend:** grupi Operations (Sender Readiness, Sync & Requests, Bootstrap & Cutover, Alerts), rifreskim manual + polling 45 s (ndalet kur skeda është e fshehur; kërkesat e vjetra anulohen), kohë në UTC + relative, këshilla veprimi për WARN/FAIL, asnjë kontroll mutues.
+**Kufizime:** kategoritë e çështjeve bootstrap, lag-u/kursori Enterprise, backlog/retry/failed i reporter-it, shadow/drift dhe cutover nuk shfaqen sepse Enterprise nuk i publikon te Central; kërkojnë (M11-E) një rrugë të vogël Enterprise→Central për snapshot operacional ose tool të veçantë.

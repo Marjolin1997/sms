@@ -165,7 +165,7 @@ export const Stat = ({ label, value, sub, tone }) => (
 // Sistemi i vetëm semantik i statuseve: faqet NUK zgjedhin ngjyra; kalojnë statusin e serverit te <StatusBadge>.
 // Kuptimi nuk varet vetëm nga ngjyra: çdo ton ka simbol dhe teksti i statusit shfaqet gjithmonë.
 export const STATUS_TONES = {
-  delivered: "good", completed: "good", verified: "good", active: "good", succeeded: "good", ok: "good", approved: "good", paid: "good", confirmed: "good", published: "good", synchronized: "good", allowed: "good",
+  delivered: "good", completed: "good", verified: "good", active: "good", succeeded: "good", ok: "good", approved: "good", paid: "good", confirmed: "good", published: "good", synchronized: "good", allowed: "good", pass: "good", warn: "warn", fail: "bad", critical: "bad", warning: "warn",
   sent: "info", running: "info", queued: "info", scheduled: "info", preparing: "info", sending: "info", open: "info", processing: "info",
   pending: "warn", paused: "warn", suspended: "warn", unpaid: "warn", not_synchronized: "warn", stale: "warn",
   draft: "muted", cancelled: "muted", skipped: "muted", expired: "muted", void: "muted", retired: "muted", not_applicable: "muted",
