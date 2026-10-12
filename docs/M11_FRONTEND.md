@@ -111,3 +111,25 @@ Ndryshimi i vetëm i planifikuar: te Sender IDs shtohen kolonat *effective statu
 2. `GET /v1/sender-ids/{id}` nuk ka `created_at`/`reviewed_by` (vetëm lista); detaji i merr nga lista e ngarkuar së fundi, përndryshe "-". Nuk ka `updated_at` askund.
 3. Nuk ka endpoint të historikut të vendimeve lokale (`SenderDecision` ekziston në DB, jo në API); historiku Central është në `/admin/senders/{id}/history`. `AuditTimeline` përdoret në M11-C.
 4. Filtrim sipas autoritetit/sync në server nuk ekziston.
+
+## 13. M11-C — Central Sender Governance (`frontend-central/`)
+Aplikacion i veçantë (React + Vite): hyrje, rrugë, API client, build dhe port të vet (dev 5174, proxy `/auth` `/admin` → Central). Nuk importon kod Enterprise dhe nuk flet me `/v1/*`.
+
+**Vendimi i kodit të përbashkët: B (dublim i vogël, i qëndrueshëm).** `ui.jsx`, `i18n.jsx` dhe `styles.css` u kopjuan nga M11-A/B (pa TOTP/SMS/çelësin API) dhe `Modal` u shtua; `api.js`, `routes.js`, auth dhe fjalori janë të veçantë. Paketë e përbashkët do kërkonte workspace/lockfile të ri dhe do prekte build-in Enterprise; kostoja e dublimit (~350 rreshta) është më e ulët se rreziku. Rivlerësohet kur të ketë një faqe të tretë të përbashkët.
+
+**Hartë ekran → endpoint** (shembujt e kontratës janë verifikuar në `apps/central/api/admin_senders.py`):
+| Ekrani | Endpoint |
+|---|---|
+| Hyrje / profil | `POST /auth/token`, `GET /auth/me` (JWT 900 s, pa refresh) |
+| Sender Registry | `GET /admin/senders` (`status, country, sender_kind, enterprise_id, limit≤200, offset` → `{items, limit, offset, has_more}`) |
+| Detaj sender | `GET /admin/senders/{id}`, `GET /admin/senders/{id}/history`, `GET /admin/sender-policies/effective` |
+| Veprime | `POST /admin/senders/{id}/approve|reject|revoke|resubmit` (admin; `reason` ≤500 i detyrueshëm për reject/revoke; `evidence_ref` ≤128 opsional) |
+| Country Policies | `GET /admin/sender-policies` (`country, sender_kind, latest_only, limit, offset`), `GET /admin/sender-policies/{id}` |
+| Parashikim | `GET /admin/sender-policies/effective?country&sender_kind` |
+| Revizion i ri | `POST /admin/sender-policies` → `{…policy, created, revoked_senders}` |
+
+**Roli:** admin = shkrim; operator = lexim (403 `forbidden` nga serveri për shkrim). UI fsheh veprimet për operator (`canWrite`), por 403 i trajtohet pa mbyllur sesionin.
+**Pa flamuj `can_*` në Central:** veprimet e ofruara sipas statusit (pending→approve|reject, approved→revoke, rejected|revoked→resubmit) janë afordancë e UI-së mbi makinën e gjendjeve të dokumentuar; serveri është autoritet dhe 409 rifreskon detajin.
+**URL state:** filtrat/faqja në hash (`#senders?status=pending&offset=50`), pa vlera sender; ID-të e detajit vetëm UUID.
+**Kufizime të API-së Central (të dokumentuara):** (1) nuk ka kërkim me tekst/emër sender-i dhe nuk ka emër ndërmarrjeje (vetëm UUID; filtri `enterprise_id`); (2) readiness/drift i sender-ave është vetëm CLI (`sender_central_readiness`) — "Overview" tregon vetëm numërime nga endpoint-et ekzistuese (kufizuar në 200), HTTP readiness për M11-D; (3) `GET /admin/sender-policies` nuk shënon "më e fundit" — shfaqet me `latest_only` (shënim "active") ose si listë e plotë pa shënim; (4) nuk ka numërues "sa sender do të revokohen" para ndryshimit — UI paralajmëron dhe shfaq `revoked_senders` të kthyer pas ruajtjes; (5) Central nuk është ende në `docker-compose`/nginx, ndaj shërbimi statik i `dist/` nga i njëjti origin është punë deployment-i.
+**Siguri/UX:** token në `sessionStorage` (jo URL/log/DOM), fjalëkalimi nuk ruhet; revoke dhe `allowed=false` shpjegojnë se mesazhet e dorëzuara tashmë te ofruesi nuk kthehen mbrapsht; konflikti i unicitetit global shfaq "already approved for another account" pa identitet tjetër.
