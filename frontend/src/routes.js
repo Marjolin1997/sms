@@ -17,7 +17,7 @@ export const NAV = [
     { id: "messages", label: T("Message history"), icon: "☷", perm: "messages:read", load: () => import("./pages/Messages.jsx"), desc: T("Everything you've sent and what happened to it.") },
     { id: "inbox", label: T("Inbox"), icon: "↩", perm: "inbox:read", load: () => import("./pages/Inbox.jsx"), desc: T("Replies from your recipients, and automatic answers to keywords.") },
     { id: "reports", label: T("Reports"), icon: "▤", perm: "reports:read", load: () => import("./pages/Reports.jsx"), desc: T("Usage, costs and CSV exports.") },
-    { id: "campaigns", label: T("Campaigns"), icon: "✉", perm: "campaigns:read", load: () => import("./pages/Campaigns.jsx"), desc: T("Send to a whole list on a schedule, with a budget cap.") },
+    { id: "campaigns", label: T("Campaigns"), icon: "✉", perm: "campaigns:read", detail: true, load: () => import("./pages/Campaigns.jsx"), desc: T("Send to a whole list on a schedule, with a budget cap.") },
   ] },
   { group: T("Audience"), items: [
     { id: "contacts", label: T("Contacts"), icon: "☰", perm: "contacts:read", load: () => import("./pages/Contacts.jsx"), desc: T("Your people, their lists and what they agreed to receive.") },

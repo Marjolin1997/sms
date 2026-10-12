@@ -31,5 +31,5 @@ export default {
   "Status: {status}": "Statusi: {status}", "All statuses": "Të gjitha statuset", "Refresh": "Rifresko", "No matches": "Asnjë rezultat",
   "No messages yet": "Ende s'ka mesazhe", "Try a different search or clear the filter.": "Provoni një kërkim tjetër ose hiqni filtrin.",
   "Messages you send appear here with their delivery status.": "Mesazhet që dërgoni shfaqen këtu me statusin e dorëzimit.",
-  "Load older": "Ngarko më të vjetrat", "What happened": "Çfarë ndodhi", "Close": "Mbyll",
+  "What happened": "Çfarë ndodhi", "Close": "Mbyll",
 };

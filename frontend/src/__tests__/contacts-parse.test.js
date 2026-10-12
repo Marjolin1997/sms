@@ -10,7 +10,7 @@ describe("parseContacts()", () => {
   it("accepts semicolons, tabs, quotes and 'name'/'mobile' aliases", () => {
     const r = parseContacts('mobile;name\n"0355691234567";"Besa"');
     expect(r.rows[0]).toMatchObject({ first_name: "Besa" });
-    expect(r.rows[0].phone).toMatch(/^\+/);
+    expect(r.rows[0].phone).toBe("0355691234567"); // pa normalizim: serveri vendos
   });
   it("without a header, treats an @ cell as email and the rest positionally", () => {
     const r = parseContacts("+355691234567,ana@example.com,Ana,Hoxha");

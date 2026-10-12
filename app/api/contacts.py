@@ -14,6 +14,7 @@ from app.models.contacts import Contact, ContactList, ContactStatus, ListMember
 from app.services import consent
 from app.services import contacts as svc
 from app.services.audit import audit
+from app.services.campaign_views import list_counts
 
 router = APIRouter(prefix="/v1")
 _STATUS = {"not_found": 404, "conflict": 409}
@@ -187,8 +188,11 @@ class MembersIn(BaseModel):
     contact_ids: list[int] = Field(min_length=1, max_length=svc.MAX_IMPORT)
 
 
-def _list_out(lst: ContactList) -> dict:
-    return {"id": lst.id, "name": lst.name}
+def _list_out(lst: ContactList, count: int | None = None) -> dict:
+    out = {"id": lst.id, "name": lst.name, "created_at": lst.created_at}
+    if count is not None:
+        out["member_count"] = count  # numërim i serverit (një pyetje e grupuar)
+    return out
 
 
 @router.post("/lists", status_code=201)
@@ -206,8 +210,11 @@ def get_lists(
     p: Principal = Depends(require("contacts:read")),
 ):
     owner = tenant(db, p, owner_ref)
-    rows = db.scalars(select(ContactList).where(owned(ContactList, owner)).order_by(ContactList.id))
-    return [_list_out(x) for x in rows]
+    rows = list(
+        db.scalars(select(ContactList).where(owned(ContactList, owner)).order_by(ContactList.id))
+    )
+    counts = list_counts(db, [x.id for x in rows])
+    return [_list_out(x, counts.get(x.id, 0)) for x in rows]
 
 
 @router.post("/lists/{list_id}/members")

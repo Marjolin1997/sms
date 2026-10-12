@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.tenant import tenant
@@ -11,7 +11,8 @@ from app.core.db import get_db
 from app.core.errors import DomainError
 from app.core.scope import owned
 from app.core.security import Principal, require
-from app.models.campaigns import Campaign, CampaignRecipient, RecipientStatus
+from app.models.campaigns import Campaign, CampaignRecipient, CampaignStatus, RecipientStatus
+from app.services import campaign_views as views
 from app.services import campaigns as svc
 from app.services.audit import audit
 
@@ -94,13 +95,28 @@ def create(
 
 @router.get("")
 def list_campaigns(
+    status: CampaignStatus | None = None,
+    q: str | None = None,
+    before_id: int | None = None,
+    limit: int = 200,
     owner_ref: str | None = None,
     db: Session = Depends(get_db),
     p: Principal = Depends(require("campaigns:read")),
 ):
+    """Më të rejat së pari (id DESC); filtra `status`, `q` (emër), `before_id`.
+    Çdo rresht ka numërues të serverit nga pyetje të grupuara për faqen."""
     owner = tenant(db, p, owner_ref)
-    rows = db.scalars(select(Campaign).where(owned(Campaign, owner)).order_by(Campaign.id.desc()))
-    return [_out(c) for c in rows.fetchmany(200)]
+    stmt = select(Campaign).where(owned(Campaign, owner))
+    if status:
+        stmt = stmt.where(Campaign.status == status)
+    if q:
+        esc = q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(func.lower(Campaign.name).like(f"%{esc}%", escape="\\"))
+    if before_id:
+        stmt = stmt.where(Campaign.id < before_id)
+    rows = list(db.scalars(stmt.order_by(Campaign.id.desc()).limit(max(1, min(limit, 201)))))
+    sums = views.page_summaries(db, rows)
+    return [{**_out(c), **sums.get(c.id, {})} for c in rows]
 
 
 @router.get("/{campaign_id}")
@@ -112,7 +128,13 @@ def get_campaign(
 ):
     owner = tenant(db, p, owner_ref)
     c = _run(db, lambda: svc._get(db, owner, campaign_id))
-    return {**_out(c), "stats": svc.stats(db, c)}
+    return {
+        **_out(c), "stats": svc.stats(db, c), "created_at": c.created_at, "text": c.text,
+        "subject": c.subject, "from_email": c.from_email,
+        "list_name": views.list_name(db, c.list_id),
+        "window_start_hour": c.window_start_hour, "window_end_hour": c.window_end_hour,
+        "utc_offset_minutes": c.utc_offset_minutes,
+    }  # fmt: skip
 
 
 @router.get("/{campaign_id}/estimate")
@@ -186,9 +208,18 @@ def recipients(
     )
     if status:
         q = q.where(CampaignRecipient.status == status)
-    rows = db.scalars(q.order_by(CampaignRecipient.id).limit(max(1, min(limit, 500))))
-    return [
-        {"id": r.id, "contact_id": r.contact_id, "status": r.status.value, "reason": r.reason,
-         "message_id": r.message_id}
-        for r in rows
-    ]  # fmt: skip
+    rows = list(db.scalars(q.order_by(CampaignRecipient.id).limit(max(1, min(limit, 500)))))
+    return views.recipient_rows(db, rows)
+
+
+@router.get("/{campaign_id}/activity")
+def activity(
+    campaign_id: int,
+    owner_ref: str | None = None,
+    db: Session = Depends(get_db),
+    p: Principal = Depends(require("campaigns:read")),
+):
+    """Ngjarjet e audituara të campaign-it (vetëm ato që ekzistojnë). Aktori s'ekspozohet."""
+    owner = tenant(db, p, owner_ref)
+    _run(db, lambda: svc._get(db, owner, campaign_id))
+    return views.activity(db, campaign_id)

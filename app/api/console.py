@@ -1,8 +1,9 @@
 """Endpoint-e leximit për konsolën: historik, radhë miratimi, tarifa, llogari, nisja e klientit."""
 
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.core.errors import DomainError
 from app.core.scope import owned
 from app.core.security import Principal, require, require_any
 from app.models.billing import BillingProfile, Subscription
+from app.models.campaigns import CampaignRecipient
 from app.models.contacts import Contact, ContactStatus
 from app.models.email import DomainStatus, Email, EmailDomain, EmailStatus
 from app.models.events import EndpointStatus, WebhookEndpoint
@@ -67,14 +69,45 @@ def list_messages(
     q: str | None = None,
     before_id: int | None = None,
     limit: int = 50,
+    campaign_id: int | None = None,
+    sender: str | None = Query(default=None, min_length=1, max_length=16),
+    created_from: date | None = None,
+    created_to: date | None = None,
     owner_ref: str | None = None,
     db: Session = Depends(get_db),
     p: Principal = Depends(require("messages:read")),
 ):
-    """Më të rejat së pari; `next_before_id` për faqen tjetër."""
+    """Më të rejat së pari; `next_before_id` për faqen tjetër. M11-F: `campaign_id`, `sender`,
+    `created_from`/`created_to` (ditë UTC, përfshirëse; from > to ⇒ 422)."""
     owner = tenant(db, p, owner_ref)
     lim = _page(limit)
+    if created_from and created_to and created_from > created_to:
+        raise HTTPException(
+            422, {"code": "invalid", "message": "created_from must be on or before created_to"}
+        )
     stmt = select(Message).where(owned(Message, owner))
+    if campaign_id is not None:
+        stmt = stmt.where(
+            Message.id.in_(
+                select(CampaignRecipient.message_id).where(
+                    CampaignRecipient.campaign_id == campaign_id,
+                    CampaignRecipient.message_id.is_not(None),
+                )
+            )
+        )
+    if sender:
+        stmt = stmt.where(Message.sender == sender)
+    if created_from:
+        stmt = stmt.where(
+            Message.created_at
+            >= datetime(created_from.year, created_from.month, created_from.day, tzinfo=UTC)
+        )
+    if created_to:
+        stmt = stmt.where(
+            Message.created_at
+            < datetime(created_to.year, created_to.month, created_to.day, tzinfo=UTC)
+            + timedelta(days=1)
+        )
     if status:
         stmt = stmt.where(Message.status == status)
     if q:

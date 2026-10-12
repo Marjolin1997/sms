@@ -14,5 +14,6 @@ import inbox from "./inbox.js";
 import developers from "./developers.js";
 import providers from "./providers.js";
 import senders from "./senders.js";
+import campaigns2 from "./campaigns2.js";
 
-export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports, ...inbox, ...developers, ...providers, ...senders };
+export default { ...common, ...dashboard, ...messaging, ...campaigns, ...contacts, ...setup, ...money, ...staff, ...security, ...reports, ...inbox, ...developers, ...providers, ...senders, ...campaigns2 };
