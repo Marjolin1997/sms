@@ -42,6 +42,14 @@ const FRIENDLY = {
   invalid_key: T("Check the key details and try again."),
   invalid_message: T("Check the message and try again."),
   conflict: T("This conflicts with what already exists. Refresh and try again."),
+  // Sender flow (M10): kodet e domain-it shfaqen si tekst i qartë, kurrë detaje të brendshme.
+  sender_authority_frozen: T("Sender approvals are managed centrally now, so this can't be changed here."),
+  sender_policy_denied: T("Sending with this sender ID is not allowed for that country."),
+  sender_revoked: T("This sender ID was revoked. Submit it again for review."),
+  sender_rejected: T("This sender ID was rejected. Fix it and submit again."),
+  sender_pending: T("This sender ID is still waiting for approval."),
+  not_synchronized: T("This sender ID is not synchronized yet. Try again shortly."),
+  validation_error: T("Check the highlighted details and try again."),
 };
 
 // Mesazhe të serverit (anglisht) që shfaqen shpesh: përkthehen me shabllon. Të tjerat shfaqen siç janë.
@@ -85,14 +93,49 @@ function serverMessage(msg) {
   return msg;
 }
 
+// Klasifikim i vetëm i gabimeve për UI-n (kind): faqet nuk krahasojnë statuse HTTP vetë.
+export function errorKind(status) {
+  if (status === 0) return "network";
+  if (status === 401) return "unauthenticated";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 409) return "conflict";
+  if (status === 429) return "rate_limited";
+  if (status === 400 || status === 422) return "validation";
+  if (status >= 500) return "server";
+  return "other";
+}
+
 export class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, extra = {}) {
     super(FRIENDLY[code] ? t(FRIENDLY[code]) : serverMessage(message));
     this.status = status;
     this.code = code;
     this.raw = message;
+    this.kind = errorKind(status);
+    this.friendly = !!FRIENDLY[code]; // kodi i njohur ⇒ mesazhi është i sigurt për t'u shfaqur
+    this.fields = extra.fields || {}; // gabime për fushë: { "emri": "mesazhi" } (serveri mbetet autoritet)
+    this.retryAfter = extra.retryAfter ?? null; // sekonda (429/503) kur serveri e dërgon
   }
+  get retryable() { return ["network", "server", "rate_limited"].includes(this.kind); }
 }
+
+// Fushat e validimit FastAPI/Pydantic: detail = [{loc:["body","emri"], msg}] → { emri: msg }.
+function fieldErrors(detail) {
+  if (!Array.isArray(detail)) return {};
+  const out = {};
+  for (const x of detail) {
+    const key = (x.loc || []).slice(1).join(".");
+    if (key && !out[key]) out[key] = x.msg;
+  }
+  return out;
+}
+
+// Sesioni skadoi (401 gjatë një sesioni aktiv): App regjistron një callback që e çon përdoruesin te hyrja.
+let onSessionExpired = null;
+export const setSessionExpiredHandler = (fn) => (onSessionExpired = fn);
+
+export const REQUEST_TIMEOUT_MS = 30000;
 
 let owner = ""; // llogaria që shohin/administrojnë stafi; klienti e ka të fiksuar
 export const setOwner = (o) => (owner = o || "");
@@ -102,21 +145,31 @@ export const currentOwner = () => owner;
 let totpPrompt = null;
 export const setTotpPrompt = (fn) => (totpPrompt = fn);
 
-async function request(method, path, { params = {}, body, headers = {}, attempt = 0 } = {}) {
+async function request(method, path, { params = {}, body, headers = {}, attempt = 0, signal, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries({ ...(owner ? { owner_ref: owner } : {}), ...params }))
     if (v !== undefined && v !== null && v !== "") qs.set(k, v);
   const url = qs.toString() ? `${path}?${qs}` : path;
   const payload = body && owner && !Array.isArray(body) ? { owner_ref: owner, ...body } : body;
+  const ctl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs);
+  const onAbort = () => ctl.abort();
+  if (signal) { if (signal.aborted) ctl.abort(); else signal.addEventListener("abort", onAbort, { once: true }); }
   let res;
   try {
     res = await fetch(url, {
       method,
       headers: { Authorization: `Bearer ${getKey()}`, ...(payload ? { "Content-Type": "application/json" } : {}), ...headers },
       body: payload ? JSON.stringify(payload) : undefined,
+      signal: ctl.signal,
     });
-  } catch {
-    throw new ApiError(0, "network", t("Can't reach the server. Check your connection and try again."));
+  } catch (e) {
+    if (!timedOut && signal?.aborted) throw e; // anuluar nga thirrësi: jo gabim për përdoruesin
+    throw new ApiError(0, timedOut ? "timeout" : "network", timedOut ? t("The server took too long to answer. Try again.") : t("Can't reach the server. Check your connection and try again."));
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
   }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
@@ -124,11 +177,14 @@ async function request(method, path, { params = {}, body, headers = {}, attempt 
     const d = data && data.detail;
     const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join("; ") : t("Request failed (HTTP {status})", { status: res.status });
     const code = d && d.code;
+    const ra = Number(res.headers?.get?.("Retry-After"));
     if ((code === "totp_required" || code === "totp_invalid") && totpPrompt && attempt < 3) {
       const otp = await totpPrompt(code === "totp_invalid");
       if (otp) return request(method, path, { params, body, headers: { ...headers, "X-TOTP": otp }, attempt: attempt + 1 });
     }
-    throw new ApiError(res.status, code, msg);
+    const err = new ApiError(res.status, code, msg, { fields: fieldErrors(d), retryAfter: Number.isFinite(ra) && ra > 0 ? ra : null });
+    if (res.status === 401 && onSessionExpired && getKey()) onSessionExpired(err); // 403 NUK e mbyll sesionin: s'ka leje
+    throw err;
   }
   return data;
 }
@@ -152,9 +208,18 @@ async function download(path, params = {}, filename = "download") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export function normalizePage(data, limit = 50, offset = 0) {
+  if (Array.isArray(data)) return { items: data, hasMore: data.length >= limit && limit > 0, limit, offset };
+  const items = (data && data.items) || [];
+  return { items, hasMore: !!(data && (data.has_more ?? data.next_before_id != null)), limit: data?.limit ?? limit, offset: data?.offset ?? offset };
+}
+
 export const api = {
   download,
-  get: (p, params) => request("GET", p, { params }),
+  get: (p, params, opts = {}) => request("GET", p, { params, ...opts }), // opts: { signal, timeoutMs }
+  // Lista me faqosje: kthen gjithmonë { items, hasMore, limit, offset } (kontratë Central `has_more` ose varg Enterprise).
+  page: async (p, { limit = 50, offset = 0, ...filters } = {}, opts = {}) =>
+    normalizePage(await request("GET", p, { params: { limit, offset, ...filters }, ...opts }), limit, offset),
   post: (p, body, opts = {}) => request("POST", p, { body, ...opts }),
   put: (p, body) => request("PUT", p, { body }),
   patch: (p, body) => request("PATCH", p, { body }),

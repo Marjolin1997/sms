@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { locale, t } from "./i18n.jsx";
+import { Component, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { T, locale, t } from "./i18n.jsx";
 import { setTotpPrompt } from "./api.js";
 
 /* ---------- Njoftime (toast) dhe dialog konfirmimi ---------- */
@@ -48,7 +48,15 @@ function Dialog({ dialog, close }) {
   useEffect(() => {
     const prev = document.activeElement;
     ref.current?.querySelector("[data-autofocus]")?.focus();
-    const onKey = (e) => e.key === "Escape" && close(false);
+    const onKey = (e) => {
+      if (e.key === "Escape") return close(false);
+      if (e.key !== "Tab") return;
+      const f = [...(ref.current?.querySelectorAll("button:not([disabled]), input, select, textarea, [href]") || [])];
+      if (!f.length) return;
+      const [first, last] = [f[0], f[f.length - 1]];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     addEventListener("keydown", onKey);
     return () => { removeEventListener("keydown", onKey); prev?.focus?.(); };
   }, []); // eslint-disable-line
@@ -73,24 +81,30 @@ function Dialog({ dialog, close }) {
 }
 
 /* ---------- Ngarkim i të dhënave ---------- */
+// `fn(signal)`: kalo `signal` te api.get(..., { signal }) që kërkesa e vjetër të anulohet kur ndryshon filtri
+// ose del faqja. Përgjigjet e vjetra nuk mbishkruajnë të reja. `stale` = ka të dhëna të vjetra + gabim të fundit.
 export function useLoad(fn, deps = [], refreshMs = 0) {
   const [state, set] = useState({ data: null, error: null, loading: true });
+  const seq = useRef(0);
+  const ctl = useRef(null);
   const load = useCallback(async () => {
+    const me = ++seq.current;
+    ctl.current?.abort();
+    const c = (ctl.current = new AbortController());
     try {
-      const data = await fn();
-      set({ data, error: null, loading: false });
+      const data = await fn(c.signal);
+      if (me === seq.current) set({ data, error: null, loading: false });
     } catch (e) {
-      set((s) => ({ data: s.data, error: e, loading: false }));
+      if (me === seq.current && !c.signal.aborted) set((s) => ({ data: s.data, error: e, loading: false }));
     }
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     set((s) => ({ ...s, loading: s.data === null }));
     load();
-    if (!refreshMs) return;
-    const timer = setInterval(() => !document.hidden && load(), refreshMs);
-    return () => clearInterval(timer);
+    const timer = refreshMs ? setInterval(() => !document.hidden && load(), refreshMs) : null;
+    return () => { if (timer) clearInterval(timer); seq.current++; ctl.current?.abort(); };
   }, [load, refreshMs]);
-  return { ...state, reload: load };
+  return { ...state, stale: !!(state.error && state.data !== null), reload: load };
 }
 
 // Ekzekuton një veprim: "duke punuar", toast suksesi, gabim i lexueshëm pranë formularit.
@@ -101,7 +115,7 @@ export function useAction() {
   const run = async (fn, okMsg) => {
     setBusy(true); setError(null);
     try { const r = await fn(); if (okMsg) toast(okMsg); return r === undefined ? true : r; }
-    catch (e) { setError(e); if (e.status === 0 || e.status >= 500) toast(e.message, "bad"); return undefined; }
+    catch (e) { setError(e); if (e.status === 0 || e.status >= 500) toast(displayMessage(e), "bad"); return undefined; }
     finally { setBusy(false); }
   };
   return { busy, error, ok: "", run, clear: () => setError(null) };
@@ -128,16 +142,24 @@ export const Stat = ({ label, value, sub, tone }) => (
   </div>
 );
 
-const TONES = {
-  delivered: "good", completed: "good", verified: "good", active: "good", succeeded: "good", ok: "good", approved: "good", paid: "good", confirmed: "good", published: "good",
-  sent: "info", running: "info", queued: "info", scheduled: "info", preparing: "info", sending: "info", open: "info",
-  pending: "warn", paused: "warn", draft: "muted", cancelled: "muted", skipped: "muted", expired: "muted", void: "muted", retired: "muted",
-  failed: "bad", bounced: "bad", complained: "bad", disabled: "bad", opted_out: "bad", rejected: "bad", revoked: "bad",
+// Sistemi i vetëm semantik i statuseve: faqet NUK zgjedhin ngjyra; kalojnë statusin e serverit te <StatusBadge>.
+// Kuptimi nuk varet vetëm nga ngjyra: çdo ton ka simbol dhe teksti i statusit shfaqet gjithmonë.
+export const STATUS_TONES = {
+  delivered: "good", completed: "good", verified: "good", active: "good", succeeded: "good", ok: "good", approved: "good", paid: "good", confirmed: "good", published: "good", synchronized: "good",
+  sent: "info", running: "info", queued: "info", scheduled: "info", preparing: "info", sending: "info", open: "info", processing: "info",
+  pending: "warn", paused: "warn", suspended: "warn", unpaid: "warn", not_synchronized: "warn", stale: "warn",
+  draft: "muted", cancelled: "muted", skipped: "muted", expired: "muted", void: "muted", retired: "muted", not_applicable: "muted",
+  failed: "bad", bounced: "bad", complained: "bad", disabled: "bad", opted_out: "bad", rejected: "bad", revoked: "bad", overdue: "bad", policy_denied: "bad",
 };
-export const Badge = ({ children }) => {
+const TONES = STATUS_TONES;
+export const statusTone = (status) => TONES[String(status).toLowerCase()] || "muted";
+const GLYPH = { good: "✓", info: "●", warn: "◔", bad: "✕", muted: "–" };
+export const StatusBadge = ({ children }) => {
   const key = String(children).toLowerCase();
-  return <span className={`badge ${TONES[key] || "muted"}`}>{t(key)}</span>; // statuset përkthehen këtu
+  const tone = statusTone(key);
+  return <span className={`badge ${tone}`}><i aria-hidden>{GLYPH[tone]}</i>{t(key)}</span>; // statuset përkthehen këtu
 };
+export const Badge = StatusBadge; // emri i vjetër (përdoret nga faqet ekzistuese)
 
 export const Button = ({ variant = "", busy, children, ...p }) => (
   <button {...p} disabled={p.disabled || busy} className={`btn ${variant} ${p.className || ""}`}>
@@ -162,13 +184,61 @@ export const Empty = ({ icon = "∅", title, children, action }) => (
   </div>
 );
 
+// Teksti i gabimit për përdoruesin. 5xx pa kod të njohur NUK shfaq tekstin e serverit (mund të ketë detaje të brendshme).
+export function displayMessage(error) {
+  if (!error) return "";
+  if (error.kind === "server" && !error.friendly) return t("Something went wrong on our side. Try again in a moment.");
+  return error.message || String(error);
+}
+
+const ERROR_TITLES = {
+  network: T("You seem to be offline"), unauthenticated: T("Your session has ended"), forbidden: T("You don't have access"),
+  not_found: T("We couldn't find that"), conflict: T("This changed in the meantime"), rate_limited: T("Too many requests"),
+  validation: T("Check the details"), server: T("Something went wrong"),
+};
+export const errorTitle = (error) => t(ERROR_TITLES[error?.kind] || T("Something went wrong"));
+
 export const ErrorBox = ({ error, retry }) =>
   error ? (
     <div className="alert bad" role="alert">
-      <span>{error.message || String(error)}</span>
+      <span>{displayMessage(error)}</span>
       {retry && <button className="link" onClick={retry}>{t("Try again")}</button>}
     </div>
   ) : null;
+
+// Gabim në nivel faqeje/blloku (jo brenda formularit): titull sipas llojit + mesazh + "Provo përsëri" kur ka kuptim.
+export function ErrorState({ error, retry, stale = false }) {
+  if (!error) return null;
+  const canRetry = retry && (error.retryable ?? true);
+  const wait = error.retryAfter ? t("Wait {n} s before trying again.", { n: error.retryAfter }) : "";
+  return (
+    <div className={`errorstate ${stale ? "stale" : ""}`} role="alert">
+      <div className="empty-i" aria-hidden>!</div>
+      <b>{errorTitle(error)}</b>
+      <div className="muted">{displayMessage(error)} {wait}</div>
+      {stale && <small className="muted">{t("Showing the last data we received.")}</small>}
+      {canRetry && <Button onClick={retry}>{t("Try again")}</Button>}
+    </div>
+  );
+}
+
+// Kap gabimet e renderimit (p.sh. një faqe me defekt) që UI-ja të mos bëhet e bardhë.
+export class ErrorBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidUpdate(prev) { if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false }); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="errorstate" role="alert">
+        <div className="empty-i" aria-hidden>!</div>
+        <b>{t("Something went wrong")}</b>
+        <div className="muted">{t("This page hit an unexpected problem. Reload it or go back to the overview.")}</div>
+        <div className="row"><Button onClick={() => location.reload()}>{t("Reload")}</Button><a className="btn" href="#dashboard">{t("Overview")}</a></div>
+      </div>
+    );
+  }
+}
 export const Notice = ({ error }) => <ErrorBox error={error} />;
 
 export const Skeleton = ({ rows = 3 }) => (
@@ -223,6 +293,71 @@ export function Tabs({ tabs, value, onChange }) {
         </button>
       ))}
     </div>
+  );
+}
+
+export const MetricCard = Stat;
+export const FormField = Field;
+
+export function PageHeader({ title, desc, crumbs, actions, lead }) {
+  return (
+    <header className="top">
+      {lead}
+      <div className="top-t">
+        {crumbs && crumbs.length > 1 && <Breadcrumbs items={crumbs} />}
+        <h1>{title}</h1>{desc && <p className="muted">{desc}</p>}
+      </div>
+      {actions}
+    </header>
+  );
+}
+
+export function Breadcrumbs({ items }) {
+  return (
+    <nav className="crumbs" aria-label={t("Breadcrumb")}>
+      <ol>
+        {items.map((c, i) => (
+          <li key={i} {...(i === items.length - 1 ? { "aria-current": "page" } : {})}>
+            {c.href && i < items.length - 1 ? <a href={c.href}>{c.label}</a> : c.label}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+export const FilterBar = ({ label, children }) => <div className="toolbar" role="search" aria-label={label || t("Filters")}>{children}</div>;
+export const SearchInput = ({ label, ...p }) => <input type="search" aria-label={label || t("Search")} {...p} />;
+
+// Faqosje me zhvendosje (offset) mbi { items, hasMore, limit, offset } nga api.page().
+export function Pagination({ page, onChange, busy }) {
+  if (!page || (page.offset === 0 && !page.hasMore)) return null;
+  const from = page.offset + 1;
+  const to = page.offset + (page.count ?? page.limit);
+  return (
+    <nav className="pager" aria-label={t("Pagination")}>
+      <Button disabled={busy || page.offset === 0} onClick={() => onChange(Math.max(0, page.offset - page.limit))}>{t("Previous")}</Button>
+      <span className="muted" aria-live="polite">{t("{from}–{to}", { from, to })}</span>
+      <Button disabled={busy || !page.hasMore} onClick={() => onChange(page.offset + page.limit)}>{t("Next")}</Button>
+    </nav>
+  );
+}
+
+export const DetailList = ({ children }) => <dl className="kvlist">{children}</dl>;
+export const DetailRow = ({ label, children }) => (<><dt>{label}</dt><dd>{children ?? "-"}</dd></>);
+
+// events: [{ id, at, title, actor?, detail?, status? }] (më i riu i pari ose i fundit, sipas thirrësit).
+export function AuditTimeline({ events, empty = t("No history yet.") }) {
+  if (!events || events.length === 0) return <Empty>{empty}</Empty>;
+  return (
+    <ol className="timeline">
+      {events.map((e, i) => (
+        <li key={e.id ?? i}>
+          <div className="row wrap"><b>{e.title}</b>{e.status && <StatusBadge>{e.status}</StatusBadge>}<span className="muted small"><Time value={e.at} />{e.actor ? ` · ${e.actor}` : ""}</span></div>
+          {e.detail && <div className="muted">{e.detail}</div>}
+        </li>
+      ))}
+    </ol>
   );
 }
 
