@@ -258,3 +258,18 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .check { display: inline-flex; gap: 6px; align-items: center; flex-direction: row; }
 .check input { width: auto; }
 .preview { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* M11-G: raporte */
+.daterange { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.daterange label { display: flex; align-items: center; gap: 6px; }
+.daterange input[type="date"] { width: auto; min-width: 140px; }
+.daterange .alert { flex-basis: 100%; margin: 0; }
+.bar.split { display: flex; min-width: 90px; }
+.bar.split .fill { border-radius: 0; background: var(--line); }
+.bar.split .fill.ok { background: var(--good); }
+.bar.split .fill.bad { background: var(--bad); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin: 6px 0 12px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; background: var(--line); }
+.legend i.ok { background: var(--good); } .legend i.bad { background: var(--bad); }
+.note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+@media (max-width: 600px) { .daterange input[type="date"] { min-width: 0; flex: 1; } }

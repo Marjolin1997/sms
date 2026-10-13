@@ -278,6 +278,15 @@
     "server_default": null,
     "type": "BIGINT"
    },
+   "owner_ref": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
    "role": {
     "default": null,
     "fks": [],
@@ -311,6 +320,7 @@
   ],
   "indexes": [
    "ix_sms_audit_actor:['actor']:False",
+   "ix_sms_audit_owner:['owner_ref', 'id']:False",
    "ix_sms_audit_target:['target_type', 'target_id']:False"
   ]
  },

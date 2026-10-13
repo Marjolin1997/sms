@@ -13,7 +13,7 @@ DEDUP_MINUTES = 5
 
 def _append(
     db: Session, *, actor: str, role: str, action: str, target_type: str, target_id: str,
-    detail: dict | None,
+    detail: dict | None, owner_ref: str | None = None,
 ) -> None:  # fmt: skip
     """Rruga e vetme e shkrimit të audit-it: `AuditLog` në sesionin (transaksionin) e thirrësit.
     Asnjë commit: rreshti del ose zhduket bashkë me ndryshimin e biznesit."""
@@ -21,6 +21,7 @@ def _append(
         AuditLog(
             actor=actor, role=role, action=action, target_type=target_type, target_id=target_id,
             detail=json.dumps(detail, default=str, sort_keys=True) if detail else None,
+            owner_ref=owner_ref,
         )
     )  # fmt: skip
 
@@ -29,9 +30,11 @@ def audit(
     db: Session, p: Principal, action: str, target_type: str, target_id, detail: dict | None = None
 ) -> None:
     """Shkruhet në të njëjtin transaksion me ndryshimin: ose të dyja, ose asnjëra."""
+    owner = p.owner_ref or (detail or {}).get("owner")  # M11-G: skopimi i leximit të audit-it
     _append(
         db, actor=p.actor, role=p.role, action=action, target_type=target_type,
         target_id=str(target_id), detail=detail,
+        owner_ref=owner[:64] if isinstance(owner, str) and owner else None,
     )  # fmt: skip
 
 

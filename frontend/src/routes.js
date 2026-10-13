@@ -16,7 +16,8 @@ export const NAV = [
     { id: "send", label: T("Send"), icon: "➤", perm: "messages:send", load: () => import("./pages/Send.jsx"), desc: T("Send an SMS or an email. You see the price before you send.") },
     { id: "messages", label: T("Message history"), icon: "☷", perm: "messages:read", load: () => import("./pages/Messages.jsx"), desc: T("Everything you've sent and what happened to it.") },
     { id: "inbox", label: T("Inbox"), icon: "↩", perm: "inbox:read", load: () => import("./pages/Inbox.jsx"), desc: T("Replies from your recipients, and automatic answers to keywords.") },
-    { id: "reports", label: T("Reports"), icon: "▤", perm: "reports:read", load: () => import("./pages/Reports.jsx"), desc: T("Usage, costs and CSV exports.") },
+    { id: "reports", label: T("Reports"), icon: "▤", perm: "reports:read", load: () => import("./pages/Reports.jsx"), desc: T("Delivery results, campaign performance, usage and CSV exports.") },
+    { id: "activity", label: T("Activity log"), icon: "☰", perm: "reports:read", load: () => import("./pages/Activity.jsx"), desc: T("Who changed what on your account, with CSV export.") },
     { id: "campaigns", label: T("Campaigns"), icon: "✉", perm: "campaigns:read", detail: true, load: () => import("./pages/Campaigns.jsx"), desc: T("Send to a whole list on a schedule, with a budget cap.") },
   ] },
   { group: T("Audience"), items: [

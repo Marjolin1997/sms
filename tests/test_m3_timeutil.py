@@ -149,8 +149,8 @@ def test_orm_metadata_matches_the_golden_snapshot_taken_before_the_refactor():
     golden = json.loads(GOLDEN.read_text())
     assert _snapshot() == golden
     assert (
-        len(golden) == 66 and sum(len(v["columns"]) for v in golden.values()) == 722
-    )  # M10-S4: +2 tabela, +4 kolona te sms_messages, +25 kolona gjithsej; M10-S5: +2 tabela, +26 kolona; M11-E2.1: +1 kolonë (sms_invoices.issuer)
+        len(golden) == 66 and sum(len(v["columns"]) for v in golden.values()) == 723
+    )  # M10-S4: +2 tabela, +4 kolona te sms_messages, +25 kolona gjithsej; M10-S5: +2 tabela, +26 kolona; M11-E2.1: +1 kolonë (sms_invoices.issuer); M11-G: +1 kolonë (sms_audit_log.owner_ref)
 
 
 @pytest.mark.skipif(

@@ -23,6 +23,9 @@ const SERVER_MESSAGES = [
   [/^a newer policy revision already took effect at this instant; retry$/, T("Another change was saved at the same moment. Try again.")],
   [/^a concurrent policy revision was created for this country and sender kind$/, T("Another change was saved at the same moment. Try again.")],
   [/^a country\/kind that is not allowed must keep requires_approval=true/, T("A country that isn't allowed must keep “Requires approval” on.")],
+  [/^the export has more than (\d+) rows/, T("This export has more than {n} rows. Narrow the dates or the filters and try again."), ["n"]],
+  [/^the range is limited to (\d+) days$/, T("The range is limited to {n} days."), ["n"]],
+  [/^'from' must not be after 'to'$/, T("The end date must not be before the start date.")],
   [/^sender not found$/, T("Sender not found.")],
   [/^sender policy not found$/, T("Policy not found.")],
   [/^a request for this sender is already in progress$/, T("A request for this sender is already in progress.")],
@@ -140,6 +143,14 @@ export const api = {
     const res = await request("GET", p, { blob: true, ...opts });
     const blob = await res.blob();
     if (!/^application\/pdf/i.test(res.headers?.get?.("Content-Type") || "") || blob.size === 0) throw new ApiError(502, "bad_document", t("The server returned an unexpected document."));
+    const m = /filename="([A-Za-z0-9._-]{1,80})"/.exec(res.headers.get("Content-Disposition") || "");
+    saveBlob(blob, m ? m[1] : fallbackName);
+  },
+  /** CSV nga serveri → skedar. Vetëm text/csv pranohet; "export_too_large" (422) kalon si ApiError me mesazh të qartë. */
+  downloadCsv: async (p, params = {}, fallbackName = "export.csv", opts = {}) => {
+    const res = await request("GET", p, { params, blob: true, ...opts });
+    const blob = await res.blob();
+    if (!/^text\/csv/i.test(res.headers?.get?.("Content-Type") || "")) throw new ApiError(502, "bad_document", t("The server returned an unexpected document."));
     const m = /filename="([A-Za-z0-9._-]{1,80})"/.exec(res.headers.get("Content-Disposition") || "");
     saveBlob(blob, m ? m[1] : fallbackName);
   },

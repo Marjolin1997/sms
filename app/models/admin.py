@@ -66,11 +66,14 @@ class AuditLog(Base):
     target_type: Mapped[str] = mapped_column(String(32))
     target_id: Mapped[str] = mapped_column(String(64))
     detail: Mapped[str | None] = mapped_column(Text)  # JSON pa sekrete
+    # M11-G: tenant-i i ngjarjes (NULL = histori para 0034 ose veprim global); vetëm skopim leximi.
+    owner_ref: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
         Index("ix_sms_audit_target", "target_type", "target_id"),
         Index("ix_sms_audit_actor", "actor"),
+        Index("ix_sms_audit_owner", "owner_ref", "id"),
     )
 
 

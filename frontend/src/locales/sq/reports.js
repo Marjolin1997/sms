@@ -1,5 +1,5 @@
 export default {
-  "Reports": "Raportet", "Usage, costs and CSV exports.": "Përdorimi, kostot dhe eksportet CSV.",
+  "Reports": "Raportet",
   "Last 7 days": "7 ditët e fundit", "Last 30 days": "30 ditët e fundit", "Last 90 days": "90 ditët e fundit",
   "Download started": "Shkarkimi filloi", "Usage": "Përdorimi", "What you sent and what it cost. Days are in UTC.": "Çfarë dërgoni dhe sa kushtoi. Ditët janë në UTC.",
   "Period": "Periudha", "Export SMS (CSV)": "Eksporto SMS (CSV)", "Export emails (CSV)": "Eksporto emailet (CSV)",

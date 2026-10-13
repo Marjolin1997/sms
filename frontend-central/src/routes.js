@@ -27,6 +27,12 @@ export const NAV = [
     { id: "com-recon", label: T("Reconciliation"), icon: "≈", load: () => import("./pages/ComRecon.jsx"), desc: T("Usage reports and the server's reconciliation of credit and settlement.") },
     { id: "com-ready", label: T("Financial Readiness"), icon: "✔", load: () => import("./pages/ComReadiness.jsx"), desc: T("Financial, pricing and billing readiness, computed by the server.") },
   ] },
+  { group: T("Audit"), items: [
+    { id: "audit-senders", label: T("Sender decisions"), icon: "✦", load: () => import("./pages/AuditSenders.jsx"), desc: T("Every sender approval, rejection, revocation and automatic policy decision.") },
+    { id: "audit-commercial", label: T("Commercial audit"), icon: "€", load: () => import("./pages/AuditCommercial.jsx"), desc: T("Staff actions on plans, prices, invoices, payments and credit.") },
+    { id: "audit-ops", label: T("Operations state"), icon: "♥", load: () => import("./pages/AuditOps.jsx"), desc: T("The latest Enterprise operations report. Central keeps no history.") },
+    { id: "audit-staff", label: T("Staff activity"), icon: "☰", load: () => import("./pages/AuditStaff.jsx"), desc: T("Every audited action by staff and system processes.") },
+  ] },
 ];
 
 export const canWrite = (me) => !!me && me.role === "admin";

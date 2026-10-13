@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 import apps.central.models  # noqa: F401  (regjistron tabelat në Base.metadata)
 from apps.central.api import (
     admin,
+    admin_audit,
     admin_billing,
     admin_financial,
     admin_money,
@@ -54,6 +55,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.include_router(admin_settlement.router)
     app.include_router(admin_senders.router)
     app.include_router(admin_operations.router)
+    app.include_router(admin_audit.router)
     app.include_router(admin_money.router)
     app.include_router(admin_pricing.router)
     app.include_router(admin_financial.router)
