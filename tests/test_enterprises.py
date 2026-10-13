@@ -378,7 +378,7 @@ def test_legacy_table_list_matches_the_models():
     in_models = {
         t.name
         for t in Base.metadata.sorted_tables
-        if "owner_ref" in t.columns and t.name != "sms_enterprises"
+        if "owner_ref" in t.columns and t.name not in ("sms_enterprises", "sms_audit_log")
     }
     assert set(svc.LEGACY_OWNER_TABLES) == in_models
     path = Path(__file__).resolve().parents[1] / "alembic/versions/0018_enterprises.py"

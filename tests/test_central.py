@@ -145,6 +145,9 @@ def test_central_has_only_health_routes_and_no_docs():
         "/registration/{registration_id}/verification/resend", "/admin/registration-ops",
             "/internal/pricing/state", "/internal/pricing/snapshot",
         # M9-f: API admin financiare (admin = shkrim, operator = lexim; pa DELETE)
+        # M11-G: audit vetëm-lexim
+        "/admin/audit", "/admin/audit/facets", "/admin/audit.csv",
+        "/admin/audit/sender-decisions", "/admin/audit/sender-decisions.csv",
         "/admin/financial/alerts",
         "/admin/financial/overview",
         "/admin/financial/readiness",

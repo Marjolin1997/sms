@@ -67,7 +67,9 @@ def test_flag_true_creates_shell_with_exact_uuid_deterministic_owner_ref_and_map
 def test_autocreate_creates_no_plan_wallet_keys_users_or_pricing(db, auto):
     snap_new(db, uuid.uuid4())
     tenant_tables = [
-        t for t in Base.metadata.sorted_tables if "owner_ref" in t.c and t.name != "sms_enterprises"
+        t
+        for t in Base.metadata.sorted_tables
+        if "owner_ref" in t.c and t.name not in ("sms_enterprises", "sms_audit_log")
     ]
     assert tenant_tables
     for t in tenant_tables:

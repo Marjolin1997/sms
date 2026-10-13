@@ -92,7 +92,7 @@ def test_every_tenant_model_uses_the_mixin_and_table_list_matches():
     with_owner = {
         t.name
         for t in Base.metadata.sorted_tables
-        if "owner_ref" in t.columns and t.name != "sms_enterprises"
+        if "owner_ref" in t.columns and t.name not in ("sms_enterprises", "sms_audit_log")
     }
     assert mixed == with_owner == set(svc.LEGACY_OWNER_TABLES)
 
