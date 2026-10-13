@@ -11,7 +11,7 @@ Auditi u ekzekutua nga një **sandbox zhvillimi** (kontejner pa akses te mjedisi
 ```bash
 # Rev dhe pema
 git rev-parse --short HEAD; git branch --show-current; git status --short | wc -l
-# Migrimet (Enterprise pret 0032, Central pret 0029)
+# Migrimet (kokat AKTUALE: Enterprise 0034, Central 0031 — në kohën e këtij dokumenti 0032/0029; shih docs/PILOT_READINESS.md)
 alembic current ; alembic -c apps/central/alembic.ini current
 # Konfigurimi (vetëm emra/vlera jo-sekrete; asnjë çelës)
 printenv | grep -E '^SMS_(ENV|SENDER_[A-Z_]+)=' | grep -v ACK ; printenv SMS_CP_BASE_URL | sed -E 's#(https?://[^/]+).*#\1#'

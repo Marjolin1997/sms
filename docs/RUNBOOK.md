@@ -54,6 +54,8 @@ Një host me Docker Compose (`docker-compose.prod.yml`): `db` (PostgreSQL 16), `
 - Qasja ndër-tenant e stafit shfaqet në `GET /v1/admin/audit` si `cross_tenant.*`.
 
 ## 7. Çfarë NUK mbulohet ende
+- **Central (`apps/central`) nuk është i paketuar këtu:** imazhi `Dockerfile` kopjon vetëm `app/`, `packages/`, `scripts/`; `docker-compose.prod.yml` nuk ka shërbim Central dhe `.env.example` s'ka `CENTRAL_*`. Procedura e pilotit për Central është te `docs/PILOT_READINESS.md` (uvicorn + `alembic -c apps/central/alembic.ini` + build i `frontend-central`).
+- `alembic downgrade` heq tabelat e shtuara pas objektivit (me të dhënat e tyre): rikthimi i prodhimit = imazhi i vjetër + backup (seksioni 3), jo downgrade.
 - Pa gateway të vërtetë pagese (`SMS_PAYMENT_PROVIDER=disabled`; mbushjet bëhen manualisht nga Financa) dhe pa provider SMS të vërtetë të lidhur (HTTP/SMPP sipas dokumentacionit të tij).
 - Rrotullimi i `SMS_SECRETS_KEY` dhe `SMS_PII_HMAC_KEY` nuk mbështetet (kërkon rienkriptim/rihash). Ruajini me kujdes.
 - Auditim i jashtëm sigurie dhe pentest para se të shiten klientëve.

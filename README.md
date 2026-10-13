@@ -28,6 +28,9 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 | 11 Event log + webhooks për klientët (SSRF, retry, nënshkrim), çelësa API vetë-shërbyes, pasqyrë përdorimi (API; pa UI) | ✅ |
 | 12 Billing: plane, abonime, fatura të pandryshueshme me TVSH, pagesë nga wallet, pagesa online (adapter + webhook) | ✅ |
 
+## Gatishmëria për pilot (M11-H)
+`docs/PILOT_READINESS.md` — kushtet, shërbimet, smoke test-i, kontrollet e izolimit/sender-it/faturimit, bllokuesit e jashtëm dhe lista go/no-go. Stack-u i plotë i validimit (PostgreSQL + 2 uvicorn + punonjës + 2 Vite, vetëm FakeProvider): `e2e/pilot/stack.sh`. **Kodi i gatshëm për pilot ≠ prodhim i gatshëm operacionalisht.**
+
 ## Siguria e prodhimit (Faza 13)
 - **Kufizim provash të dështuara:** pas `SMS_AUTH_MAX_FAILURES` (20) autentikimeve të dështuara brenda `SMS_AUTH_FAIL_WINDOW_S` (600 s) nga e njëjta IP, kërkesat me kredenciale kthejnë `429 too_many_attempts` (`Retry-After`). Regjistri është në PostgreSQL (`sms_auth_failures`, pa sekrete), pra funksionon për shumë procese.
 - **IP e klientit pas proxy-t:** vendosni `SMS_TRUSTED_PROXY_HOPS=N` (p.sh. 1 pas Nginx) që të besohet elementi N-nga-fundi i `X-Forwarded-For`. Me 0 (parazgjedhje) ky header injorohet, kështu nuk mund të falsifikohet.
@@ -45,7 +48,7 @@ Platformë SMS ku **saktësia e parave dhe e statuseve** ka përparësi mbi numr
 
 ## Raporte dhe njoftime (Faza 15)
 - **Përdorimi:** `GET /v1/reports/usage?from=YYYY-MM-DD&to=YYYY-MM-DD` (parazgjedhje 30 ditët e fundit, maksimumi 366): numërim ditor (UTC) për SMS (dërguar/dorëzuar/dështuar, pjesë, kosto e dorëzuarave) dhe email (dorëzuar/kthyer/dështuar), me ditët pa aktivitet si zero dhe totalet.
-- **Eksport CSV:** `GET /v1/reports/messages.csv` dhe `/v1/reports/emails.csv` (deri në 100 000 rreshta, transmetohet, UTF-8 me BOM që Excel të hapë ë/ç). Qelizat që fillojnë me `= + - @` neutralizohen kundër formula-injection; çdo eksport regjistrohet në audit (`report.export`). Të dy janë të kufizuar te llogaria e thirrësit.
+- **Eksport CSV:** `GET /v1/reports/messages.csv`, `emails.csv`, `campaigns.csv`, `usage.csv`, `audit.csv` dhe `/v1/reports/campaigns/{id}/recipients.csv` (transmetohen, UTF-8 me BOM që Excel të hapë ë/ç). **Mbi 100 000 rreshta (campaigns: 20 000) kthehet `422 export_too_large` para trupit** — kërkohen filtra/data më të ngushta; nuk ka prerje të heshtur. Qelizat që fillojnë me `= + - @ TAB CR` neutralizohen kundër formula-injection (numrat/telefonat `+355…` mbeten). Çdo eksport regjistrohet në audit (`report.export`) dhe është i kufizuar te llogaria e thirrësit. Raportet e reja (M11-G): `overview`, `campaigns`, `failures`, `audit` — shih `docs/M11_G_REPORTS_AUDIT.md`.
 - **Bilanc i ulët:** `PUT /v1/wallets/{id}/alert {"threshold": "5"}` (null = çaktivizo). Kur balanca e disponueshme bie nën prag del një event `wallet.low_balance` (një herë për çdo rënie; rifutet kur balanca ngrihet mbi prag) që shkon te webhook-et (`wallet.*` ose `*`).
 - **Konsola:** faqja “Raportet” (përdorim, sipas ditës, butonat CSV) dhe karta “Njoftim për bilanc të ulët” te Portofoli. Leje të reja: `reports:read` (klient, financë, mbështetje), `wallet:alert` (klient, financë).
 
