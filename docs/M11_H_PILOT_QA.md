@@ -31,6 +31,11 @@ e2e/pilot/stack.sh down
 | Operacionet | 18 kontrolle: pa snapshot→unknown, fresh, stale, expired, drift kritik, bootstrap i pazgjidhur, Central i ndalur |
 | Migrime | 24 kontrolle: kokat 0034/0031, `compare_metadata=0`, down/up me të dhëna, instalim i pastër base→head |
 
+## Regresioni përfundimtar (rishikimi c4dbb94; kodi i aplikacionit i pandryshuar që nga 229347d)
+- PostgreSQL 16.13 / psycopg, 4 shard paralele mbi gjithë `tests/`: 4182 kaluan, 7 dështime (6 teste) = **pin-e të vjetruara në teste** (`sender_ops_snapshots`, `sender/ops_v1.py`, rrugët `/admin/audit*`, `sms_audit_log.owner_ref` nga 0034); dështonin edhe në 229347d. U korrigjuan (vetëm `tests/`, c4dbb94) dhe 6 skedarët u ri-ekzekutuan në PG: 200 kaluan, 0 dështime.
+- Vitest: Enterprise 281, Central 232; build dhe `i18n:check` në rregull; ruff i pastër.
+- Suitat E2E mbi stack-un real (PG + uvicorn + Vite) të ri-ekzekutuara në rishikimin final: flow_central 35, iso_matrix 113, rbac_auth 22, ui_pilot 152, csv_pdf_security 55, ops_scenarios 18, migrations_check 24 — të gjitha kaluan. Mesazhet në DB: 60, të gjitha `provider=fake`; 0 email.
+
 ## Performanca (PostgreSQL, uvicorn real, të dhëna sintetike)
 Audit në shkallë, mediana e 5 matjeve:
 
