@@ -1,7 +1,7 @@
 # Imazh i vetëm për API dhe workers Enterprise (komanda ndryshon në compose) + një target `central` për Central.
 # Frontend-et ndërtohen veçmas (deploy/web.Dockerfile, deploy/web-central.Dockerfile) dhe shërbehen nga nginx.
 # Stage-i i FUNDIT është Enterprise: `docker build .` / `build: .` mbetet i pandryshuar; Central ndërtohet me `--target central`.
-FROM python:3.12-slim AS base
+FROM python:3.14-slim AS base
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /srv
 COPY requirements.txt .
