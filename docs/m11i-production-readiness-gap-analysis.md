@@ -3,21 +3,58 @@
 **Revision i bazës:** `6020026`. **Faza:** M11-I Faza 2 (vetëm dokumentim; asnjë ndryshim kodi, konfigurimi apo infrastrukture).
 **Verdikti: BLOCKED.** Kodi është pilot-ready (M11-H: PASS WITH ACCEPTED DEBT); sistemi nuk është gati operativisht për prodhim.
 
+**Përditësim M11-I/F-01 (paketimi i Central):** GAP-01, GAP-02, GAP-03, GAP-14, GAP-15 dhe pjesa e paketimit e GAP-16/17 janë **IMPLEMENTED / LOCALLY VERIFIED; CI VERIFICATION PENDING** (ndryshimet nuk janë commit-uar/push-uar; CI s'ka ekzekutuar). Asnjë bllokues i jashtëm nuk është mbyllur. Shih §0b.
+
 ## 0. Si lexohet ky dokument
 
 - Klasifikimet: **VERIFIED** (provuar në repo ose në validimet M11-H), **PARTIALLY VERIFIED**, **NOT VERIFIED**, **EXTERNAL EVIDENCE REQUIRED** (kërkon infrastrukturë, llogari ose njerëz jashtë repo-së).
 - Asnjë fakt prodhimi nuk është shpikur. Pragjet, kohët dhe pronarët e shënuar **PROPOSED** ose **NUK ËSHTË CAKTUAR** janë propozime/zbrazëti, jo fakte.
 - Veprimet e ardhshme teknike (F-xx) janë **të papërfshira** në M11-I; kërkojnë miratim të shprehur në një fazë të mëvonshme.
 
+## 0b. Përditësim M11-I/F-01 — çfarë u zbatua dhe si u verifikua
+
+Zbatuar (vetëm paketim, pa ndryshim të semantikës së biznesit): stage `central` te `Dockerfile` (Enterprise mbetet stage-i i fundit), `deploy/web-central.Dockerfile` + `deploy/nginx.central.conf`, `.env.central.example`, shërbimet `central-migrate` / `central-api` / `central-web` (profili opt-in `central`) dhe profili `central-jobs` te `docker-compose.prod.yml` (nisja e zakonshme mbetet vetëm-Enterprise), hapa CI, mbrojtja e nisjes (prodhimi refuzon SQLite/jo-PostgreSQL) dhe mbrojtja e migrimit (Central refuzon një DB Enterprise), teste statike dhe docs.
+
+| Provë | Rezultati | Klasifikim |
+|---|---|---|
+| Ndërtim i pastër i 4 imazheve (`central`, Enterprise, web Enterprise, web Central) | 4/4 `exit=0` | VERIFIED LOKALISHT (daemon Docker lokal; shih shënimin e CA më poshtë) |
+| Imazhi Central: user 10001, pa `app/`, `scripts/`, `.env*`, `*.db`, `*.pem`, pa frontend; Enterprise pa `apps/` | Kontrolluar brenda imazheve | VERIFIED LOKALISHT |
+| `nginx -t` për të dy nginx-et në imazhet e tyre | të dyja `successful` | VERIFIED LOKALISHT |
+| `docker compose config` / `create` (amendment F-01) | **Pa profile = vetëm Enterprise** (`api db migrate web webhook-worker worker`), pa kërkuar `.env.central` (provuar me `config` dhe `create`, me dhe pa `.env.central` pranë); `--profile central` shton `central-migrate/api/web` dhe kërkon `.env.central` (dështim i qartë pa të); `--profile central-jobs` shton vetëm jobet; `central` nuk nis jobet; `up -d central-web` nis vetëm Central | VERIFIED LOKALISHT |
+| Stack real me compose (PG 16 në kontejner, `central-migrate` → `central-api` → `central-web`) | migrim te `0031`; `central-api` healthy (`/readyz`); vetëm `127.0.0.1:8081` publikohet; `central-api:8001` i paarritshëm nga host-i | VERIFIED LOKALISHT |
+| Rrugëzimi përmes nginx real | `/auth`,`/admin`,`/healthz`,`/readyz` → Central; `/v1`,`/webhooks`,`/u`,`/internal`,`/registration` → 404; fallback SPA | VERIFIED LOKALISHT |
+| Hyrja në konsolën Central përmes nginx real (Chromium): admin dhe operator; fjalëkalim i gabuar mbetet te hyrja; 0 kërkesa `/v1`; 0 gabime console (CSP aktive); token vetëm në `sessionStorage` | OK | VERIFIED LOKALISHT |
+| Ndarja admin/operator (API) | operator: `/admin/ping` 403, shkrim 403; admin 200/422; pa token 401 | VERIFIED LOKALISHT |
+| `central-billing-run` kur autoriteti i faturimit është `local` | refuzon (kod 3), nuk lëshon fatura | VERIFIED LOKALISHT |
+| Nisja në prodhim refuzohet: SQLite; sekret bosh; mailer `fake` | `RuntimeError` për secilën (provuar edhe me `uvicorn`/import) | VERIFIED LOKALISHT |
+| Migrim Central bosh → `0031` në PG; kontrolli `readyz` kur skema është pas (`503 not_ready`), pastaj rikthim në `ready` | OK | VERIFIED LOKALISHT |
+| Migrimi Central kundër një DB Enterprise | refuzohet (`sms_alembic_version`); asgjë nuk krijohet | VERIFIED LOKALISHT (PG + SQLite) |
+| DB-të ndahen: tabela e versioneve Central vs Enterprise (`0031` / `0034`), 0 tabela `sms_*` në DB Central | OK | VERIFIED LOKALISHT |
+| CI (`.github/workflows/ci.yml`) | hapat shtuar, **s'kanë ekzekutuar kurrë** | NOT VERIFIED (CI PENDING) |
+| Asnjë provider real, asnjë SMS/email, asnjë sekret në log/imazh | kontrolluar (0 përputhje) | VERIFIED LOKALISHT |
+
+**Shënim mjedisi (vetëm sandbox):** `pip`/`npm` brenda `docker build` dështonin me `CERTIFICATE_VERIFY_FAILED` (proxy TLS i sandbox-it). Ndërtimet u bënë me imazhe bazë LOKALE me CA-në e sandbox-it, të dhëna përmes `--build-context`; `Dockerfile`-t e repo-së NUK u ndryshuan për këtë. Në CI/prodhim nuk nevojitet.
+
+**Çfarë NUK u mbyll (mbetet bllokues):** infrastruktura, TLS/DNS/LB (përfshirë HSTS-në dhe `TRUSTED_PROXY_HOPS` real), PostgreSQL prodhimi/PITR, backup/restore i Central në prodhim, menaxhimi i sekreteve, monitorimi, kredencialet dhe canary i provider-it, planifikimi real i `billing_run`/`send_notifications`, evidenca e cutover-it. Imazhet nuk janë vendosur askund veç sandbox-it lokal.
+
+### Gjetje të reja nga validimi F-01 (nuk u rregulluan këtu)
+| ID | Gjetja | Ashpërsia | Klasifikim |
+|---|---|---|---|
+| N-1 | **Nginx i Enterprise** (`deploy/nginx.conf`): `location /` dhe `/assets/` kanë `add_header` të tyre, prandaj **humbasin** CSP, `X-Content-Type-Options`, `X-Frame-Options`, HSTS (ato shfaqen vetëm te `/v1`, `/u`, `/webhooks`). Provuar në imazhin real `web`. Nginx i ri Central e ka rregulluar (përsërit header-at). | MEDIUM | VERIFIED LOKALISHT; shtyhet te blloku TLS/reverse-proxy (së bashku me C-3) |
+| N-2 | Log-u i hyrjes së Central (`login failed … ip=`) shfaq IP-në e proxy-t (kontejnerit nginx), jo të klientit: `CENTRAL_TRUSTED_PROXY_HOPS` përdoret vetëm te regjistrimi publik. | LOW (lidhet me M11-H MEDIUM "login-et Central vetëm në log") | VERIFIED LOKALISHT |
+| N-3 | `financial_readiness` thërret `scripts.*` të Enterprise (subproces) dhe del FAIL brenda imazhit Central. **RESOLVED (amendment F-01):** është agregator ndër-sistem, jo komandë e imazhit Central; hequr nga paketimi/inventari (compose, RUNBOOK §8) dhe dokumentuar si "jashtë imazhit" (ekzekutohet nga checkout me të dy mjediset). Inventar i dokumentuar (11 komanda) me test `--help`/pa varësi Enterprise për secilën, dhe i provuar brenda imazhit real (11/11). | ~~MEDIUM~~ RESOLVED | VERIFIED LOKALISHT |
+| N-4 | Një `.env` lokal në rrënjë ndryshon sjelljen e testeve Enterprise (lexohet nga `Settings`): kërkon pastrim para `pytest`. **E hapur.** | LOW | VERIFIED |
+| N-5 | `docker compose up -d` pa emra nisi edhe Central dhe kërkonte `.env.central`. **RESOLVED (amendment F-01):** shërbimet Central janë te profili opt-in `central` (serving) dhe `central-jobs`; nisja e zakonshme mbetet vetëm-Enterprise dhe nuk kërkon `.env.central`; aktivizimi i Central kërkon `.env.central` (kërkesa s'u dobësua). | ~~LOW~~ RESOLVED | VERIFIED LOKALISHT |
+
 ## 1. Veprimet e ardhshme që heqin bllokuesit (jo të zbatuara)
 
 | ID | Veprimi i ardhshëm | Heq |
 |---|---|---|
-| F-01 | Imazh/target Central + shërbim dhe migrim Central në compose + `CENTRAL_*` në shabllonin e mjedisit | GAP-01 |
-| F-02 | Build/imazh për `frontend-central` dhe servirje statike | GAP-02 |
-| F-03 | Rrugëzim proxy/nginx për Central (publike/private), `limit_req` për `/auth/token` | GAP-03 |
-| F-04 | Hapa CI: Vitest/build Central, E2E Central, `docker compose config`, skanim sekretesh, imazh Central | GAP-14, GAP-15 |
-| F-05 | Mbrojtje nisjeje: `SMS_DLR_SECRETS`, kredenciale provider-i; vendim për 2FA të stafit Central | GAP-17 |
+| F-01 | Imazh/target Central + shërbim dhe migrim Central në compose + `CENTRAL_*` në shabllonin e mjedisit | GAP-01 — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** |
+| F-02 | Build/imazh për `frontend-central` dhe servirje statike | GAP-02 — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** |
+| F-03 | Rrugëzim proxy/nginx për Central (publike/private), `limit_req` për `/auth/token` | GAP-03 — **IMPLEMENTED / LOCALLY VERIFIED** (rrugët publike vs private në topologjinë reale mbeten vendim/provë të jashtme) |
+| F-04 | Hapa CI: Vitest/build Central, E2E Central, `docker compose config`, skanim sekretesh, imazh Central | GAP-14, GAP-15 — **PARTIALLY IMPLEMENTED** (Vitest/build Central, imazh Central, `nginx -t`, `compose config`, kokat Central; **mbeten**: E2E Central dhe skanim sekretesh); CI PENDING |
+| F-05 | Mbrojtje nisjeje: `SMS_DLR_SECRETS`, kredenciale provider-i; vendim për 2FA të stafit Central | GAP-17 — **PARTIALLY IMPLEMENTED** (vetëm refuzimi i SQLite/jo-PG te Central; `SMS_DLR_SECRETS`/provider/2FA mbeten) |
 | F-06 | Korrigjim dokumentesh: referenca SMPP, rruga `/backup.sh`, pohimi për TLS në nginx | Kontradiktat |
 
 ## 2. Regjistri i boshllëqeve
@@ -36,6 +73,7 @@
 | Rikthim / abort | Abort nëse migrimi dështon ose `/readyz` ≠ 200 për >5 min (PROPOSED). Rikthim: ndalo shërbimin Central; Enterprise mbetet në `local` (fail-static, provuar në M11-H `ops_scenarios`). |
 | Pronari / varësia | NUK ËSHTË CAKTUAR (jashtë repo-së); varet nga miratimi i pronarit të produktit. |
 | Kriteri GO/NO-GO | GO vetëm kur imazhi ndërtohet nga checkout i pastër, kalon validimin në staging dhe mbulohet nga CI (GAP-14). |
+| Status pas F-01 | **IMPLEMENTED / LOCALLY VERIFIED; CI VERIFICATION PENDING.** Stage `central` te `Dockerfile` (Enterprise mbetet i fundit), `central-migrate` → `central-api` në compose; imazhi u ndërtua nga checkout i pastër, u nis me compose lokal mbi PG, migroi te 0031, `/readyz` healthy, user 10001, FS read-only, pa sekrete në imazh. Nuk është vendosur në prodhim. |
 
 ### GAP-02 — Paketimi i frontend-it Central
 
@@ -51,6 +89,7 @@
 | Rikthim / abort | Abort nëse login ose një faqe kyçe jep gabim console/CSP. Rikthim: hiq rrugën/vhost-in e konsolës Central; API mbetet i paarritshëm publikisht. |
 | Pronari / varësia | NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur konsola Central ngarkohet nga imazhi në staging me 0 gabime console. |
+| Status pas F-01 | **IMPLEMENTED / LOCALLY VERIFIED; CI VERIFICATION PENDING.** `deploy/web-central.Dockerfile` (npm ci + build + nginx); hyrja admin/operator provuar me Chromium përmes nginx real, 0 gabime console. 232 teste Vitest + `i18n:check` + build kaluan. |
 
 ### GAP-03 — Rrugëzimi nginx/proxy për Central
 
@@ -66,6 +105,7 @@
 | Rikthim / abort | Abort nëse një rrugë `/internal/*` kthen 200 nga rrjet i jashtëm. Rikthim: kthe konfigurimin e mëparshëm nginx dhe ngarko. |
 | Pronari / varësia | NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur matrica e rrugëve është e saktë dhe e dokumentuar me dalje reale. |
+| Status pas F-01 | **IMPLEMENTED / LOCALLY VERIFIED.** `deploy/nginx.central.conf`: vetëm `/auth`, `/admin`, `/healthz`, `/readyz` te `central-api`; `/v1`, `/webhooks`, `/u`, `/internal`, `/registration` = 404; kufizim `limit_req` (429) për `/auth`; pa HSTS dhe pa TLS (HTTP lokal). Vlera e saktë e `CENTRAL_TRUSTED_PROXY_HOPS` në topologjinë reale = GAP-08 (e hapur). |
 
 ### GAP-04 — Infrastruktura e prodhimit (hosting, rrjet, kapacitet)
 
@@ -231,6 +271,7 @@
 | Rikthim / abort | Rikthim: hiq hapin që është i paqëndrueshëm, jo testin. |
 | Pronari / varësia | Inxhinieria — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur CI mbulon Central dhe compose-in prodhimi. |
+| Status pas F-01 | **PARTIALLY IMPLEMENTED; CI PENDING.** Shtuar: Central migrations në PG (kokë 0031), Vitest/build `frontend-central`, imazh Central + smoke, build web Central, `nginx -t` i të dy nginx-eve, `compose config`. **Mbeten:** E2E Central, skanim sekretesh. Asnjë nga hapat s'ka ekzekutuar në CI. |
 
 ### GAP-15 — Validimi i compose-it të prodhimit
 
@@ -246,6 +287,7 @@
 | Rikthim / abort | Abort nëse një shërbim del unhealthy. |
 | Pronari / varësia | Inxhinieria + infrastruktura — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur staging bëhet healthy sipas kriterit. |
+| Status pas F-01 | **LOCALLY VERIFIED (compose renders + stack Central u nis); CI PENDING.** `docker compose config` kaloi; Central u nis realisht me compose lokal. Stack-u i plotë i prodhimit (Enterprise + workers + provider) NUK u nis. |
 
 ### GAP-16 — Proceset e planifikuara të Central
 
@@ -261,6 +303,7 @@
 | Rikthim / abort | Abort nëse `due_unprocessed` rritet. Rikthim: ndalo `billing_run` (M9G §rikthim). |
 | Pronari / varësia | Operacione — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur proceset janë planifikuar dhe të monitoruara. |
+| Status pas F-01 | **PACKAGED (explicit/manual), NOT SCHEDULED.** Profili `central-jobs`: `central-billing-run` (refuzon kur autoriteti ≠ central), `central-send-notifications` (një kalim), `central-tool` (parazgjedhje `sender_central_readiness`). Planifikimi, heartbeat-i dhe monitorimi mbeten EXTERNAL EVIDENCE REQUIRED. |
 
 ### GAP-17 — Mbrojtjet e nisjes që mungojnë (kod, veprim i ardhshëm)
 
@@ -276,6 +319,7 @@
 | Rikthim / abort | — |
 | Pronari / varësia | Inxhinieria + sigurinë — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | Jo bllokues vetëm nëse kontrolli kompensohet procedurialisht në cutover (checklist). |
+| Status pas F-01 | **PARTIALLY IMPLEMENTED.** Në prodhim Central refuzon SQLite/jo-PostgreSQL (nisja) dhe migrimi refuzon SQLite dhe një DB Enterprise; gate-t ekzistuese nuk u dobësuan. **Mbeten:** `SMS_DLR_SECRETS`/provider; 2FA e stafit Central. |
 
 ## 3. Kontradiktat e gjetura në dokumentacion
 
@@ -287,6 +331,8 @@
 | C-4 | Docstring-u i `app/worker.py` liston vetëm një pjesë të roleve; kodi pranon edhe `pricing_control_plane`, `billing_usage_reporter`, `money_usage_reporter` | `app/worker.py` | VERIFIED (kozmetike) |
 | C-5 | `docs/M10_PROD_OPERATIONS.md` kokat 0032/0029 në kohën e shkrimit; aktualet 0034/0031 (dokumenti e pranon) | `docs/M10_PROD_OPERATIONS.md` | VERIFIED (e shënuar) |
 | C-6 | `.env.example` këshillon përdorues PostgreSQL me të drejta minimale (jo superuser); compose lidh aplikacionin si `sms`, përdoruesi i krijuar nga `POSTGRES_USER` në imazhin zyrtar, që është superuser | `.env.example`; `docker-compose.prod.yml` | PARTIALLY VERIFIED (nga semantika e imazhit; s'është ekzekutuar) |
+| C-3b | Nginx Enterprise humb header-at e sigurisë te `/` dhe `/assets/` (N-1); C-3 (HSTS pa TLS) mbetet i hapur dhe i shtyrë te blloku TLS/reverse-proxy | `deploy/nginx.conf`; provë në imazhin real | VERIFIED LOKALISHT |
+| C-7 | `docs/RUNBOOK.md` §7 pohonte se Central s'është i paketuar; **zgjidhur nga F-01** (§7 përditësuar, §8 shtuar) | `docs/RUNBOOK.md` | VERIFIED (rregulluar) |
 
 ## 4. Tabela e bllokuesve sipas varësisë
 
@@ -299,11 +345,11 @@ Rendi është i detyrueshëm: një rresht nuk mund të mbyllet para varësive t�
 | 3 | GAP-08 Trusted proxy hops | EXTERNAL + konfigurim | 2 | Test me dy IP |
 | 4 | GAP-09 Sekretet | EXTERNAL | 1 | Inventar + skanim 0 gjetje |
 | 5 | GAP-05 PG prodhimi, backup, PITR | EXTERNAL | 1, 4 | Restore + `verify_ledger` + PITR i provuar |
-| 6 | GAP-01 Central backend | Kod (F-01, kërkon miratim) | — | Imazh + migrim 0031 + `/readyz` në staging |
-| 7 | GAP-02 Central frontend | Kod (F-02) | 6 | Build nga imazhi, 0 gabime console |
-| 8 | GAP-03 Proxy për Central | Kod/konfigurim (F-03) | 2, 6 | Matrica e rrugëve |
-| 9 | GAP-14 CI, GAP-15 compose | Kod (F-04) | 6, 7 | CI jeshile; staging healthy |
-| 10 | GAP-17 Mbrojtje nisjeje/2FA Central | Kod (F-05) | 6 | Teste refuzimi |
+| 6 | GAP-01 Central backend | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** | — | Imazh + migrim 0031 + `/readyz` në staging |
+| 7 | GAP-02 Central frontend | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** | 6 | Build nga imazhi, 0 gabime console |
+| 8 | GAP-03 Proxy për Central | Kod/konfigurim — **IMPLEMENTED / LOCALLY VERIFIED** | 2, 6 | Matrica e rrugëve |
+| 9 | GAP-14 CI, GAP-15 compose | Kod — **PARTIALLY IMPLEMENTED; CI PENDING** | 6, 7 | CI jeshile; staging healthy |
+| 10 | GAP-17 Mbrojtje nisjeje/2FA Central | Kod — **PARTIALLY IMPLEMENTED** (SQLite guard); 2FA/provider të hapura | 6 | Teste refuzimi |
 | 11 | GAP-06 Backup/restore Central | EXTERNAL | 5, 6 | Restore Central i provuar |
 | 12 | GAP-12 Monitorim/alarme | EXTERNAL | 1 | Test alarmi i kaluar |
 | 13 | GAP-16 Procese të planifikuara Central | EXTERNAL | 6, 12 | Heartbeat + `due_unprocessed=0` |
@@ -313,4 +359,4 @@ Rendi është i detyrueshëm: një rresht nuk mund të mbyllet para varësive t�
 
 ## 5. Përfundimi
 
-**BLOCKED.** 17 boshllëqe në 16 rreshta varësie; 11 rreshta kërkojnë dëshmi të jashtme, 5 kërkojnë zbatim të miratuar në kod/konfigurim. Asnjë nuk mbyllet me dokumentim. Statusi mund të kalojë në CONDITIONALLY READY vetëm kur rreshtat 1–11 janë të mbyllur me evidencë, dhe në PRODUCTION READY vetëm pas rreshtit 16.
+**BLOCKED.** 17 boshllëqe në 16 rreshta varësie; 11 rreshta kërkojnë dëshmi të jashtme (të pandryshuar nga F-01). Nga 5 rreshtat e kodit/konfigurimit (6–10), pas F-01: 3 (rreshtat 6–8) janë IMPLEMENTED / LOCALLY VERIFIED, 2 (rreshtat 9–10) PARTIALLY IMPLEMENTED; asnjë nuk është verifikuar ende në CI. Asnjë nuk mbyllet me dokumentim. Statusi mund të kalojë në CONDITIONALLY READY vetëm kur rreshtat 1–11 janë të mbyllur me evidencë, dhe në PRODUCTION READY vetëm pas rreshtit 16.

@@ -1,6 +1,6 @@
 # M11-I — Checklist i cutover-it në prodhim
 
-**Revision i bazës:** `6020026`. Checklist për operatorin; **nuk është plotësuar dhe nuk ekzekutohet në M11-I**. Statusi aktual: **BLOCKED** (çdo kuti mbetet bosh).
+**Revision i bazës:** `6020026`. Checklist për operatorin; **nuk është plotësuar dhe nuk ekzekutohet në M11-I**. Statusi aktual: **BLOCKED** (çdo kuti mbetet bosh). Seksioni CENTRAL është përditësuar pas M11-I/F-01 (paketimi: IMPLEMENTED / LOCALLY VERIFIED; CI PENDING).
 
 **Si përdoret:** secila kuti ka një kriter objektiv: *Prova* (komanda/vëzhgimi) dhe *Pritet* (rezultati i saktë). Një kuti shënohet vetëm kur dalja reale është ngjitur në regjistrin e ndryshimit. Klasifikimi tregon nëse hapi mbështetet në kod të provuar (**VERIFIED**/**PARTIALLY VERIFIED**), është i paprovuar (**NOT VERIFIED**) ose kërkon dëshmi të jashtme (**EXTERNAL EVIDENCE REQUIRED**). Komandat me **PROPOSED**/**FUTURE** nuk ekzistojnë ende ose s'janë provuar. Çdo kuti e pashënuar = NO-GO.
 
@@ -72,7 +72,7 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   Klas.: VERIFIED (CI round-trip); prodhimi EXTERNAL  
   NO-GO/abort: FAIL → NO-GO
 - [ ] **DB-06** — Restore i provuar i Central.  
-  Prova: Restore në DB të re + `python -m apps.central.tools.financial_readiness --json`  
+  Prova: Restore në DB të re + `docker compose … --profile central-jobs run --rm central-tool apps.central.tools.billing_readiness --strict` (komandë e inventarit Central; `financial_readiness` s'punon në imazhin Central — shih CE-07)  
   Pritet: pa FAIL; `central_alembic_version` = 0031  
   Klas.: NOT VERIFIED  
   NO-GO/abort: FAIL ose mungon → NO-GO
@@ -95,9 +95,9 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   Klas.: EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: mungon → NO-GO
 - [ ] **IN-02** — Compose i vlefshëm në host.  
-  Prova: `docker compose -f docker-compose.prod.yml --env-file .env config --services`  
-  Pritet: lista e pritur e shërbimeve, pa gabim  
-  Klas.: NOT VERIFIED (s'është ekzekutuar kurrë)  
+  Prova: `docker compose -f docker-compose.prod.yml --env-file .env config --services` (pa profile)  
+  Pritet: vetëm Enterprise: `api db migrate web webhook-worker worker`, pa gabim dhe **pa kërkuar `.env.central`**  
+  Klas.: VERIFIED LOKALISHT (rendering me `docker compose config`); në hostin real EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: gabim → NO-GO
 - [ ] **IN-03** — Vetëm portat e pritura të hapura.  
   Prova: Skanim nga rrjet i jashtëm (p.sh. `nmap` ose rregullat e firewall-it të eksportuara)  
@@ -144,7 +144,7 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   NO-GO/abort: 503 → ABORT
 - [ ] **AP-04** — Shërbimet healthy.  
   Prova: `docker compose -f docker-compose.prod.yml ps`  
-  Pritet: db, api, worker, webhook-worker, web = healthy  
+  Pritet: db, api, worker, webhook-worker, web = healthy; me `--profile central`: edhe `central-api` = healthy dhe `central-web` = running (`central-migrate` përfundon me kod 0 dhe nuk shfaqet në `ps`)  
   Klas.: NOT VERIFIED në prodhim  
   NO-GO/abort: unhealthy >5 min → ABORT
 - [ ] **AP-05** — Header-at e sigurisë aktive.  
@@ -193,40 +193,77 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
 
 ## 6. CENTRAL
 
-- [ ] **CE-01** — Imazhi/shërbimi Central ekziston.  
-  Prova: `docker compose … config --services` përmban shërbimin Central (FUTURE)  
-  Pritet: shërbimi është i listuar  
-  Klas.: NOT VERIFIED (nuk ekziston)  
-  NO-GO/abort: mungon → NO-GO
+Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VERIFICATION PENDING**: provuar me compose lokal mbi PG dev, jo në CI dhe jo në prodhim. Kutitë e mëposhtme kërkojnë dëshmi nga mjedisi i prodhimit.
+
+- [ ] **CE-00** — Revision-i ka CI jeshile për hapat Central (imazh `--target central`, build web Central, `nginx -t`, `compose config`, Vitest/build `frontend-central`, migrim Central në PG).  
+  Prova: statusi CI i atij commit-i  
+  Pritet: të gjitha punët `backend`, `frontend-central`, `docker` = success  
+  Klas.: NOT VERIFIED (CI nuk ka ekzekutuar mbi paketimin)  
+  NO-GO/abort: ndonjë punë e kuqe ose e munguar → NO-GO
+- [ ] **CE-01** — Central është opt-in: nisja e zakonshme mbetet vetëm-Enterprise.  
+  Prova: `docker compose -f docker-compose.prod.yml --env-file .env config --services` (pa profile) dhe `… --profile central config --services`  
+  Pritet: pa profile: `api db migrate web webhook-worker worker` (pa asnjë `central-*`, dhe pa kërkuar `.env.central`); me `--profile central`: shtohen `central-migrate`, `central-api`, `central-web` dhe **jo** `central-billing-run`, `central-send-notifications`, `central-tool` (profili `central-jobs`)  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: një `central-*` në nisjen e zakonshme, ose një job te profili `central` → NO-GO
+- [ ] **CE-01a** — Aktivizimi i Central kërkon mjedisin e vet (kërkesa s'është dobësuar).  
+  Prova: `docker compose -f docker-compose.prod.yml --env-file .env --profile central config -q` pa `.env.central`  
+  Pritet: dështon me `env file … .env.central not found`; me `.env.central` të plotësuar del pa gabim  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: kalon pa `.env.central` → NO-GO
+- [ ] **CE-01b** — DB logjike `sms_central` ekziston dhe është e ndarë nga `sms` (hap infrastrukture; RUNBOOK §8.1).  
+  Prova: `docker compose … exec db psql -U sms -d postgres -Atc "select datname from pg_database where datname in ('sms','sms_central') order by 1"`  
+  Pritet: dy rreshta, `sms` dhe `sms_central`; `CENTRAL_DATABASE_URL` përfundon me `/sms_central` dhe përdor rolin `sms_central`  
+  Klas.: EXTERNAL EVIDENCE REQUIRED (prodhimi); procedura VERIFIED LOKALISHT  
+  NO-GO/abort: `CENTRAL_DATABASE_URL` drejt DB `sms` → NO-GO
 - [ ] **CE-02** — Migrimi Central te 0031.  
-  Prova: Shërbimi i migrimit Central (FUTURE) + `Central /readyz`  
-  Pritet: `ready`  
-  Klas.: NOT VERIFIED  
-  NO-GO/abort: jo ready → NO-GO
-- [ ] **CE-03** — Konfigurim prodhimi Central i vlefshëm.  
-  Prova: Nisja me `CENTRAL_ENV=production` pa `CENTRAL_AUTH_SECRET` refuzohet; me vlerë ≥32 karaktere nis  
-  Pritet: refuzim pa sekret; nis me sekret  
-  Klas.: VERIFIED (kodi `create_app`); prodhimi EXTERNAL  
-  NO-GO/abort: nis pa sekret → NO-GO
-- [ ] **CE-04** — `/internal/*` i paarritshëm nga jashtë.  
-  Prova: `curl -s -o /dev/null -w '%{http_code}' https://<domen-central>/internal/sync/changes` nga jashtë  
-  Pritet: 403 ose 404 (jo 200)  
-  Klas.: NOT VERIFIED  
-  NO-GO/abort: 200 → NO-GO
-- [ ] **CE-05** — Konsola Central ngarkon dhe hyn.  
-  Prova: Chromium: login admin dhe një faqe audit  
-  Pritet: 0 gabime console  
-  Klas.: NOT VERIFIED  
-  NO-GO/abort: gabim → NO-GO
+  Prova: `docker compose -f docker-compose.prod.yml --env-file .env run --rm central-migrate` (kod daljeje 0) pastaj `docker compose … exec db psql -U sms -d sms_central -Atc "select version_num from central_alembic_version"`  
+  Pritet: `0031`; `central-migrate` refuzon DB Enterprise dhe SQLite në prodhim  
+  Klas.: VERIFIED LOKALISHT (PG dev); prodhimi EXTERNAL  
+  NO-GO/abort: gabim migrimi → ABORT sipas rollback runbook (jo downgrade)
+- [ ] **CE-02b** — `central-api` healthy dhe i brendshëm.  
+  Prova: `docker compose … ps central-api`; `docker compose … port central-api 8001`; `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/healthz` nga host-i  
+  Pritet: `healthy`; asnjë port i publikuar; kërkesa nga host-i dështon (kod 000)  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: `central-api` i publikuar ose unhealthy >5 min → NO-GO
+- [ ] **CE-03** — Konfigurim prodhimi Central i vlefshëm; gate-t e nisjes aktive.  
+  Prova: `.env.central` me `CENTRAL_ENV=production`; një nisje provë pa `CENTRAL_AUTH_SECRET` (ose me SQLite/`fake`) refuzohet; me sekret ≥32 karaktere dhe PG nis  
+  Pritet: `RuntimeError` për sekret bosh, SQLite dhe `fake`; nis me konfigurim të vlefshëm  
+  Klas.: VERIFIED LOKALISHT (kodi dhe provat); vlerat e prodhimit EXTERNAL  
+  NO-GO/abort: nis me sekret bosh ose SQLite → NO-GO
+- [ ] **CE-04** — Familjet e API-ve që s'janë të konsolës Central nuk ekspozohen përmes `central-web`.  
+  Prova: `for p in /v1/contacts /webhooks/dlr/x /u/x /internal/sync/changes /registration; do curl -s -o /dev/null -w "$p %{http_code}\n" http://127.0.0.1:8081$p; done` (lokalisht) dhe e njëjta nga jashtë me domenin real  
+  Pritet: `404` për secilën; `/healthz` dhe `/readyz` 200; `/admin/ping` pa token 401  
+  Klas.: VERIFIED LOKALISHT; përmes domenit real EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: çdo 200 për një rrugë të listuar → NO-GO
+- [ ] **CE-04b** — Vetëm `central-web` publikon port: `127.0.0.1:8081`.  
+  Prova: `docker ps --format '{{.Names}} {{.Ports}}'`  
+  Pritet: `central-web` → `127.0.0.1:8081->8081/tcp`; `central-api` vetëm `8001/tcp` (jo i publikuar)  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: port tjetër i publikuar → NO-GO
+- [ ] **CE-05** — Konsola Central ngarkon dhe hyn (admin dhe operator).  
+  Prova: Chromium kundër `central-web`: hyrje me admin, pastaj operator, një faqe audit; fjalëkalim i gabuar mbetet te hyrja  
+  Pritet: 0 gabime console (CSP aktive); asnjë kërkesë `/v1`; token vetëm në `sessionStorage`  
+  Klas.: VERIFIED LOKALISHT (nginx real, DB dev); prodhimi EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: gabim console ose CSP → NO-GO
+- [ ] **CE-05b** — Ndarja admin/operator.  
+  Prova: me token operatori `GET /admin/ping`, `POST /admin/products` (trup `{}`); me token admini `GET /admin/ping`  
+  Pritet: operator 403 dhe 403; admin 200  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: operator 200 në shkrim → NO-GO
+- [ ] **CE-05c** — Header-at e sigurisë në `central-web`.  
+  Prova: `curl -sI http://127.0.0.1:8081/` dhe `/assets/x.js`  
+  Pritet: `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`; **pa** `Strict-Transport-Security` (TLS jashtë; HSTS vendoset në pikën e TLS)  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: mungon CSP → NO-GO
 - [ ] **CE-06** — Proceset e planifikuara Central të instaluara dhe me heartbeat.  
-  Prova: `billing_final_readiness --json` PASS; heartbeat i `billing_run` i freskët; `periods.due_unprocessed = 0` (kur faturimi është aktiv)  
-  Pritet: PASS; 0  
-  Klas.: EXTERNAL EVIDENCE REQUIRED  
+  Prova: planifikuesi i jashtëm ekzekuton `docker compose -f docker-compose.prod.yml --env-file .env --profile central-jobs run --rm central-billing-run` (vetëm kur autoriteti i faturimit është `central`; me `local` refuzon me kod 3); `central-send-notifications` sipas nevojës; `docker compose -f docker-compose.prod.yml --env-file .env --profile central-jobs run --rm central-tool apps.central.tools.billing_readiness --json`  
+  Pritet: ekzekutime të planifikuara me kod 0; `periods.due_unprocessed = 0` kur faturimi është aktiv; `CENTRAL_BILLING_WORKER_CONFIGURED=true` vetëm pasi planifikimi ekziston  
+  Klas.: komandat VERIFIED LOKALISHT; planifikimi dhe heartbeat EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: `due_unprocessed` >0 → NO-GO
-- [ ] **CE-07** — Kredenciale shërbimi Central minimale.  
-  Prova: `python -m apps.central.tools.financial_readiness --json` → `central:financial_service_credentials`  
-  Pritet: PASS  
-  Klas.: VERIFIED (mjeti)  
+- [ ] **CE-07** — Gate-i financiar agregat (kredencialet e shërbimit + alarmet Enterprise).  
+  Prova: **jashtë kontejnerit Central**, nga një checkout i repo-së me të dy mjediset (`CENTRAL_DATABASE_URL` dhe `SMS_DATABASE_URL`, ose `--enterprise-cwd`): `python -m apps.central.tools.financial_readiness --json` (`financial_readiness` thërret `scripts.*` të Enterprise; nuk është në inventarin e imazhit Central, RUNBOOK §8)  
+  Pritet: `central:financial_service_credentials` PASS; pa FAIL  
+  Klas.: VERIFIED (mjeti, kufiri i dokumentuar); prodhimi EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: FAIL → NO-GO
 
 ## 7. PROVIDER / DLR

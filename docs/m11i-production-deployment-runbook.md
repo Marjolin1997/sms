@@ -2,7 +2,7 @@
 
 **Revision i bazës:** `6020026`. Ky dokument përshkruan një procedurë; **nuk është ekzekutuar dhe nuk ekzekutohet në M11-I**. Çdo hap që varet nga infrastruktura, llogari ose njerëz të jashtëm është shënuar **EXTERNAL EVIDENCE REQUIRED**.
 **Komandat:** ato me burim në repo/docs janë të listuara si ekzistuese; ato të shënuara **PROPOSED** ose **FUTURE** nuk ekzistojnë ende ose s'janë provuar.
-**Statusi i procedurës: BLOCKED** (shih `m11i-production-readiness-gap-analysis.md`). Një autorizim ndërmjet fazave është i detyrueshëm; asnjë fazë nuk nis automatikisht.
+**Statusi i procedurës: BLOCKED** (shih `m11i-production-readiness-gap-analysis.md`). **Përditësim M11-I/F-01:** paketimi i Central ekziston dhe u provua LOKALISHT (imazhe, compose, migrim, hyrje në konsolë); komandat Central më poshtë janë tani ekzistuese (jo FUTURE), por **s'janë provuar në CI as në prodhim** (CI PENDING). Një autorizim ndërmjet fazave është i detyrueshëm; asnjë fazë nuk nis automatikisht.
 
 Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production-rollback-runbook.md`, `m11i-observability-alerting-plan.md`, `m11i-secrets-and-access-plan.md`.
 
@@ -21,7 +21,7 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 |---|---|
 | Klasifikimi / evidenca | EXTERNAL EVIDENCE REQUIRED. Aktualisht NUK plotësohet asnjë (shih `m11i-production-readiness-gap-analysis.md`). |
 | Rreziku | Nisja pa parakushte = deployment i pamundur ose i pasigurt. |
-| Parakusht | GAP-04, 05, 07, 08, 09, 12 të mbyllura; F-01..F-04 të zbatuara dhe të miratuara; provë e plotë në staging; dritare ndryshimi; operator dhe zëvendës të emëruar; rollback runbook i lexuar nga operatori. |
+| Parakusht | GAP-04, 05, 07, 08, 09, 12 të mbyllura; F-01 e zbatuar (IMPLEMENTED / LOCALLY VERIFIED, **CI PENDING**: kërkohet CI jeshile mbi revision-in); F-02..F-04 sipas gap analysis; provë e plotë në staging; dritare ndryshimi; operator dhe zëvendës të emëruar; rollback runbook i lexuar nga operatori. |
 | Validim para prodhimit | Lista e dëshmive e firmosur nga pronari i produktit dhe pronari i infrastrukturës. |
 | Veprimi (NUK ekzekutohet në M11-I) | Asnjë (vetëm konfirmim). |
 | Abort / rikthim | Nëse një parakusht mungon: NUK nisim. |
@@ -48,7 +48,7 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 | Klasifikimi / evidenca | Mbrojtjet e nisjes: VERIFIED (`production_problems()`); mbulim i pjesshëm: PARTIALLY VERIFIED (nuk kontrollon `SMS_DLR_SECRETS`, kredencialet provider-it, `SMS_TRUSTED_PROXY_HOPS`). Vlerat reale: EXTERNAL EVIDENCE REQUIRED. |
 | Rreziku | Sekrete të dobëta/default ose të ruajtura gabim; humbja e `SMS_SECRETS_KEY`/`SMS_PII_HMAC_KEY` është e pariparueshme. |
 | Parakusht | Sekretet e provisionuara sipas `m11i-secrets-and-access-plan.md`; `.env` me leje 600, jashtë git; çelësi CP si mount read-only. |
-| Validim para prodhimit | Brenda imazhit me `env_file`: `python -c "from app.core.config import settings; print(chr(10).join(settings.production_problems()) or 'OK')"` (PROPOSED; mesazhet janë tekste statike, pa vlera) — pritet `OK`. Kontrolle manuale: asnjë vlerë `change-me`/`dev`/`test`/`demo`; `SMS_ENV=production`; `SMS_PAYMENT_PROVIDER=disabled`; `SMS_PUBLIC_BASE_URL` fillon me `https://`; `SMS_TRUSTED_PROXY_HOPS` sipas topologjisë së dokumentuar. |
+| Validim para prodhimit | Brenda imazhit me `env_file`: `python -c "from app.core.config import settings; print(chr(10).join(settings.production_problems()) or 'OK')"` (PROPOSED; mesazhet janë tekste statike, pa vlera) — pritet `OK`. Kontrolle manuale: asnjë vlerë `change-me`/`dev`/`test`/`demo`; `SMS_ENV=production`; `SMS_PAYMENT_PROVIDER=disabled`; `SMS_PUBLIC_BASE_URL` fillon me `https://`; `SMS_TRUSTED_PROXY_HOPS` sipas topologjisë së dokumentuar. **Central:** `.env.central` (nga `.env.central.example`, leje 600, jashtë git): `CENTRAL_ENV=production`, `CENTRAL_DATABASE_URL` drejt DB `sms_central` (rol i veçantë; jo DB-ja `sms` e Enterprise), `CENTRAL_AUTH_SECRET` ≥ 32 karaktere, `CENTRAL_MAILER` dhe `CENTRAL_BOT_CHALLENGE` ≠ `fake`, `CENTRAL_ALLOW_UNVERIFIED_AUTO_REGISTRATION=false`. Nisja në prodhim refuzon SQLite/jo-PostgreSQL, sekret të dobët dhe `fake` (VERIFIED LOKALISHT). Vlerat reale: EXTERNAL EVIDENCE REQUIRED. |
 | Veprimi (NUK ekzekutohet në M11-I) | Asnjë (vetëm validim). |
 | Abort / rikthim | Çdo problem i listuar ose vlerë placeholder: abort. |
 | Pronari / varësia | Sigurinë + operatori — NUK ËSHTË CAKTUAR |
@@ -71,11 +71,11 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 
 | Fusha | Përmbajtja |
 |---|---|
-| Klasifikimi / evidenca | Mekanizmi: VERIFIED (shërbimi `migrate` në compose; `depends_on: service_completed_successfully`; CI up/down/up). Central: shërbimi s'ekziston (NOT VERIFIED). |
+| Klasifikimi / evidenca | Mekanizmi: VERIFIED (shërbimi `migrate` në compose; `depends_on: service_completed_successfully`; CI up/down/up). Central: `central-migrate` ekziston (VERIFIED LOKALISHT mbi PG të kontejnerit; CI PENDING). **DB `sms_central` krijohet para tij me hap infrastrukture** (aplikacioni nuk e krijon; RUNBOOK §8.1); migrimi refuzon një DB Enterprise dhe SQLite në prodhim. |
 | Rreziku | Migrimi i pjesshëm lë skemën në gjendje të papajtueshme; `readyz` kthen 503. |
 | Parakusht | Faza 3 e mbyllur. |
 | Validim para prodhimit | Në staging me kopje të përmasave reale: migrim Enterprise → kokë 0034; Central → 0031; `readyz` ready në të dyja. |
-| Veprimi (NUK ekzekutohet në M11-I) | 1) Enterprise: `docker compose -f docker-compose.prod.yml --env-file .env run --rm migrate` (PROPOSED si hap i veçantë; `up -d` e ekzekuton automatikisht). 2) Central: shërbimi i migrimit FUTURE (F-01). Bazat janë të ndara; kokat verifikohen veçmas. |
+| Veprimi (NUK ekzekutohet në M11-I) | 1) Enterprise: `docker compose -f docker-compose.prod.yml --env-file .env run --rm migrate` (PROPOSED si hap i veçantë; `up -d` e ekzekuton automatikisht). 2) Central: `docker compose -f docker-compose.prod.yml --env-file .env run --rm central-migrate` (`alembic -c apps/central/alembic.ini upgrade head`, kokë 0031). Bazat janë të ndara; kokat verifikohen veçmas (`central_alembic_version` në `sms_central`, `sms_alembic_version` në `sms`). |
 | Abort / rikthim | Nëse migrimi dështon: NDALO; mos nis api/workers; rikthim = imazh i vjetër + restore në DB të re (jo downgrade). |
 | Pronari / varësia | DBA + inxhinieria — NUK ËSHTË CAKTUAR |
 | GO/NO-GO | GO kur kokat janë 0034/0031 dhe `readyz` ready. |
@@ -87,8 +87,8 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 | Klasifikimi / evidenca | Vartësitë: VERIFIED (compose: db → migrate → api/worker/webhook-worker → web). Nisja reale: NOT VERIFIED. |
 | Rreziku | Workers para API-së ose para migrimit. |
 | Parakusht | Faza 4. |
-| Validim para prodhimit | Rendi i dokumentuar: db healthy → migrate përfundon → api → worker, webhook-worker → web → (Central) → profilet opsionale vetëm me miratim shprehimisht (`control-plane`, `money-*`, `billing-report`, `pricing-sync`, `sender`). |
-| Veprimi (NUK ekzekutohet në M11-I) | `docker compose -f docker-compose.prod.yml --env-file .env up -d --build` (RUNBOOK §1.2) — pa profile. |
+| Validim para prodhimit | Rendi i dokumentuar: db healthy → migrate përfundon → api → worker, webhook-worker → web; Central: db → `central-migrate` → `central-api` (healthy) → `central-web`; pastaj profilet opsionale vetëm me miratim shprehimisht (`control-plane`, `money-*`, `billing-report`, `pricing-sync`, `sender`). |
+| Veprimi (NUK ekzekutohet në M11-I) | `docker compose -f docker-compose.prod.yml --env-file .env up -d --build` (RUNBOOK §1.2) — pa profile = **vetëm Enterprise** (nuk kërkon `.env.central` as DB `sms_central`). Central nis veçmas, me opt-in të shprehur, në Fazën 9 (`--profile central`). Jobet Central (`central-jobs`) nuk nisen kurrë me `up -d`. |
 | Abort / rikthim | Nëse një shërbim del unhealthy brenda 5 min (PROPOSED): ndalo dhe diagnostiko; mos vazhdo. |
 | Pronari / varësia | Operatori — NUK ËSHTË CAKTUAR |
 | GO/NO-GO | GO kur `docker compose ps` tregon healthy për db, api, worker, webhook-worker, web. |
@@ -136,20 +136,20 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 
 | Fusha | Përmbajtja |
 |---|---|
-| Klasifikimi / evidenca | NOT VERIFIED në prodhim. Paketimi nuk ekziston (GAP-01, 02, 03). |
+| Klasifikimi / evidenca | Paketimi: **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** (GAP-01, 02, 03). Prodhimi: EXTERNAL EVIDENCE REQUIRED / NOT VERIFIED. |
 | Rreziku | HIGH. |
-| Parakusht | F-01, F-02, F-03 të zbatuara dhe të miratuara. |
-| Validim para prodhimit | Në staging: migrim 0031, `/readyz` ready, login admin, `/internal/*` i paarritshëm nga jashtë, `CENTRAL_ENV=production` me `CENTRAL_AUTH_SECRET` (≥32 karaktere), mailer dhe bot-challenge jo `fake`. |
-| Veprimi (NUK ekzekutohet në M11-I) | FUTURE: nis shërbimin Central pas migrimit; planifiko proceset (`billing_run`, `send_notifications`) vetëm kur autoriteti i faturimit kërkon (GAP-16). |
+| Parakusht | F-01 (paketimi) i zbatuar; CI jeshile mbi revision-in; faza 2 (sekretet Central) dhe faza 4 (DB `sms_central` + migrim) të mbyllura. |
+| Validim para prodhimit | Në staging (dhe i provuar lokalisht): `central-migrate` te 0031; `curl -s http://127.0.0.1:8081/readyz` → `ready`; `/internal/sync/changes`, `/v1/*`, `/webhooks/*` përmes `central-web` = 404; `central-api:8001` i paarritshëm nga host-i; hyrje admin dhe operator në Chromium pa gabime console; `CENTRAL_ENV=production` refuzon SQLite, sekret bosh dhe `fake`. Në prodhim: EXTERNAL EVIDENCE REQUIRED. |
+| Veprimi (NUK ekzekutohet në M11-I) | `docker compose -f docker-compose.prod.yml --env-file .env --profile central run --rm central-migrate`, pastaj `… up -d central-web` (nis vetëm Central: `central-migrate` → `central-api` → `central-web`; `… --profile central up -d` nis Enterprise + Central bashkë); admini i parë me `… --profile central-jobs run --rm --no-deps --entrypoint python central-tool -m apps.central.tools.create_admin --email <email> --role admin` (fjalëkalimi kërkohet në terminal). Procesat e planifikuara (`central-billing-run`, `central-send-notifications`, `central-tool`; profili `central-jobs`) nisen vetëm manualisht ose nga një planifikues i jashtëm, kurrë me `up -d`; komandat e mbështetura brenda imazhit Central janë vetëm ato të inventarit te RUNBOOK §8 (`financial_readiness` ekzekutohet jashtë imazhit, nga një checkout me të dy mjediset); planifikimi/monitorimi = GAP-16 (EXTERNAL). |
 | Abort / rikthim | Central s'bëhet healthy: Enterprise mbetet `local` (fail-static); asnjë cutover. |
 | Pronari / varësia | Inxhinieria — NUK ËSHTË CAKTUAR |
-| GO/NO-GO | NO-GO për çdo hap Central derisa F-01..F-03 janë të mbyllura. |
+| GO/NO-GO | NO-GO derisa CI të jetë jeshile mbi paketimin dhe fazat 2/4 të Central të kenë dëshmi; TLS/proxy real (Faza 10) është kusht i veçantë. |
 
 ## Faza 10 — Proxy dhe TLS
 
 | Fusha | Përmbajtja |
 |---|---|
-| Klasifikimi / evidenca | Konfigurimi nginx: VERIFIED. TLS/DNS/LB real: EXTERNAL EVIDENCE REQUIRED. |
+| Klasifikimi / evidenca | Konfigurimi nginx: VERIFIED (`nginx -t` provuar lokalisht për të dy nginx-et). TLS/DNS/LB real: EXTERNAL EVIDENCE REQUIRED. **E hapur (N-1, C-3):** nginx Enterprise humb CSP/nosniff/X-Frame/HSTS te `/` dhe `/assets/` dhe dërgon HSTS mbi HTTP; nginx Central s'ka HSTS qëllimisht (TLS jashtë). |
 | Rreziku | TLS i gabuar/mungues; IP e klientit e gabuar (kyçje masive me hops=0 ose spoofing me hops të gabuar). |
 | Parakusht | GAP-07, GAP-08. |
 | Validim para prodhimit | `nginx -t` (në imazhin `web`); `curl -vI https://<domen>/healthz` zinxhir i vlefshëm; test me dy IP (shih GAP-08). |

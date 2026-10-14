@@ -45,8 +45,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         raise RuntimeError("CENTRAL_MAILER must not be 'fake' in production")
     if settings.env == "production" and settings.bot_challenge == "fake":
         raise RuntimeError("CENTRAL_BOT_CHALLENGE must not be 'fake' in production")
+    effective_engine = engine or default_engine
+    if settings.env == "production" and effective_engine.dialect.name != "postgresql":
+        raise RuntimeError(
+            "CENTRAL_DATABASE_URL must be PostgreSQL in production "
+            f"(got dialect '{effective_engine.dialect.name}')"
+        )
     app = FastAPI(title="SMS Central", docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.engine = engine or default_engine
+    app.state.engine = effective_engine
     app.state.sessionmaker = sessionmaker(bind=app.state.engine, expire_on_commit=False)
     app.include_router(health.router)
     app.include_router(auth.router)

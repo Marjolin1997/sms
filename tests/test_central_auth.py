@@ -236,7 +236,9 @@ def test_production_refuses_to_start_without_an_auth_secret(monkeypatch):
     with pytest.raises(RuntimeError, match="CENTRAL_AUTH_SECRET"):
         create_app(create_engine("sqlite://"))
     monkeypatch.setattr(settings, "auth_secret", SECRET)
-    create_app(create_engine("sqlite://"))
+    # M11-I/F-01: në prodhim DB duhet të jetë PostgreSQL (SQLite refuzohet, shih tests/test_central_packaging.py);
+    # dialekti PG mjafton këtu (create_engine nuk lidhet), kështu gate-i i sekretit provohet i izoluar.
+    create_app(create_engine("postgresql+psycopg://u:p@localhost/db"))
 
 
 # --- token-at ---------------------------------------------------------------------------------------

@@ -42,6 +42,14 @@ jobs:
           alembic upgrade head
           alembic downgrade base
           alembic upgrade head
+      - name: Central migrations on a clean PostgreSQL database (head 0031)
+        env:
+          CENTRAL_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_central_migrate
+        run: |
+          psql -h localhost -U sms -d postgres -c "create database sms_central_migrate"
+          test "$(alembic -c apps/central/alembic.ini heads | cut -d' ' -f1)" = "0031"
+          alembic -c apps/central/alembic.ini upgrade head
+          test "$(alembic -c apps/central/alembic.ini current | cut -d' ' -f1)" = "0031"
       - name: Backup, restore and ledger verification round-trip
         env:
           SMS_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_migrate
@@ -58,6 +66,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci
+      - name: Component and unit tests (Vitest)
+        run: npm test
+      - name: i18n coverage + production build
+        run: npm run build
+
+  frontend-central:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: frontend-central}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm, cache-dependency-path: frontend-central/package-lock.json}
       - run: npm ci
       - name: Component and unit tests (Vitest)
         run: npm test
@@ -114,11 +135,34 @@ jobs:
           docker build -t sms-api .
           docker run --rm -e SMS_DATABASE_URL=sqlite:////tmp/smoke.db sms-api python -c "from app.main import app; print('import ok')"
           docker run --rm sms-api python -m scripts.worker_health 1 || echo "worker_health correctly fails when no worker runs"
-      - name: Build web image (frontend + nginx)
-        run: docker build -f deploy/web.Dockerfile -t sms-web .
-      - name: nginx configuration is valid
+      - name: Build Central image (target central) and smoke-test it
+        run: |
+          docker build --target central -t sms-central .
+          docker run --rm -e CENTRAL_DATABASE_URL=sqlite:////tmp/smoke.db sms-central python -c "from apps.central.main import app; print('import ok')"
+          test "$(docker run --rm sms-central id -u)" = "10001"
+          # çdo komandë e dokumentuar si e ekzekutueshme brenda imazhit Central (inventari te docs/RUNBOOK.md §8)
+          for m in $(sed -n '/central-image-commands:start/,/central-image-commands:end/p' docs/RUNBOOK.md | grep -oE 'apps\.central\.tools\.[a-z_]+'); do
+            docker run --rm sms-central python -m "$m" --help > /dev/null || { echo "FAILED in Central image: $m"; exit 1; }
+          done
+      - name: Build web images (Enterprise and Central consoles + nginx)
+        run: |
+          docker build -f deploy/web.Dockerfile -t sms-web .
+          docker build -f deploy/web-central.Dockerfile -t sms-web-central .
+      - name: nginx configurations are valid
         run: |
           docker run --rm --add-host api:127.0.0.1 sms-web nginx -t
+          docker run --rm --add-host central-api:127.0.0.1 sms-web-central nginx -t
+      - name: Production compose renders (templates only, no secrets)
+        run: |
+          cp .env.example .env
+          # nisja e zakonshme = vetëm Enterprise: NUK kërkon .env.central
+          docker compose -f docker-compose.prod.yml --env-file .env config -q
+          test "$(docker compose -f docker-compose.prod.yml --env-file .env config --services | sort | tr '\n' ' ')" = "api db migrate web webhook-worker worker "
+          # Central është opt-in dhe kërkon mjedisin e vet kur aktivizohet
+          if docker compose -f docker-compose.prod.yml --env-file .env --profile central config -q 2>/dev/null; then echo "central profile must require .env.central"; exit 1; fi
+          cp .env.central.example .env.central
+          docker compose -f docker-compose.prod.yml --env-file .env --profile central config -q
+          docker compose -f docker-compose.prod.yml --env-file .env --profile central-jobs --profile sender config -q
 
   audit:
     runs-on: ubuntu-latest

@@ -10,6 +10,7 @@ Një host me Docker Compose (`docker-compose.prod.yml`): `db` (PostgreSQL 16), `
    - `SMS_ADMIN_API_KEY` (bootstrap, 24+ karaktere), `SMS_PUBLIC_BASE_URL=https://…`, provider-i email (`SMS_EMAIL_PROVIDER=smtp` + SMTP), provider-i SMS
    - `SMS_PAYMENT_PROVIDER=disabled` derisa të lidhet një gateway i vërtetë
 2. `docker compose -f docker-compose.prod.yml --env-file .env up -d --build`
+   `up -d` i zakonshëm mbetet vetëm-Enterprise; Central është opt-in (`--profile central`, shih §8).
    Aplikacioni **refuzon të nisë** me konfigurim të pasigurt (`SMS_ENV=production`); `docker compose logs api` liston çdo problem.
 3. Kontrolli: `curl -s http://127.0.0.1:8080/readyz` → `{"status":"ready"}` (kthen 503 nëse DB s'përgjigjet ose skema s'është në versionin e kodit).
 4. **Stafi i parë** (me çelësin bootstrap; shih README → “Nisje”): krijoni një çelës `superadmin` personal për çdo person, hyni në konsolë me të, aktivizoni 2FA te *Siguria*. Pastaj **hiqni `SMS_ADMIN_API_KEY`** nga `.env` dhe rinisni `api` (bootstrap-i është vetëm për nisjen). Vendosni `SMS_REQUIRE_STAFF_2FA=true`.
@@ -54,8 +55,40 @@ Një host me Docker Compose (`docker-compose.prod.yml`): `db` (PostgreSQL 16), `
 - Qasja ndër-tenant e stafit shfaqet në `GET /v1/admin/audit` si `cross_tenant.*`.
 
 ## 7. Çfarë NUK mbulohet ende
-- **Central (`apps/central`) nuk është i paketuar këtu:** imazhi `Dockerfile` kopjon vetëm `app/`, `packages/`, `scripts/`; `docker-compose.prod.yml` nuk ka shërbim Central dhe `.env.example` s'ka `CENTRAL_*`. Procedura e pilotit për Central është te `docs/PILOT_READINESS.md` (uvicorn + `alembic -c apps/central/alembic.ini` + build i `frontend-central`).
+- **Central (`apps/central`) është i paketuar që nga M11-I/F-01** (imazh `--target central`, profilet opt-in `central` dhe `central-jobs`, `.env.central.example`; shih §8). Provuar vetëm lokalisht/dev; **nuk është vendosur në prodhim**. Mbeten jashtë paketimit: TLS/DNS/LB, `CENTRAL_TRUSTED_PROXY_HOPS` real, PostgreSQL prodhimi/PITR, sekretet, monitorimi, planifikimi i `billing_run`/`send_notifications`.
 - `alembic downgrade` heq tabelat e shtuara pas objektivit (me të dhënat e tyre): rikthimi i prodhimit = imazhi i vjetër + backup (seksioni 3), jo downgrade.
 - Pa gateway të vërtetë pagese (`SMS_PAYMENT_PROVIDER=disabled`; mbushjet bëhen manualisht nga Financa) dhe pa provider SMS të vërtetë të lidhur (HTTP/SMPP sipas dokumentacionit të tij).
 - Rrotullimi i `SMS_SECRETS_KEY` dhe `SMS_PII_HMAC_KEY` nuk mbështetet (kërkon rienkriptim/rihash). Ruajini me kujdes.
 - Auditim i jashtëm sigurie dhe pentest para se të shiten klientëve.
+
+## 8. Central (staf admin/operator) — M11-I/F-01
+**Opt-in:** shërbimet Central ndodhen te profili `central` (serving) dhe `central-jobs` (komanda manuale). `docker compose up -d` i zakonshëm mbetet **vetëm-Enterprise** dhe NUK kërkon `.env.central` as DB `sms_central`. Central niset me `--profile central` (që kërkon `.env.central`; pa të, compose dështon qartë).
+Topologjia me `--profile central`: `db` (PG i njëjtë, **DB logjike e veçantë `sms_central`**) → `central-migrate` (një herë) → `central-api` (:8001, vetëm rrjeti i brendshëm) → `central-web` (nginx + konsola, `127.0.0.1:8081`). Central ka imazh të vetin (`target: central`), mjedis të vetin (`.env.central`, prefiks `CENTRAL_`) dhe NUK lexon `.env` të Enterprise. Profili `central-jobs` NUK niset nga `--profile central`.
+1. **Hap infrastrukture (një herë; aplikacioni NUK e krijon DB-në):** `docker compose -f docker-compose.prod.yml --env-file .env exec db psql -U sms -d sms -c "CREATE ROLE sms_central LOGIN" -c "CREATE DATABASE sms_central OWNER sms_central"`, pastaj vendos fjalëkalimin në mënyrë interaktive (`\password sms_central` në `psql`), kurrë në argument komande, git apo chat.
+2. `cp .env.central.example .env.central` (leje 600, jashtë git). Plotëso `CENTRAL_DATABASE_URL` (rol `sms_central`, DB `sms_central`) dhe `CENTRAL_AUTH_SECRET` (`python -c "import secrets;print(secrets.token_hex(32))"`). Me sekret bosh/<32 karaktere, SQLite ose mailer/bot-challenge `fake`, nisja në prodhim REFUZOHET.
+3. Validim pa nisur asgjë: `docker compose -f docker-compose.prod.yml --env-file .env --profile central config -q`.
+4. Migrimi (eksplicit, i dukshëm): `docker compose -f docker-compose.prod.yml --env-file .env --profile central run --rm central-migrate` (`alembic -c apps/central/alembic.ini upgrade head`; kokë 0031). Refuzon një DB Enterprise (gjen `sms_alembic_version`) dhe SQLite në prodhim. **Rikthimi i të dhënave NUK bëhet me `alembic downgrade`** (shih §3 dhe `docs/m11i-production-rollback-runbook.md`).
+5. Nisja vetëm e Central (provuar lokalisht: nis `central-migrate` → `central-api` → `central-web` dhe `db`, jo shërbimet Enterprise): `docker compose -f docker-compose.prod.yml --env-file .env up -d central-web` (profili `central` aktivizohet nga emri i shërbimit). `docker compose … --profile central up -d` nis **Enterprise + Central** bashkë. Kontroll: `curl -s http://127.0.0.1:8081/readyz` → `{"status":"ready"}` (503 nëse skema nuk është te koka).
+6. Administratori i parë (fjalëkalimi kërkohet në terminal, nuk jepet në argument): `docker compose -f docker-compose.prod.yml --env-file .env --profile central-jobs run --rm --no-deps --entrypoint python central-tool -m apps.central.tools.create_admin --email <email> --role admin`.
+7. Komanda të planifikuara/operacionale (profili `central-jobs`; asnjë nuk niset me `up -d`; Central s'ka scheduler, planifikimi është i jashtëm: cron/systemd): `docker compose -f docker-compose.prod.yml --env-file .env --profile central-jobs run --rm central-billing-run` (refuzon nëse autoriteti i faturimit s'është `central`), `... central-send-notifications` (një kalim; `--loop` vetëm me komandë të shprehur), `... central-tool [modul] [opsione]` (parazgjedhje `sender_central_readiness`).
+8. Rrugëzimi i `central-web`: `/auth`, `/admin`, `/healthz`, `/readyz` → `central-api`; `/v1`, `/webhooks`, `/u`, `/internal`, `/registration` → 404; pjesa tjetër = SPA. HTTP i thjeshtë, **pa TLS dhe pa HSTS**: TLS/load balancer dhe `CENTRAL_TRUSTED_PROXY_HOPS` real mbeten blloku i veçantë "TLS / reverse proxy". Regjistrimi publik (`/registration*`) nuk ekspozohet nga ky nginx.
+
+### Inventari i komandave që ekzekutohen BRENDA imazhit Central
+Vetëm këto janë të dokumentuara si të ekzekutueshme në imazhin Central (`python -m <modul>`; testohen te `tests/test_central_packaging.py`: importohen, `--help` del me kod 0 dhe nuk varen nga `scripts/` apo `app/` të Enterprise).
+<!-- central-image-commands:start -->
+| Moduli | Qëllimi |
+|---|---|
+| `apps.central.tools.billing_run` | faturimi periodik (shërbimi `central-billing-run`; refuzon pa autoritet `central`) |
+| `apps.central.tools.send_notifications` | outbox i njoftimeve (shërbimi `central-send-notifications`) |
+| `apps.central.tools.sender_central_readiness` | gatishmëria e sender-ave (parazgjedhja e `central-tool`) |
+| `apps.central.tools.billing_readiness` | gatishmëria e faturimit |
+| `apps.central.tools.billing_final_readiness` | gatishmëria përfundimtare e faturimit |
+| `apps.central.tools.registration_readiness` | gatishmëria e regjistrimit |
+| `apps.central.tools.money_reconciliation` | rakordimi i parave |
+| `apps.central.tools.retention` | retention i raporteve të përdorimit (plan/dry-run si parazgjedhje; `--apply` fshin) |
+| `apps.central.tools.create_admin` | krijimi i administratorit/operatorit (fjalëkalimi në terminal) |
+| `apps.central.tools.create_service_credential` | kredencial shërbimi (çelës publik) për Enterprise |
+| `apps.central.tools.service_credential_admin` | çaktivizim/administrim i kredencialeve të shërbimit |
+<!-- central-image-commands:end -->
+
+**Jashtë imazhit Central:** `apps.central.tools.financial_readiness` është agregator ndër-sistem: thërret `scripts.financial_ops`, `scripts.queue_readiness`, `scripts.money_authority_readiness` dhe `scripts.pricing_authority_readiness` të Enterprise si nënprocese. Imazhi Central s'ka `scripts/` (kufi i qëllimshëm: Central s'ngarkon kodin Enterprise), prandaj **nuk është në inventar dhe nuk ekzekutohet në kontejner Central**. Ekzekutohet nga një checkout i repo-së me të dy mjediset (venv me `CENTRAL_DATABASE_URL` dhe `SMS_DATABASE_URL`, ose `--enterprise-cwd`), siç e kërkon `docs/M9_PRODUCTION_CHECKLIST.md` §8.

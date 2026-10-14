@@ -8,3 +8,6 @@ frontend/dist/
 docs/
 *.db
 .env
+.env.*
+secrets/
+frontend-central/dist/

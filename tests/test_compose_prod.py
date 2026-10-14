@@ -65,11 +65,21 @@ def test_compose_has_no_embedded_credentials_and_only_the_web_port_is_published(
             r"(?i)(password|token|secret_key|api_key)\s*:\s*['\"]?[A-Za-z0-9+/=]{12,}",
             block.replace("${POSTGRES_PASSWORD}", ""),
         )
-    assert "BEGIN" not in text and not re.search(
-        r"https?://[a-z0-9]", text.replace("https://", "") or ""
-    )
+    # asnjë URL i jashtëm i ngulitur; përjashtim i qëllimshëm: probë gatishmërie në loopback të vetë kontejnerit (central-api, M11-I/F-01)
+    external = re.sub(r"http://127\.0\.0\.1:\d+/readyz", "", text.replace("https://", ""))
+    assert "BEGIN" not in text and not re.search(r"https?://[a-z0-9]", external)
     published = {n for n, s in COMPOSE["services"].items() if s.get("ports")}
-    assert published == {"web"} and COMPOSE["services"]["web"]["ports"] == ["127.0.0.1:8080:8080"]
+    # M11-I/F-01: dy porte të publikuara, të dyja vetëm në loopback: konsola Enterprise (nginx) dhe konsola Central (nginx).
+    # central-api mbetet i brendshëm (testet e topologjisë Central: tests/test_central_packaging.py).
+    assert published == {"web", "central-web"}
+    default_published = {
+        n for n, s in COMPOSE["services"].items() if s.get("ports") and "profiles" not in s
+    }
+    assert default_published == {
+        "web"
+    }  # nisja e zakonshme: vetëm konsola Enterprise (Central është opt-in: profili `central`)
+    assert COMPOSE["services"]["web"]["ports"] == ["127.0.0.1:8080:8080"]
+    assert COMPOSE["services"]["central-web"]["ports"] == ["127.0.0.1:8081:8081"]
 
 
 def test_env_example_documents_the_m10_variables_with_safe_defaults():

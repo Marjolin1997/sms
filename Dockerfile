@@ -1,10 +1,26 @@
-# Imazh i vetëm për API dhe workers (komanda ndryshon në compose). Frontend-i ndërtohet veçmas
-# (deploy/web.Dockerfile) dhe shërbehet nga nginx.
+# Imazh i vetëm për API dhe workers Enterprise (komanda ndryshon në compose) + një target `central` për Central.
+# Frontend-et ndërtohen veçmas (deploy/web.Dockerfile, deploy/web-central.Dockerfile) dhe shërbehen nga nginx.
+# Stage-i i FUNDIT është Enterprise: `docker build .` / `build: .` mbetet i pandryshuar; Central ndërtohet me `--target central`.
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /srv
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+
+# --- Central (staf admin/operator): apps/central + kontratat/PDF të përbashkëta (`packages`). Pa sekrete, pa frontend, pa skedarë env.
+# Pa HEALTHCHECK në imazh: i njëjti imazh shërben API-n, migrimin dhe jobet një-herë; kontrolli i gatishmërisë `/readyz`
+# jeton te shërbimi `central-api` në compose (një mekanizëm i vetëm).
+FROM base AS central
+COPY apps ./apps
+COPY packages ./packages
+RUN useradd -r -u 10001 sms && chown -R sms /srv
+USER sms
+EXPOSE 8001
+# --proxy-headers e heq: IP-në e klientit e trajton aplikacioni (CENTRAL_TRUSTED_PROXY_HOPS)
+CMD ["uvicorn", "apps.central.main:app", "--host", "0.0.0.0", "--port", "8001", "--no-proxy-headers", "--workers", "2"]
+
+# --- Enterprise (stage-i i fundit = parazgjedhja)
+FROM base AS enterprise
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app

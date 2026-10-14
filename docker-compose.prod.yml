@@ -16,6 +16,23 @@ x-app: &app
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
 
+# Central (M11-I/F-01): imazh i VEÇANTË (target `central`), konfigurim i VEÇANTË (.env.central, prefiks CENTRAL_), DB logjike e veçantë `sms_central`.
+# Asnjë sekret/DB i përbashkët me Enterprise: shërbimet Central NUK lexojnë `.env`. DB `sms_central` krijohet me hap infrastrukture (docs/RUNBOOK.md §8).
+# OPT-IN: shërbimet Central ndodhen te profili `central` (serving: central-migrate, central-api, central-web) dhe `central-jobs` (komanda manuale).
+# `docker compose up -d` i zakonshëm mbetet VETËM-ENTERPRISE (as `.env.central` as DB `sms_central` nuk kërkohen); Central niset me `--profile central`.
+x-central: &central
+  build:
+    context: .
+    target: central
+  restart: unless-stopped
+  env_file: .env.central
+  environment:
+    CENTRAL_ENV: production
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
 services:
   db:
     image: postgres:16-alpine
@@ -188,6 +205,78 @@ services:
     restart: unless-stopped
     depends_on: [api]
     ports: ["127.0.0.1:8080:8080"]  # vendose TLS/load balancer përpara këtij porti
+
+  # ----- Central (staf admin/operator) -----
+  # Hapi 1 (EKSPLICIT, i dukshëm): migrimi i Central. Kërkon që DB `sms_central` të ekzistojë (hap infrastrukture) dhe refuzon një DB Enterprise.
+  #   docker compose -f docker-compose.prod.yml --profile central run --rm central-migrate
+  central-migrate:
+    <<: *central
+    profiles: ["central"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["alembic", "-c", "apps/central/alembic.ini", "upgrade", "head"]
+
+  # API-ja Central: vetëm rrjeti i brendshëm i compose (asnjë port i publikuar); i vetmi mekanizëm gatishmërie është /readyz këtu.
+  central-api:
+    <<: *central
+    profiles: ["central"]
+    depends_on:
+      db: {condition: service_healthy}
+      central-migrate: {condition: service_completed_successfully}
+    command: ["uvicorn", "apps.central.main:app", "--host", "0.0.0.0", "--port", "8001", "--no-proxy-headers", "--workers", "2"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 4s
+      start_period: 20s
+      retries: 4
+
+  # Konsola e stafit Central + proxy VETËM drejt central-api (/auth, /admin, /healthz, /readyz); asnjë rrugë drejt Enterprise.
+  # HTTP i thjeshtë, pa HSTS: TLS/load balancer vendoset para këtij porti (blloku "TLS / reverse proxy").
+  central-web:
+    profiles: ["central"]
+    build:
+      context: .
+      dockerfile: deploy/web-central.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      central-api: {condition: service_healthy}
+    ports: ["127.0.0.1:8081:8081"]
+
+  # ----- Komanda të planifikuara Central (profili `central-jobs`; ASNJË nuk niset me `up -d` të zakonshëm) -----
+  # Central s'ka scheduler: operatori i nis me `docker compose --profile central-jobs run --rm <shërbimi>` (cron/systemd i jashtëm).
+  # Faturimi NUK aktivizohet vetvetiu: `billing_run` refuzon (kod 3) kur autoriteti i faturimit s'është `central`; CENTRAL_BILLING_WORKER_CONFIGURED
+  # është vetëm konfirmim operativ. Asnjë nga këto s'ka restart dhe s'ka port.
+  central-billing-run:
+    <<: *central
+    profiles: ["central-jobs"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["python", "-m", "apps.central.tools.billing_run", "--json"]
+
+  # Një kalim i outbox-it të njoftimeve (verifikim regjistrimi). Për proces të vazhdueshëm: komanda `... send_notifications --loop --interval 15`.
+  central-send-notifications:
+    <<: *central
+    profiles: ["central-jobs"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["python", "-m", "apps.central.tools.send_notifications"]
+
+  # Mjet i përgjithshëm operacional: parazgjedhja është `sender_central_readiness` (vetëm-lexim, vetëm Central). Komandat e tjera ekzistuese
+  # që punojnë brenda imazhit Central (p.sh. billing_final_readiness, billing_readiness, registration_readiness, money_reconciliation, retention (dry-run))
+  # jepen si argument: `run --rm central-tool <modul> [opsione]`. Inventari i mbështetur: docs/RUNBOOK.md §8 (tabela). `financial_readiness` NUK është
+  # në inventar: thërret `scripts.*` të Enterprise (subproces) dhe nuk ekzekutohet brenda imazhit Central (ekzekutohet nga një checkout me të dy mjediset).
+  central-tool:
+    <<: *central
+    profiles: ["central-jobs"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    entrypoint: ["python", "-m"]
+    command: ["apps.central.tools.sender_central_readiness"]
 
 volumes:
   dbdata:
