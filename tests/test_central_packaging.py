@@ -427,6 +427,7 @@ def test_production_rejects_sqlite_and_any_non_postgresql_database(monkeypatch):
     from apps.central.main import settings as central_settings
 
     monkeypatch.setattr(central_settings, "env", "production")
+    monkeypatch.setattr(central_settings, "trusted_proxy_hops", 1)  # F-03: gate i ndarë
     monkeypatch.setattr(tokens, "configured", lambda: True)
     for url in ("sqlite://", "sqlite:///./central_dev.db"):
         with pytest.raises(RuntimeError, match="must be PostgreSQL in production"):
@@ -440,6 +441,7 @@ def test_production_with_postgresql_dialect_passes_this_gate_and_development_kee
     from apps.central.main import settings as central_settings
 
     monkeypatch.setattr(central_settings, "env", "production")
+    monkeypatch.setattr(central_settings, "trusted_proxy_hops", 1)  # F-03: gate i ndarë
     monkeypatch.setattr(tokens, "configured", lambda: True)
     assert create_app(create_engine(PG)).title == "SMS Central"  # pa lidhje reale
     monkeypatch.setattr(central_settings, "env", "development")

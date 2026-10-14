@@ -45,6 +45,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         raise RuntimeError("CENTRAL_MAILER must not be 'fake' in production")
     if settings.env == "production" and settings.bot_challenge == "fake":
         raise RuntimeError("CENTRAL_BOT_CHALLENGE must not be 'fake' in production")
+    if settings.env == "production" and (problems := settings.production_problems()):
+        raise RuntimeError("unsafe production configuration:\n - " + "\n - ".join(problems))
     effective_engine = engine or default_engine
     if settings.env == "production" and effective_engine.dialect.name != "postgresql":
         raise RuntimeError(

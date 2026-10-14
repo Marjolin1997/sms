@@ -29,6 +29,29 @@ Legjenda e rrotullimit: **RROTULLOHET** = mekanizmi ekziston; **PROCEDURË** = e
 | CI / ndërtim | Sekretet e CI (aktualisht vetëm vlera sintetike `ci-only-…`, DB provë `sms/sms`) | Magazina e sekreteve të CI; **asnjë sekret prodhimi në CI** | Mirëmbajtësit e CI | RROTULLOHET | VERIFIED (ci.yml: vetëm vlera provë) |
 | Host | Çelësat SSH/IAM të operatorëve | Menaxheri i identitetit i organizatës | Operatorët e emëruar | RROTULLOHET sipas politikës së organizatës | EXTERNAL EVIDENCE REQUIRED |
 
+## 1b. Matrica e validimit të nisjes në prodhim (M11-I/F-03)
+
+Siç zbatohet në `production_problems()` (Enterprise) dhe `create_app` (Central); mesazhet kurrë s'përmbajnë vlera.
+
+| Sekreti / cilësimi | Klasifikim | Kontrolli i nisjes |
+|---|---|---|
+| `SMS_PII_HMAC_KEY` (≥ 32), `SMS_SECRETS_KEY` | Gjithmonë i detyrueshëm | refuzon bosh/të shkurtër |
+| `SMS_ADMIN_API_KEY` | Opsional (bootstrap) | nëse vendoset: ≥ 24, jo placeholder |
+| Çelësat API të stafit/klientit | Operacional (DB), jo env | — |
+| `SMS_DLR_SECRETS[<provider HTTP>]` | **Kushtëzuar**: kur `SMS_HTTP_PROVIDER_URL` është vendosur | ≥ 24, jo `change/dev/test/demo…` |
+| Hyrje të tjera në `SMS_DLR_SECRETS` | Opsionale | nëse jo-boshe: jo e dobët |
+| `SMS_TWILIO_ACCOUNT_SID` + `SMS_TWILIO_AUTH_TOKEN` | **Kushtëzuar**: të dyja ose asnjëra | refuzon gjysmë-konfigurimin; nuk kërkohet HMAC DLR (X-Twilio-Signature) |
+| `SMS_HTTP_PROVIDER_KEY`, `SMS_TWILIO_MESSAGING_SERVICE_SID` | Opsional | nuk validohet |
+| `SMS_SMTP_HOST` | **Kushtëzuar**: kur `SMS_EMAIL_PROVIDER=smtp` | refuzon bosh; `SMS_SMTP_USER/PASSWORD` opsionale (relay pa auth) |
+| `SMS_TRUSTED_PROXY_HOPS` | Gjithmonë (topologjia F-02) | = 1 |
+| Çelësi privat CP / `SMS_CP_*` | Kushtëzuar nga sync/authority (gate-t ekzistuese); sekret operacional i jashtëm | `https` + ACK sipas modit |
+| Sekretet e pagesave | `SMS_PAYMENT_PROVIDER` ≠ `fake`; asnjë gateway real ende | refuzon `fake` |
+| `CENTRAL_AUTH_SECRET` (≥ 32) | Gjithmonë i detyrueshëm | refuzon |
+| `CENTRAL_REGISTRATION_VERIFY_KEY` | Opsional: pa të, regjistrimi mbetet manual | nuk kërkohet |
+| `CENTRAL_SMTP_HOST` + `CENTRAL_SMTP_FROM` (+ kredenciale) | **Kushtëzuar**: kur `CENTRAL_MAILER=smtp` | host + from të detyrueshëm; user/password opsionalë |
+| `CENTRAL_TRUSTED_PROXY_HOPS` | Gjithmonë | = 1 |
+| Vlerat reale, rrotullimi, menaxheri i sekreteve | EXTERNAL EVIDENCE REQUIRED | — |
+
 ## 2. Kufizimet që nuk rrotullohen sot
 
 - `SMS_PII_HMAC_KEY`: një ndryshim shkatërron përputhjen e hash-eve të pëlqimit për të dhënat ekzistuese. Humbja = humbje e pëlqimeve të verifikueshme. (VERIFIED/PARTIALLY VERIFIED sipas burimit më sipër)
@@ -91,7 +114,7 @@ Legjenda e rrotullimit: **RROTULLOHET** = mekanizmi ekziston; **PROCEDURË** = e
 | Hapi i parë me çelës bootstrap; çelës `superadmin` personal për çdo person; 2FA aktive te *Siguria*; pastaj heqje e `SMS_ADMIN_API_KEY` dhe rinisje | Procedura është te RUNBOOK §1.4 | VERIFIED (procedura); zbatimi EXTERNAL |
 | `SMS_REQUIRE_STAFF_2FA=true` | Shembulli `.env.example` e ka; mekanizmi ekziston | VERIFIED (mekanizmi) |
 | Reset 2FA vetëm nga superadmin tjetër ose bootstrap (`POST /v1/admin/api-keys/{id}/reset-2fa`) | RUNBOOK §6 | VERIFIED |
-| 2FA për stafin Central | Kërkimi në `apps/central` nuk gjeti totp/2fa; hyrja është fjalëkalim + JWT | PARTIALLY VERIFIED (vetëm nga kërkimi) — kontroll kompensues i kërkuar (VPN/IP allow-list), vendim i pronarit |
+| 2FA për stafin Central | Kërkimi në `apps/central` nuk gjeti totp/2fa; hyrja është fjalëkalim + JWT | EXTERNAL / POLICY DECISION REQUIRED (F-03 nuk e zbaton; më parë PARTIALLY VERIFIED nga kërkimi) — kontroll kompensues i kërkuar (VPN/IP allow-list), vendim i pronarit |
 | Operatori Central vetëm-lexim; admin Central vetëm për të miratuar | 42 shkrime të operatorit refuzohen 403 (M11-H) | VERIFIED (M11-H) |
 
 ## 10. Pritshmëritë e audit-it dhe boshllëku i skanimit

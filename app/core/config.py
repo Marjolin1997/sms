@@ -4,6 +4,13 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_WEAK_PREFIXES = ("change", "dev", "test", "demo")
+
+
+def _weak_secret(value: str | None) -> bool:
+    """Bosh, <24 karaktere ose placeholder i njohur (konventa e SMS_ADMIN_API_KEY)."""
+    return not value or len(value) < 24 or value.lower().startswith(_WEAK_PREFIXES)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SMS_", env_file=".env", extra="ignore")
@@ -275,6 +282,41 @@ class Settings(BaseSettings):
             )
         if self.money_authority == "central" and not self.money_reporting:
             bad.append("SMS_MONEY_AUTHORITY=central requires SMS_MONEY_REPORTING=true")
+        bad.extend(self._startup_safety_problems())
+        return bad
+
+    def _startup_safety_problems(self) -> list[str]:
+        """M11-I/F-03: topologjia e skajit dhe sekretet e kushtëzuara nga funksionet e aktivizuara.
+        Mesazhet emërtojnë vetëm variablat, kurrë vlerat."""
+        bad = []
+        # Topologjia e miratuar (F-02): TLS terminator → nginx (real_ip, XFF i normalizuar) → app.
+        if self.trusted_proxy_hops != 1:
+            bad.append(
+                "SMS_TRUSTED_PROXY_HOPS must be 1 in production (nginx real_ip topology: "
+                "0 collapses all clients to the proxy IP, >1 is not an approved topology)"
+            )
+        # Provider HTTP aktiv ⇔ http_provider_url; DLR i tij nënshkruhet me dlr_secrets[emri].
+        if self.http_provider_url and _weak_secret(self.dlr_secrets.get(self.http_provider_name)):
+            bad.append(
+                f"SMS_DLR_SECRETS must contain a strong secret (24+ chars, not a placeholder) "
+                f"for the active HTTP provider '{self.http_provider_name}'"
+            )
+        # Sekret i vendosur por i dobët/placeholder është i pasigurt edhe pse provider-i s'është aktiv.
+        for name, value in self.dlr_secrets.items():
+            if value and _weak_secret(value) and name != self.http_provider_name:
+                bad.append(
+                    f"SMS_DLR_SECRETS entry '{name}' is weak/placeholder (use 24+ random chars)"
+                )
+        # Twilio: aktiv vetëm me të dyja; gjysmë-konfigurimi e çaktivizon heshturazi (dhe auth token
+        # është edhe çelësi i verifikimit të callback-eve).
+        if bool(self.twilio_account_sid) != bool(self.twilio_auth_token):
+            bad.append(
+                "SMS_TWILIO_ACCOUNT_SID and SMS_TWILIO_AUTH_TOKEN must be set together "
+                "(half-configured Twilio provider)"
+            )
+        # Email SMTP: zgjedhja e 'smtp' pa host nuk regjistron provider.
+        if self.email_provider == "smtp" and not self.smtp_host:
+            bad.append("SMS_SMTP_HOST must be set when SMS_EMAIL_PROVIDER is 'smtp'")
         return bad
 
     def validate_production(self) -> None:

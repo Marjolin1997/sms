@@ -7,6 +7,10 @@
 
 **Përditësim M11-I/F-02 (skaji: TLS/DNS/reverse proxy/IP e klientit):** pjesa e KODIT dhe e konfigurimit të skajit është **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** (nginx real në Docker lokal, pa TLS/DNS/LB real). **Mbeten të jashtme:** DNS real, certifikata, LB/WAF real, CIDR-t reale të proxy-ve, rrjeti/firewall-i, emrat reale të hostit, validimi real i TLS, aktivizimi real i HSTS dhe dëshmia e provider-it. Shih §0c.
 
+**Përditësim M11-I/F-03 (nisja/sekretet në prodhim):** pjesa e nisjes dhe e sekreteve e GAP-17 është **RESOLVED / LOCALLY VERIFIED** (gate-t kushtëzuese në `production_problems()` dhe te Central; CI PENDING). **2FA e detyrueshme e stafit Central mbetet EXTERNAL / POLICY DECISION REQUIRED** — GAP-17 si i tërë NUK është mbyllur. Shih §0d.
+
+> **Shënim numërimi:** etiketat F-01/F-02/F-03 të milestone-s së ekzekutimit (F-01 paketimi i Central, F-02 TLS/reverse proxy/trusted proxy, F-03 siguria e nisjes/sekreteve) janë të ndryshme nga etiketat e vjetra F-xx të «veprimeve të ardhshme» të shkruara fillimisht në §1. Etiketat e §1 janë **legacy** dhe nuk e udhëheqin më numërimin; historiku nuk është rinumëruar.
+
 ## 0. Si lexohet ky dokument
 
 - Klasifikimet: **VERIFIED** (provuar në repo ose në validimet M11-H), **PARTIALLY VERIFIED**, **NOT VERIFIED**, **EXTERNAL EVIDENCE REQUIRED** (kërkon infrastrukturë, llogari ose njerëz jashtë repo-së).
@@ -70,6 +74,28 @@ Modeli i vendosur: terminator i JASHTËM i TLS/LB/WAF; nginx-et mbeten HTTP-only
 **Mbeten të jashtme (asnjë nuk është mbyllur):** emrat/DNS real dhe rekordet; certifikatat (SAN, rinovim, TLS ≥ 1.2); LB/WAF/CDN real dhe sjellja e tij për XFF/Proto; CIDR-t reale (`*_TRUSTED_PROXY_CIDRS`, `CENTRAL_S2S_ALLOW_CIDRS`, `*_INTERNAL_ALLOW_CIDRS`); firewall/rrjeti; ridrejtimi 80→443 dhe HSTS te terminatori; vlerat reale të `limit_req` për provider-in; provat me provider real; testi me dy IP të jashtme përmes terminatorit real.
 
 **Pika të dokumentuara për operatorin:** (1) me proxy në host dhe port të publikuar në loopback, nginx sheh adresën e gateway-t Docker, jo `127.0.0.1`; (2) `*_INTERNAL_ALLOW_CIDRS` ka parazgjedhje `172.16.0.0/12` (rrjetet e parazgjedhura Docker): rregulloje nëse rrjeti yt është tjetër; (3) `CENTRAL_S2S_ALLOW_CIDRS` duhet të jetë IP-ja e Enterprise ashtu siç e sheh nginx pas `real_ip`; (4) `hops>1` nuk është zgjidhje e përgjithshme: normalizimi bëhet nga nginx.
+
+## 0d. Përditësim M11-I/F-03 — siguria e nisjes dhe e sekreteve
+
+Zbatuar (kod + teste, pa ndryshuar algoritmet e nënshkrimit, provider-in apo rrugëzimin): `Settings._startup_safety_problems()` te `app/core/config.py` (thirret nga `production_problems()`) dhe `Settings.production_problems()` te `apps/central/core/config.py` (thirret nga `create_app` në prodhim). Të gjitha janë **të kushtëzuara nga funksioni i aktivizuar**; asnjë kredencial provider-i nuk bëhet global i detyrueshëm.
+
+| Gate | Kushti | Dev/test |
+|---|---|---|
+| `SMS_TRUSTED_PROXY_HOPS` = 1 | gjithmonë në prodhim (topologjia F-02: hops=0 e përmbledh çdo klient te IP e proxy-t; >1 nuk është topologji e miratuar) | e pandryshuar (parazgjedhja 0) |
+| `SMS_DLR_SECRETS[<SMS_HTTP_PROVIDER_NAME>]` i fortë (≥ 24 kar., jo `change/dev/test/demo…`) | vetëm kur provider-i HTTP është aktiv (`SMS_HTTP_PROVIDER_URL` i vendosur) | jo |
+| Çdo hyrje tjetër e `SMS_DLR_SECRETS` e vendosur nuk është e dobët/placeholder | kur ka hyrje jo-bosh | jo |
+| `SMS_TWILIO_ACCOUNT_SID` dhe `SMS_TWILIO_AUTH_TOKEN` së bashku ose asnjëri | gjysmë-konfigurimi e çaktivizon provider-in heshturazi | jo |
+| `SMS_SMTP_HOST` | vetëm kur `SMS_EMAIL_PROVIDER=smtp` | jo |
+| `CENTRAL_TRUSTED_PROXY_HOPS` = 1 | gjithmonë në prodhim (vetëm log i IP-së) | jo |
+| `CENTRAL_SMTP_HOST` + `CENTRAL_SMTP_FROM` | vetëm kur `CENTRAL_MAILER=smtp` | jo |
+
+Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi admin i dobët, `https` publik, `fake` email/pagesë, gate-t CP/authority; Central: sekret auth ≥ 32, auto-regjistrim i pa-verifikuar, mailer/bot `fake`, jo-PG. Mesazhet e gabimit emërtojnë vetëm variablat (provuar: asnjë vlerë sekrete në përjashtim). Twilio verifikohet me `X-Twilio-Signature` (jo `dlr_secrets`) — nuk kërkohet sekret HMAC për të.
+
+**Teste:** `tests/test_f03_startup_safety.py` (26). Tri teste ekzistuese që izolonin gate-t e tjera të Central (`test_central_packaging.py` ×2, `test_central_auth.py` ×1) tani vendosin `trusted_proxy_hops=1`.
+
+**Ndarja e GAP-17:** (a) mbrojtjet e nisjes/sekreteve — **RESOLVED / LOCALLY VERIFIED; CI PENDING**; (b) 2FA e detyrueshme e stafit Central — **EXTERNAL / POLICY DECISION REQUIRED** (nuk zbatohet në F-03; kontrolli kompensues SC-06 mbetet).
+
+**Mbeten të jashtme:** vlerat reale të sekreteve, kredencialet e provider-it, vendimi i politikës 2FA, CI jeshile.
 
 ## 1. Veprimet e ardhshme që heqin bllokuesit (jo të zbatuara)
 
@@ -348,6 +374,7 @@ Modeli i vendosur: terminator i JASHTËM i TLS/LB/WAF; nginx-et mbeten HTTP-only
 | Pronari / varësia | Inxhinieria + sigurinë — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | Jo bllokues vetëm nëse kontrolli kompensohet procedurialisht në cutover (checklist). |
 | Status pas F-01 | **PARTIALLY IMPLEMENTED.** Në prodhim Central refuzon SQLite/jo-PostgreSQL (nisja) dhe migrimi refuzon SQLite dhe një DB Enterprise; gate-t ekzistuese nuk u dobësuan. **Mbeten:** `SMS_DLR_SECRETS`/provider; 2FA e stafit Central. |
+| Status pas F-03 | **Nisja/sekretet: RESOLVED / LOCALLY VERIFIED; CI PENDING** (§0d: proxy hops, `SMS_DLR_SECRETS` kushtëzuar nga provider-i HTTP aktiv, Twilio gjysmë-konfigurim, SMTP, Central hops/SMTP). **2FA e stafit Central: EXTERNAL / POLICY DECISION REQUIRED** — GAP-17 nuk mbyllet i tërë. |
 
 ## 3. Kontradiktat e gjetura në dokumentacion
 
@@ -377,7 +404,7 @@ Rendi është i detyrueshëm: një rresht nuk mund të mbyllet para varësive t�
 | 7 | GAP-02 Central frontend | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** | 6 | Build nga imazhi, 0 gabime console |
 | 8 | GAP-03 Proxy për Central | Kod/konfigurim — **IMPLEMENTED / LOCALLY VERIFIED** | 2, 6 | Matrica e rrugëve |
 | 9 | GAP-14 CI, GAP-15 compose | Kod — **PARTIALLY IMPLEMENTED; CI PENDING** | 6, 7 | CI jeshile; staging healthy |
-| 10 | GAP-17 Mbrojtje nisjeje/2FA Central | Kod — **PARTIALLY IMPLEMENTED** (SQLite guard); 2FA/provider të hapura | 6 | Teste refuzimi |
+| 10 | GAP-17 Mbrojtje nisjeje/2FA Central | Kod — nisja/sekretet **RESOLVED / LOCALLY VERIFIED** (F-03); 2FA Central: **POLICY DECISION REQUIRED** | 6 | Teste refuzimi |
 | 11 | GAP-06 Backup/restore Central | EXTERNAL | 5, 6 | Restore Central i provuar |
 | 12 | GAP-12 Monitorim/alarme | EXTERNAL | 1 | Test alarmi i kaluar |
 | 13 | GAP-16 Procese të planifikuara Central | EXTERNAL | 6, 12 | Heartbeat + `due_unprocessed=0` |

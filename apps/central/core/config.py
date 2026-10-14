@@ -97,5 +97,19 @@ class Settings(BaseSettings):
     issuer_address: str = Field(default="Street 1, City, Country", max_length=300)
     issuer_tax_id: str = Field(default="", max_length=40)
 
+    def production_problems(self) -> list[str]:
+        """M11-I/F-03: gate-t shtesë të nisjes (mesazhe pa vlera sekrete)."""
+        bad = []
+        if self.trusted_proxy_hops != 1:
+            bad.append(
+                "CENTRAL_TRUSTED_PROXY_HOPS must be 1 in production "
+                "(nginx real_ip topology; only used for login/internal IP logging)"
+            )
+        if self.mailer == "smtp" and not (self.smtp_host and self.smtp_from):
+            bad.append(
+                "CENTRAL_SMTP_HOST and CENTRAL_SMTP_FROM must be set when CENTRAL_MAILER=smtp"
+            )
+        return bad
+
 
 settings = Settings()

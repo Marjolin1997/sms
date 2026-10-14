@@ -323,6 +323,8 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
 
 ## 7. PROVIDER / DLR
 
+> **M11-I/F-03:** nisja në prodhim refuzon tani `SMS_TRUSTED_PROXY_HOPS`/`CENTRAL_TRUSTED_PROXY_HOPS` ≠ 1, sekret DLR të dobët për provider-in HTTP aktiv, Twilio gjysmë-konfigurimi dhe SMTP pa host (§0d në gap analysis). Provuar lokalisht; vlerat reale mbeten EXTERNAL.
+
 - [ ] **PV-01** — Kredencialet e provider-it në vendin e miratuar.  
   Prova: Konfirmim nga pronari i sekreteve (pa shfaqur vlerat)  
   Pritet: konfirmim i regjistruar  
@@ -331,7 +333,7 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
 - [ ] **PV-02** — `SMS_DLR_SECRETS` i vendosur për provider-in aktiv.  
   Prova: Kontroll i pranisë së çelësit pa e shfaqur (p.sh. `python -c` që shfaq vetëm emrat e çelësave)  
   Pritet: emri i provider-it i pranishëm  
-  Klas.: PARTIALLY VERIFIED (s'validohet nga nisja)  
+  Klas.: VERIFIED LOKALISHT (F-03: nisja në prodhim refuzon `SMS_DLR_SECRETS` që mungon/është i dobët kur provider-i HTTP është aktiv); vlera reale EXTERNAL  
   NO-GO/abort: mungon → NO-GO
 - [ ] **PV-03** — Callback i nënshkruar pranohet, i pasaktë refuzohet.  
   Prova: Dy POST te `/webhooks/dlr/<provider>`: një me HMAC të saktë, një me të gabuar  
@@ -407,7 +409,7 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
 - [ ] **SC-06** — Kontroll kompensues për Central pa 2FA.  
   Prova: Vendim i shkruar (VPN/IP allow-list për `/admin/*`, fjalëkalime të gjata)  
   Pritet: vendim i firmosur  
-  Klas.: PARTIALLY VERIFIED (nuk u gjet 2FA në kod)  
+  Klas.: EXTERNAL / POLICY DECISION REQUIRED (nuk u gjet 2FA në kod; F-03 nuk e zbaton)  
   NO-GO/abort: pa vendim → NO-GO
 
 ## 10. CANARY

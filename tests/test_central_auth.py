@@ -232,6 +232,7 @@ def test_login_is_unavailable_without_a_configured_secret(api, monkeypatch):
 
 def test_production_refuses_to_start_without_an_auth_secret(monkeypatch):
     monkeypatch.setattr(settings, "env", "production")
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)  # F-03: gate i ndarë
     monkeypatch.setattr(settings, "auth_secret", "")
     with pytest.raises(RuntimeError, match="CENTRAL_AUTH_SECRET"):
         create_app(create_engine("sqlite://"))
