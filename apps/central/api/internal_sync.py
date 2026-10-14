@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from apps.central.api.deps import get_db
+from apps.central.core.request_ip import client_ip_or_unknown
 from apps.central.services import service_auth, sync_feed
 
 router = APIRouter(prefix="/internal/sync")
@@ -15,7 +16,7 @@ SCOPE = "sync:read"
 
 
 def _ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return client_ip_or_unknown(request)
 
 
 def service_context(

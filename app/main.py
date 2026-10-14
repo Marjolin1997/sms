@@ -29,7 +29,9 @@ _RID_CHARS = set(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678
 
 
 class SecurityMiddleware:
-    """Kufi për madhësinë e trupit (përpara parsimit) dhe header-a sigurie standardë."""
+    """Kufi për madhësinë e trupit (përpara parsimit) dhe header-a sigurie standardë.
+
+    HSTS NUK emetohet këtu (M11-I/F-02): e zotëron shtresa që përfundon TLS."""
 
     def __init__(self, app):
         self.app = app
@@ -64,7 +66,6 @@ class SecurityMiddleware:
                     (b"x-content-type-options", b"nosniff"),
                     (b"cache-control", b"no-store"),
                     (b"referrer-policy", b"no-referrer"),
-                    (b"strict-transport-security", b"max-age=63072000; includeSubDomains"),
                     (b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'"),
                 ]
                 extra = [(k, v) for k, v in extra if k not in have]  # endpoint-i mund ta ketë vetë

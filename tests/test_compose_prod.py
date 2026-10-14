@@ -79,7 +79,10 @@ def test_compose_has_no_embedded_credentials_and_only_the_web_port_is_published(
         "web"
     }  # nisja e zakonshme: vetëm konsola Enterprise (Central është opt-in: profili `central`)
     assert COMPOSE["services"]["web"]["ports"] == ["127.0.0.1:8080:8080"]
-    assert COMPOSE["services"]["central-web"]["ports"] == ["127.0.0.1:8081:8081"]
+    assert COMPOSE["services"]["central-web"]["ports"] == [
+        "127.0.0.1:8081:8081",
+        "127.0.0.1:8082:8082",
+    ]
 
 
 def test_env_example_documents_the_m10_variables_with_safe_defaults():

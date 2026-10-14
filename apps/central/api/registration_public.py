@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from apps.central.api.deps import get_db
+from apps.central.core import request_ip
 from apps.central.core.config import settings
 from apps.central.core.errors import CentralError, Conflict, Invalid, TooManyRequests
 from apps.central.models.registration import (
@@ -117,15 +118,8 @@ def verification_state(row: RegistrationRequest) -> str:
 
 
 def client_ip(request: Request) -> str | None:
-    """IP vetëm për LOG (kufijtë IP jetojnë te proxy). XFF besohet vetëm sa hop-e të besuara."""
-    hops = settings.trusted_proxy_hops
-    if hops > 0:
-        chain = [
-            x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip()
-        ]
-        if len(chain) >= hops:
-            return chain[-hops][:45]
-    return request.client.host[:45] if request.client else None
+    """IP vetëm për LOG (kufijtë IP jetojnë te proxy). Logjika e përbashkët me Central login/internal dhe Enterprise (packages/netutil)."""
+    return request_ip.client_ip(request)
 
 
 def check_challenge(request: Request) -> None:

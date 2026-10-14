@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Requ
 from sqlalchemy.orm import Session
 
 from apps.central.api.deps import get_db
+from apps.central.core.request_ip import client_ip_or_unknown
 from apps.central.services import money_feed, money_reconciliation, service_auth, usage_reports
 
 router = APIRouter(prefix="/internal/money")
@@ -19,7 +20,7 @@ REPORT_SCOPE = "money:report"
 
 
 def _ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return client_ip_or_unknown(request)
 
 
 def _context(request: Request, authorization: str, scope: str) -> service_auth.ServiceContext:

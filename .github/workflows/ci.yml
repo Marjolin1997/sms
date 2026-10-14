@@ -152,6 +152,8 @@ jobs:
         run: |
           docker run --rm --add-host api:127.0.0.1 sms-web nginx -t
           docker run --rm --add-host central-api:127.0.0.1 sms-web-central nginx -t
+      - name: Edge proxy behaviour on real nginx (real_ip, XFF/Proto, headers, 429, webhooks, health, /internal)
+        run: EDGE_WEB_IMAGE=sms-web EDGE_CENTRAL_WEB_IMAGE=sms-web-central python3 e2e/edge/check_edge.py
       - name: Production compose renders (templates only, no secrets)
         run: |
           cp .env.example .env

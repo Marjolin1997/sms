@@ -145,18 +145,18 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 | Pronari / varësia | Inxhinieria — NUK ËSHTË CAKTUAR |
 | GO/NO-GO | NO-GO derisa CI të jetë jeshile mbi paketimin dhe fazat 2/4 të Central të kenë dëshmi; TLS/proxy real (Faza 10) është kusht i veçantë. |
 
-## Faza 10 — Proxy dhe TLS
+## Faza 10 — Proxy, TLS dhe skaji (M11-I/F-02)
 
 | Fusha | Përmbajtja |
 |---|---|
-| Klasifikimi / evidenca | Konfigurimi nginx: VERIFIED (`nginx -t` provuar lokalisht për të dy nginx-et). TLS/DNS/LB real: EXTERNAL EVIDENCE REQUIRED. **E hapur (N-1, C-3):** nginx Enterprise humb CSP/nosniff/X-Frame/HSTS te `/` dhe `/assets/` dhe dërgon HSTS mbi HTTP; nginx Central s'ka HSTS qëllimisht (TLS jashtë). |
-| Rreziku | TLS i gabuar/mungues; IP e klientit e gabuar (kyçje masive me hops=0 ose spoofing me hops të gabuar). |
-| Parakusht | GAP-07, GAP-08. |
-| Validim para prodhimit | `nginx -t` (në imazhin `web`); `curl -vI https://<domen>/healthz` zinxhir i vlefshëm; test me dy IP (shih GAP-08). |
-| Veprimi (NUK ekzekutohet në M11-I) | Vendos DNS pas provës TLS; HSTS vetëm kur TLS punon. |
-| Abort / rikthim | Zinxhir i pavlefshëm ose 429 për përdorues legjitim: abort; kthe DNS/LB. |
+| Klasifikimi / evidenca | Konfigurimi i skajit: **IMPLEMENTED / LOCALLY VERIFIED** (nginx real: `real_ip`, XFF/Proto, header-at, 429, webhooks, health, `/internal`; 64 kontrolle; CI PENDING). C-3 dhe N-1 RESOLVED. TLS/DNS/LB/CIDR reale: EXTERNAL EVIDENCE REQUIRED. |
+| Rreziku | TLS i gabuar/mungues; CIDR e gabuar e proxy-t (IP e gabuar, kyçje masive, ose besim i tepërt); HSTS i aktivizuar para HTTPS-së së provuar. |
+| Parakusht | GAP-07, GAP-08; terminator i jashtëm i TLS (80→443, SAN për `enterprise.`, `central.`, `central-internal.`, TLS ≥ 1.2) që shton XFF dhe vendos `X-Forwarded-Proto: https`; `.env`: `WEB_TRUSTED_PROXY_CIDRS`, `CENTRAL_WEB_TRUSTED_PROXY_CIDRS`, `CENTRAL_S2S_ALLOW_CIDRS` (RUNBOOK §2). |
+| Validim para prodhimit | `python3 e2e/edge/check_edge.py` mbi imazhet e lëshimit; `nginx -t`; në staging me terminatorin: test me dy IP, Proto, `/readyz` 403 publikisht, `/internal` vetëm nga Enterprise, callback i nënshkruar; checklist EG-01..EG-10. |
+| Veprimi (NUK ekzekutohet në M11-I) | 1) Plotëso CIDR-t. 2) Nis/rinis `web` dhe `central-web` (`up -d --force-recreate web` / `central-web`). 3) Vendos DNS pas provës së TLS. 4) HSTS te terminatori vetëm sipas RUNBOOK §2b (`max-age=300` → ngritje graduale). |
+| Abort / rikthim | Zinxhir i pavlefshëm, IP e gabuar ose 429 për përdorues legjitim: abort; kthe CIDR-t e mëparshme dhe rinis nginx; kthe DNS/LB; HSTS: `max-age=0` te terminatori. |
 | Pronari / varësia | Infrastruktura — NUK ËSHTË CAKTUAR |
-| GO/NO-GO | GO vetëm me të dyja provat. |
+| GO/NO-GO | GO vetëm me EG-01..EG-10 të plotësuara dhe provën me dy IP përmes terminatorit real. |
 
 ## Faza 11 — Provider dhe DLR
 

@@ -35,7 +35,7 @@ Pronarët janë **NUK ËSHTË CAKTUAR** (role të propozuara: Operacione, DBA, S
 |---|---|---|---|---|---|---|---|
 | A-01 | Norma 5xx e API-së | Log nginx (`$status`; default `combined` e ka) — agregimi EXT | ≥ 5% për 5 min → S1; ≥ 1% për 15 min → S2 | S1/S2 | Operacione | RB §1 RT-03; RB §3 | PARTIALLY VERIFIED (statusi në log; agregimi EXT) |
 | A-02 | Latenca e API-së (p95) | Log nginx me `$request_time` (PROPOSED: shtohet `log_format`) | p95 > 1 s për 10 min → S2 (M11-H: faqet interaktive 11–200 ms në PG sintetike) | S2 | Operacione | RUN §6; hetim me `X-Request-ID` | NOT VERIFIED (konfigurimi mungon) |
-| A-03 | `/readyz` ≠ ready | Probe e jashtme çdo 30 s në `/readyz` (Enterprise dhe Central) | 2 dështime radhazi → S1 | S1 | Operacione | RB §3, §4 | VERIFIED (endpoint); probe EXT |
+| A-03 | Gjallëria e skajit dhe gatishmëria e aplikacionit | Probe e jashtme çdo 30 s në `/nginx-health` (vetëm gjallëria e nginx); `/readyz` vetëm nga rrjeti i brendshëm (publikisht 403, M11-I/F-02) | 2 dështime radhazi → S1 | S1 | Operacione | RB §3, §4 | VERIFIED LOKALISHT (endpoint-et); probe EXT |
 | A-04 | Rritje e 429 (lockout) | Log nginx 429 | > 20 përgjigje 429 në 5 min nga IP të ndryshme → S2 (shenjë e `TRUSTED_PROXY_HOPS` të gabuar) | S2 | Siguri | RB §7; `m11i-secrets-and-access-plan.md` | PARTIALLY VERIFIED |
 
 ### 2.2 Workers, radhë, UNKNOWN

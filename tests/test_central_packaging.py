@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = (ROOT / "Dockerfile").read_text()
 COMPOSE = yaml.safe_load((ROOT / "docker-compose.prod.yml").read_text())
 SVC = COMPOSE["services"]
-NGINX = (ROOT / "deploy" / "nginx.central.conf").read_text()
 WEB_DOCKERFILE = (ROOT / "deploy" / "web-central.Dockerfile").read_text()
 ENV_EXAMPLE = (ROOT / ".env.central.example").read_text()
 JOBS = ("central-billing-run", "central-send-notifications", "central-tool")
@@ -90,7 +89,13 @@ def test_dockerignore_and_gitignore_keep_central_env_and_secrets_out():
 def test_central_services_exist_and_only_central_web_publishes_a_port():
     assert {"central-migrate", "central-api", "central-web", *JOBS} <= set(SVC)
     published = {n: s["ports"] for n, s in SVC.items() if s.get("ports")}
-    assert published == {"web": ["127.0.0.1:8080:8080"], "central-web": ["127.0.0.1:8081:8081"]}
+    assert published == {
+        "web": ["127.0.0.1:8080:8080"],
+        "central-web": [
+            "127.0.0.1:8081:8081",
+            "127.0.0.1:8082:8082",
+        ],  # 8081 publik stafi, 8082 i brendshëm /internal
+    }
     assert not SVC["central-api"].get("ports") and not SVC["central-api"].get("expose")
 
 
@@ -107,7 +112,7 @@ def test_plain_compose_up_is_enterprise_only_and_central_is_profile_gated():
     # porti i publikuar në nisjen e zakonshme: vetëm konsola Enterprise; Central publikon vetëm central-web (profili `central`)
     assert {n for n in always_on if SVC[n].get("ports")} == {"web"}
     assert {n for n in SERVING if SVC[n].get("ports")} == {"central-web"}
-    assert SVC["central-web"]["ports"] == ["127.0.0.1:8081:8081"]
+    assert SVC["central-web"]["ports"] == ["127.0.0.1:8081:8081", "127.0.0.1:8082:8082"]
     assert not any(SVC[n].get("ports") for n in JOBS)
 
 
@@ -268,75 +273,15 @@ def test_enterprise_services_keep_their_env_file_and_image_target():
         )  # `build: .` = stage-i i fundit (Enterprise)
 
 
-# --- nginx Central ------------------------------------------------------------------------------------------
-
-
-def _locations() -> dict[str, str]:
-    out = {}
-    for m in re.finditer(r"(?m)^\s*location\s+([^{\n]+?)\s*\{", NGINX):
-        depth, j = 1, m.end()
-        while depth:
-            depth += {"{": 1, "}": -1}.get(NGINX[j], 0)
-            j += 1
-        out[m.group(1).strip()] = NGINX[m.end() : j - 1]
-    return out
-
-
-def test_central_nginx_routes_only_central_paths_to_the_central_api():
-    loc = _locations()
-    proxied = {k for k, v in loc.items() if "proxy_pass" in v}
-    assert proxied == {"~ ^/auth(/|$)", "~ ^/(admin(/|$)|healthz$|readyz$)"}
-    assert re.findall(r"proxy_pass\s+(\S+);", NGINX) == ["http://central_api"] * 2
-    assert re.search(r"upstream central_api\s*\{\s*server central-api:8001;", NGINX)
-    assert "/v1" not in "".join(v for v in loc.values() if "proxy_pass" in v)
-
-
-def test_central_nginx_denies_enterprise_and_internal_families_and_falls_back_to_the_spa():
-    loc = _locations()
-    deny = loc["~ ^/(v1|webhooks|u|internal|registration)(/|$)"]
-    assert "return 404" in deny and "proxy_pass" not in deny
-    assert "try_files $uri /index.html" in loc["/"]
-    for path in ("/v1/x", "/webhooks/dlr/x", "/internal/sync/changes", "/registration"):
-        assert re.match(r"^/(v1|webhooks|u|internal|registration)(/|$)", path)
-        assert not re.match(r"^/(admin(/|$)|healthz$|readyz$)|^/auth(/|$)", path)
-
-
-def test_central_nginx_is_plain_http_without_hsts_and_sets_forwarding_headers_deliberately():
-    assert (
-        "listen 8081;" in NGINX
-        and "ssl" not in NGINX.lower().replace("# ", "").split("server {")[1]
-    )
-    assert not re.search(r"(?m)^\s*add_header\s+Strict-Transport-Security", NGINX)
-    for h in (
-        "X-Forwarded-For $remote_addr",
-        "X-Forwarded-Proto $scheme",
-        "X-Request-ID $request_id",
-    ):
-        assert NGINX.count(f"proxy_set_header {h};") == 2
-    assert "$proxy_add_x_forwarded_for" not in NGINX  # SHKRUHET, jo shtohet (hops=1 i saktë)
-    assert "Content-Security-Policy" in NGINX and "frame-ancestors 'none'" in NGINX
-
-
-def test_central_nginx_security_headers_survive_in_every_location_that_sets_its_own_headers():
-    # nginx: `add_header` në location zëvendëson atë të serverit; pa përsëritje SPA shërbehej pa CSP/X-Frame (gjetur në validimin real)
-    needed = (
-        "X-Content-Type-Options",
-        "Referrer-Policy",
-        "X-Frame-Options",
-        "Content-Security-Policy",
-    )
-    own = {k: v for k, v in _locations().items() if "add_header" in v}
-    assert {"/", "/assets/"} <= set(own)
-    for name, body in own.items():
-        for h in needed:
-            assert f"add_header {h} " in body, (name, h)
-    assert "limit_req_status 429;" in NGINX
+# --- nginx Central: tests te tests/test_edge_nginx.py (parsues i bllokut, Enterprise + Central) -------------------
 
 
 def test_central_web_image_builds_the_central_frontend_only_with_no_build_secrets():
     assert "COPY frontend-central/" in WEB_DOCKERFILE and "npm ci" in WEB_DOCKERFILE
     assert "npm run build" in WEB_DOCKERFILE
-    assert "COPY deploy/nginx.central.conf" in WEB_DOCKERFILE and "EXPOSE 8081" in WEB_DOCKERFILE
+    assert (
+        "COPY deploy/nginx.central.conf" in WEB_DOCKERFILE and "EXPOSE 8081 8082" in WEB_DOCKERFILE
+    )
     assert "COPY frontend/" not in WEB_DOCKERFILE and "ARG " not in WEB_DOCKERFILE
     assert "ENV " not in WEB_DOCKERFILE
 

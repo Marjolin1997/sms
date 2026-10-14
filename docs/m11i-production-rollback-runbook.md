@@ -92,19 +92,19 @@ Pragjet janë **PROPOSED** (asnjë nuk është verifikuar në prodhim) përveç 
 | Pronari | Operatori + pronari i provider-it — NUK ËSHTË CAKTUAR |
 | GO/NO-GO | `queue_readiness` pa FAIL; asnjë mesazh i ri në `sending`. |
 
-## 7. Rikthimi i DNS / proxy / TLS
+## 7. Rikthimi i DNS / proxy / TLS / HSTS
 
 | Fusha | Përmbajtja |
 |---|---|
-| Gjendja | Nginx i vetëm me `127.0.0.1:8080`; DNS/LB/TLS nuk janë në repo. |
-| Klasifikimi | EXTERNAL EVIDENCE REQUIRED. |
-| Rreziku | DNS me TTL të gjatë vonon rikthimin; HSTS (max-age 63072000) bën që shfletuesit të refuzojnë HTTP pas aktivizimit. |
-| Parakusht | TTL i ulur para cutover-it (PROPOSED ≤ 300 s); konfigurimi i mëparshëm i proxy-t i ruajtur. |
-| Validim para prodhimit | Provë e rikthimit të DNS në staging; `nginx -t` mbi konfigurimin e mëparshëm. |
-| Veprimi | Ktheje DNS/LB te objektivi i mëparshëm; ose rikthe konfigurimin nginx të mëparshëm dhe `nginx -s reload`. Për 429 masiv: rikthe `SMS_TRUSTED_PROXY_HOPS`/`CENTRAL_TRUSTED_PROXY_HOPS` në vlerën e provuar dhe rinis shërbimin. |
-| Abort | — |
+| Gjendja | Nginx HTTP-only (`127.0.0.1:8080`, `:8081`, `:8082`); CIDR-t e besuara vijnë nga `.env` (`WEB_TRUSTED_PROXY_CIDRS`, `CENTRAL_WEB_TRUSTED_PROXY_CIDRS`, `CENTRAL_S2S_ALLOW_CIDRS`, `*_INTERNAL_ALLOW_CIDRS`); HSTS vetëm te terminatori i TLS. DNS/LB/TLS nuk janë në repo. |
+| Klasifikimi | Mekanizmat: VERIFIED LOKALISHT (M11-I/F-02). Rikthimi real: EXTERNAL EVIDENCE REQUIRED. |
+| Rreziku | DNS me TTL të gjatë vonon rikthimin; HSTS i dhënë nga terminatori mbahet mend nga shfletuesit deri në skadimin e `max-age`; CIDR e gabuar e proxy-t jep IP të gabuar (kyçje masive) ose besim të tepërt. |
+| Parakusht | TTL i ulur para cutover-it (PROPOSED ≤ 300 s); `.env` dhe konfigurimi i terminatorit të mëparshëm të ruajtur; HSTS i filluar me `max-age` të ulët (RUNBOOK §2b). |
+| Validim para prodhimit | Provë e rikthimit të DNS dhe e CIDR-ve në staging; `python3 e2e/edge/check_edge.py`. |
+| Veprimi | **DNS/LB:** ktheje te objektivi i mëparshëm. **CIDR/IP e gabuar (429 masiv ose IP e proxy-t te log-et):** korrigjo CIDR-n te `.env` dhe `docker compose … up -d --force-recreate web central-web` (nginx e rigjeneron skedarin në nisje; pa ndryshim kodi). **HSTS:** te terminatori `max-age=0`; asgjë te nginx/aplikacioni. **Enterprise→Central:** korrigjo `CENTRAL_S2S_ALLOW_CIDRS` (bosh = askush, i sigurt) dhe rinis `central-web`; workers CP riprovojnë (fail-static). **Rikthim imazhi nginx:** `up -d --force-recreate` me imazhin e mëparshëm. |
+| Abort | Çdo ndryshim CIDR që e bën `/readyz` ose `/internal` të arritshëm nga publiku. |
 | Pronari | Infrastruktura — NUK ËSHTË CAKTUAR |
-| GO/NO-GO | Provat §9 për IP-në e klientit dhe TLS kalojnë. |
+| GO/NO-GO | Provat §9 dhe EG-03/EG-05/EG-08 të checklist-it kalojnë. |
 
 ## 8. Rikthimi i workerëve dhe i autoriteteve
 

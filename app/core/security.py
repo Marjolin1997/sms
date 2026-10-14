@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.timeutil import as_utc
 from app.models.admin import ApiKey, AuthFailure, KeyStatus
+from packages import netutil
 
 ROLE_PERMS: dict[str, set[str]] = {
     "superadmin": {"*"},
@@ -82,15 +83,12 @@ def _unauthorized() -> HTTPException:
 
 
 def client_ip(request: Request) -> str:
-    """IP e klientit. X-Forwarded-For besohet vetëm sa proxy të besuar deklarohen."""
-    hops = settings.trusted_proxy_hops
-    if hops > 0:
-        chain = [
-            x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip()
-        ]
-        if len(chain) >= hops:
-            return chain[-hops][:45]
-    return (request.client.host if request.client else "unknown")[:45]
+    """IP e klientit; X-Forwarded-For besohet vetëm sa proxy të besuar (packages/netutil)."""
+    peer = request.client.host if request.client else None
+    ip = netutil.client_ip(
+        peer, request.headers.get("x-forwarded-for", ""), settings.trusted_proxy_hops
+    )
+    return ip or "unknown"
 
 
 def ip_allowed(ip: str, allowed_cidrs: str | None) -> bool:

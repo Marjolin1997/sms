@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from apps.central.api.deps import current_user, get_db
 from apps.central.core import tokens
 from apps.central.core.errors import AuthenticationFailed
+from apps.central.core.request_ip import client_ip_or_unknown
 from apps.central.models.user import CentralUser
 from apps.central.services import users
 
@@ -21,7 +22,7 @@ class LoginIn(BaseModel):
 
 @router.post("/token")
 def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip_or_unknown(request)
     if not tokens.configured():
         raise HTTPException(
             503, {"code": "auth_not_configured", "message": "authentication is unavailable"}

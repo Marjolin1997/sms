@@ -204,7 +204,12 @@ services:
       dockerfile: deploy/web.Dockerfile
     restart: unless-stopped
     depends_on: [api]
-    ports: ["127.0.0.1:8080:8080"]  # vendose TLS/load balancer përpara këtij porti
+    # M11-I/F-02: origjinë HTTP-only pas terminatorit të jashtëm të TLS (LB/WAF/proxy). CIDR-t vijnë nga `.env` (interpolim compose; shih `.env.example`).
+    # Parazgjedhja: asnjë proxy i besuar; /healthz dhe /readyz vetëm nga loopback dhe rrjeti i parazgjedhur Docker (host -> port i publikuar).
+    environment:
+      EDGE_TRUSTED_PROXY_CIDRS: ${WEB_TRUSTED_PROXY_CIDRS:-}
+      EDGE_INTERNAL_ALLOW_CIDRS: ${WEB_INTERNAL_ALLOW_CIDRS:-172.16.0.0/12}
+    ports: ["127.0.0.1:8080:8080"]  # terminatori i TLS/LB vendoset para këtij porti; mos e publiko në 0.0.0.0
 
   # ----- Central (staf admin/operator) -----
   # Hapi 1 (EKSPLICIT, i dukshëm): migrimi i Central. Kërkon që DB `sms_central` të ekzistojë (hap infrastrukture) dhe refuzon një DB Enterprise.
@@ -242,7 +247,13 @@ services:
     restart: unless-stopped
     depends_on:
       central-api: {condition: service_healthy}
-    ports: ["127.0.0.1:8081:8081"]
+    # 8081 = sipërfaqja publike e stafit; 8082 = listener i BRENDSHËM Enterprise->Central (/internal/* me allowlist; parazgjedhja: askush).
+    # Të dy vetëm në loopback: terminatori i TLS i ekspozon veçmas (central.<domen> dhe emri i brendshëm central-internal.<domen>).
+    environment:
+      EDGE_TRUSTED_PROXY_CIDRS: ${CENTRAL_WEB_TRUSTED_PROXY_CIDRS:-}
+      EDGE_INTERNAL_ALLOW_CIDRS: ${CENTRAL_WEB_INTERNAL_ALLOW_CIDRS:-172.16.0.0/12}
+      EDGE_S2S_ALLOW_CIDRS: ${CENTRAL_S2S_ALLOW_CIDRS:-}
+    ports: ["127.0.0.1:8081:8081", "127.0.0.1:8082:8082"]
 
   # ----- Komanda të planifikuara Central (profili `central-jobs`; ASNJË nuk niset me `up -d` të zakonshëm) -----
   # Central s'ka scheduler: operatori i nis me `docker compose --profile central-jobs run --rm <shërbimi>` (cron/systemd i jashtëm).

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from apps.central.api.deps import get_db
+from apps.central.core.request_ip import client_ip_or_unknown
 from apps.central.services import billing_usage, service_auth
 
 router = APIRouter(prefix="/internal/billing")
@@ -18,7 +19,7 @@ REPORT_SCOPE = "billing:report"
 
 
 def _ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return client_ip_or_unknown(request)
 
 
 def report_context(

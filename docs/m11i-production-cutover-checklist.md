@@ -125,6 +125,61 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   Klas.: EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: nën prag → NO-GO
 
+## 3b. EDGE (TLS / DNS / reverse proxy / IP e klientit — M11-I/F-02)
+
+Modeli: terminator i jashtëm i TLS; nginx HTTP-only; `hops=1` pas `real_ip`; HSTS vetëm te terminatori. Prova lokale: `python3 e2e/edge/check_edge.py` (64 kontrolle, nginx real) dhe compose real; **asnjë provë me terminator, DNS, certifikatë ose CIDR real nuk ekziston**.
+
+- [ ] **EG-01** — Imazhet e lëshimit kalojnë provën e skajit.  
+  Prova: `EDGE_WEB_IMAGE=<imazhi web> EDGE_CENTRAL_WEB_IMAGE=<imazhi web central> python3 e2e/edge/check_edge.py`  
+  Pritet: `… checks passed, 0 failed`  
+  Klas.: VERIFIED LOKALISHT; CI PENDING  
+  NO-GO/abort: ndonjë FAIL → NO-GO
+- [ ] **EG-02** — CIDR-t e proxy-ve të besuara janë të dhëna nga operatori, jo `/0`, jo bosh kur ka proxy.  
+  Prova: `docker compose … logs web central-web | grep edge-cidrs` dhe `.env` (vetëm emrat/vlerat jo-sekrete)  
+  Pritet: `trusted_proxies=N` me N ≥ 1 sipas topologjisë; `WEB_TRUSTED_PROXY_CIDRS`/`CENTRAL_WEB_TRUSTED_PROXY_CIDRS` = rrjetet e terminatorit; asnjë `/0`  
+  Klas.: VERIFIED LOKALISHT (mekanizmi); vlerat reale EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: bosh me terminator para nginx (IP e gabuar, kyçje masive) ose CIDR e gjerë → NO-GO
+- [ ] **EG-03** — IP e klientit e saktë përmes terminatorit real (dy IP të jashtme).  
+  Prova: nga IP-A dërgo 21 çelësa të gabuar te `https://enterprise.<domen>/v1/me`; pastaj nga IP-B një kërkesë me çelës të vlefshëm; kontrollo log-un/audit për IP-të  
+  Pritet: 429 vetëm për IP-A; IP-B pranohet; IP-të e regjistruara = IP-të reale; `SMS_TRUSTED_PROXY_HOPS=1` dhe `CENTRAL_TRUSTED_PROXY_HOPS=1`  
+  Klas.: EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: IP-ja e terminatorit te log-u ose IP-B e bllokuar → NO-GO
+- [ ] **EG-04** — `X-Forwarded-Proto` i besuar.  
+  Prova: një kërkesë përmes terminatorit dhe një direkt te nginx me `X-Forwarded-Proto: https` të falsifikuar (nga IP jo e besuar)  
+  Pritet: aplikacioni sheh `https` vetëm te e para; `http` te e dyta  
+  Klas.: VERIFIED LOKALISHT (nginx real); terminatori real EXTERNAL  
+  NO-GO/abort: falsifikimi pranohet → NO-GO
+- [ ] **EG-05** — HSTS absent nga origjina.  
+  Prova: `curl -sI http://127.0.0.1:8080/ http://127.0.0.1:8080/assets/x.js http://127.0.0.1:8081/ | grep -i strict-transport`  
+  Pritet: asnjë rresht; HSTS te terminatori vetëm sipas RUNBOOK §2b (fillon `max-age=300`)  
+  Klas.: VERIFIED LOKALISHT; aktivizimi te terminatori EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: HSTS nga origjina ose `includeSubDomains`/`preload` para konfirmimit → NO-GO
+- [ ] **EG-06** — Health publik minimal.  
+  Prova: nga jashtë `curl -s -o /dev/null -w '%{http_code}' https://<domen>/readyz` dhe `/healthz`; LB provon `/nginx-health`  
+  Pritet: 403 për `/readyz` dhe `/healthz`; 200 për `/nginx-health`  
+  Klas.: VERIFIED LOKALISHT; përmes domenit real EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: `/readyz` 200 publikisht → NO-GO
+- [ ] **EG-07** — Callback-et e provider-it arrijnë aplikacionin pa ndryshuar path/query/trup/nënshkrim.  
+  Prova: callback i nënshkruar nga provider-i (ose sandbox) te `https://enterprise.<domen>/webhooks/…`; `SMS_PUBLIC_BASE_URL` = origjina publike  
+  Pritet: 200 `applied`; nënshkrim i pasaktë 401; asnjë 429/503 gjatë batch-it të pritur  
+  Klas.: VERIFIED LOKALISHT (proxy + firma); provider real EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: 401 për nënshkrim të vlefshëm ose 429 gjatë batch-it legjitim → NO-GO
+- [ ] **EG-08** — Rruga e brendshme Enterprise→Central.  
+  Prova: `SMS_CP_BASE_URL=https://central-internal.<domen>`; nga Enterprise një kërkesë me kredencial shërbimi te `/internal/sync/changes`; nga një IP tjetër e jashtme e njëjta  
+  Pritet: nga Enterprise i lejuar: 200 (nënshkrimi i vlefshëm); nga IP tjetër 403; `https://central.<domen>/internal/…` 404; `CENTRAL_S2S_ALLOW_CIDRS` = IP-ja e Enterprise ashtu siç e sheh nginx  
+  Klas.: VERIFIED LOKALISHT (allowlist + 401 nga `central-api` pa token); rruga reale EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: `/internal` i arritshëm nga publiku → NO-GO
+- [ ] **EG-09** — Kufizimi kthen 429 dhe nuk bllokon callback-et.  
+  Prova: 400 kërkesa paralele te `/v1/…`; 300 te `/webhooks/dlr/…`  
+  Pritet: 429 te e para, asnjë 429/503 te e dyta (vlerat `perip`/`hooks` janë PROPOSED; rregullohen sipas trafikut real)  
+  Klas.: VERIFIED LOKALISHT  
+  NO-GO/abort: 503 si përgjigje kufizimi ose callback i refuzuar → NO-GO
+- [ ] **EG-10** — Certifikata, DNS dhe TLS ≥ 1.2 për `enterprise.`, `central.`, `central-internal.`.  
+  Prova: shih IN-04/IN-05; `openssl s_client -tls1_1` dështon, `-tls1_2` kalon  
+  Pritet: SAN për secilin emër; TLS ≥ 1.2; ridrejtim 80→443 nga terminatori  
+  Klas.: EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: mungon ndonjë → NO-GO
+
 ## 4. APP
 
 - [ ] **AP-01** — `production_problems()` bosh.  
@@ -232,12 +287,12 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
   NO-GO/abort: nis me sekret bosh ose SQLite → NO-GO
 - [ ] **CE-04** — Familjet e API-ve që s'janë të konsolës Central nuk ekspozohen përmes `central-web`.  
   Prova: `for p in /v1/contacts /webhooks/dlr/x /u/x /internal/sync/changes /registration; do curl -s -o /dev/null -w "$p %{http_code}\n" http://127.0.0.1:8081$p; done` (lokalisht) dhe e njëjta nga jashtë me domenin real  
-  Pritet: `404` për secilën; `/healthz` dhe `/readyz` 200; `/admin/ping` pa token 401  
+  Pritet: `404` për secilën; `/healthz` dhe `/readyz` **403 publikisht** (vetëm të brendshme); `/admin/ping` pa token 401  
   Klas.: VERIFIED LOKALISHT; përmes domenit real EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: çdo 200 për një rrugë të listuar → NO-GO
-- [ ] **CE-04b** — Vetëm `central-web` publikon port: `127.0.0.1:8081`.  
+- [ ] **CE-04b** — Vetëm `central-web` publikon porte, vetëm në loopback: `127.0.0.1:8081` (stafi) dhe `127.0.0.1:8082` (Enterprise→Central).  
   Prova: `docker ps --format '{{.Names}} {{.Ports}}'`  
-  Pritet: `central-web` → `127.0.0.1:8081->8081/tcp`; `central-api` vetëm `8001/tcp` (jo i publikuar)  
+  Pritet: `central-web` → `127.0.0.1:8081-8082->8081-8082/tcp`; `central-api` vetëm `8001/tcp` (jo i publikuar)  
   Klas.: VERIFIED LOKALISHT  
   NO-GO/abort: port tjetër i publikuar → NO-GO
 - [ ] **CE-05** — Konsola Central ngarkon dhe hyn (admin dhe operator).  

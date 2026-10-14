@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from apps.central.api.deps import get_db
+from apps.central.core.request_ip import client_ip_or_unknown
 from apps.central.services import pricing_feed, service_auth, sync_feed
 
 router = APIRouter(prefix="/internal/pricing")
@@ -20,7 +21,7 @@ def service_context(
     request: Request, authorization: str = Header(default="")
 ) -> service_auth.ServiceContext:
     token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip_or_unknown(request)
     try:
         return service_auth.authenticate(request.app.state.sessionmaker, token, SCOPE)
     except service_auth.ScopeDenied as e:

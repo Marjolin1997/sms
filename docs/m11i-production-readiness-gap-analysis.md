@@ -5,6 +5,8 @@
 
 **Përditësim M11-I/F-01 (paketimi i Central):** GAP-01, GAP-02, GAP-03, GAP-14, GAP-15 dhe pjesa e paketimit e GAP-16/17 janë **IMPLEMENTED / LOCALLY VERIFIED; CI VERIFICATION PENDING** (ndryshimet nuk janë commit-uar/push-uar; CI s'ka ekzekutuar). Asnjë bllokues i jashtëm nuk është mbyllur. Shih §0b.
 
+**Përditësim M11-I/F-02 (skaji: TLS/DNS/reverse proxy/IP e klientit):** pjesa e KODIT dhe e konfigurimit të skajit është **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** (nginx real në Docker lokal, pa TLS/DNS/LB real). **Mbeten të jashtme:** DNS real, certifikata, LB/WAF real, CIDR-t reale të proxy-ve, rrjeti/firewall-i, emrat reale të hostit, validimi real i TLS, aktivizimi real i HSTS dhe dëshmia e provider-it. Shih §0c.
+
 ## 0. Si lexohet ky dokument
 
 - Klasifikimet: **VERIFIED** (provuar në repo ose në validimet M11-H), **PARTIALLY VERIFIED**, **NOT VERIFIED**, **EXTERNAL EVIDENCE REQUIRED** (kërkon infrastrukturë, llogari ose njerëz jashtë repo-së).
@@ -40,11 +42,34 @@ Zbatuar (vetëm paketim, pa ndryshim të semantikës së biznesit): stage `centr
 ### Gjetje të reja nga validimi F-01 (nuk u rregulluan këtu)
 | ID | Gjetja | Ashpërsia | Klasifikim |
 |---|---|---|---|
-| N-1 | **Nginx i Enterprise** (`deploy/nginx.conf`): `location /` dhe `/assets/` kanë `add_header` të tyre, prandaj **humbasin** CSP, `X-Content-Type-Options`, `X-Frame-Options`, HSTS (ato shfaqen vetëm te `/v1`, `/u`, `/webhooks`). Provuar në imazhin real `web`. Nginx i ri Central e ka rregulluar (përsërit header-at). | MEDIUM | VERIFIED LOKALISHT; shtyhet te blloku TLS/reverse-proxy (së bashku me C-3) |
-| N-2 | Log-u i hyrjes së Central (`login failed … ip=`) shfaq IP-në e proxy-t (kontejnerit nginx), jo të klientit: `CENTRAL_TRUSTED_PROXY_HOPS` përdoret vetëm te regjistrimi publik. | LOW (lidhet me M11-H MEDIUM "login-et Central vetëm në log") | VERIFIED LOKALISHT |
+| N-1 | Nginx i Enterprise humbiste CSP/nosniff/X-Frame/HSTS te `/` dhe `/assets/`. **RESOLVED (F-02):** bashkësia e plotë përsëritet në çdo location me `add_header`, gabimet e nginx kanë header-a të plotë, API-ja i mban ato të aplikacionit pa dyfishim; provuar në nginx real. | ~~MEDIUM~~ RESOLVED | VERIFIED LOKALISHT |
+| N-2 | Log-u i hyrjes së Central tregonte IP-në e proxy-t. **RESOLVED (F-02):** login-i dhe `/internal/*` përdorin `CENTRAL_TRUSTED_PROXY_HOPS` me helper të përbashkët; provuar me testet dhe compose real. Vlera e saktë në topologjinë reale mbetet EXTERNAL EVIDENCE REQUIRED (GAP-08). | ~~LOW~~ RESOLVED (kod) | VERIFIED LOKALISHT |
 | N-3 | `financial_readiness` thërret `scripts.*` të Enterprise (subproces) dhe del FAIL brenda imazhit Central. **RESOLVED (amendment F-01):** është agregator ndër-sistem, jo komandë e imazhit Central; hequr nga paketimi/inventari (compose, RUNBOOK §8) dhe dokumentuar si "jashtë imazhit" (ekzekutohet nga checkout me të dy mjediset). Inventar i dokumentuar (11 komanda) me test `--help`/pa varësi Enterprise për secilën, dhe i provuar brenda imazhit real (11/11). | ~~MEDIUM~~ RESOLVED | VERIFIED LOKALISHT |
 | N-4 | Një `.env` lokal në rrënjë ndryshon sjelljen e testeve Enterprise (lexohet nga `Settings`): kërkon pastrim para `pytest`. **E hapur.** | LOW | VERIFIED |
 | N-5 | `docker compose up -d` pa emra nisi edhe Central dhe kërkonte `.env.central`. **RESOLVED (amendment F-01):** shërbimet Central janë te profili opt-in `central` (serving) dhe `central-jobs`; nisja e zakonshme mbetet vetëm-Enterprise dhe nuk kërkon `.env.central`; aktivizimi i Central kërkon `.env.central` (kërkesa s'u dobësua). | ~~LOW~~ RESOLVED | VERIFIED LOKALISHT |
+
+## 0c. Përditësim M11-I/F-02 — çfarë u zbatua dhe si u verifikua
+
+Modeli i vendosur: terminator i JASHTËM i TLS/LB/WAF; nginx-et mbeten HTTP-only; hostname të ndarë (`enterprise.<domen>`, `central.<domen>`, emër/listener i brendshëm për Enterprise→Central); `hops=1` pas `real_ip` me CIDR të besuara të dhëna nga operatori (parazgjedhja: asnjë); HSTS i zotëruar nga terminatori.
+
+| Zbatuar | Provë | Klasifikim |
+|---|---|---|
+| `real_ip` (`X-Forwarded-For`, `real_ip_recursive on`) në të dy nginx-et, vetëm nga CIDR të gjeneruara nga `EDGE_*_CIDRS` (`deploy/edge-cidrs.sh`); `/0` dhe vlera të pavlefshme refuzohen në nisje; asnjë CIDR e ngulitur | nginx real: klient i falsifikuar majtas injorohet; disa proxy upstream normalizohen; pa proxy të besuar, XFF i klientit injorohet; `0.0.0.0/0`, `::/0`, vlera të pavlefshme → nginx s'niset (64 kontrolle `e2e/edge/check_edge.py`) | VERIFIED LOKALISHT |
+| `X-Forwarded-For` i normalizuar (`$remote_addr`), `X-Real-IP` i rishkruar, `X-Forwarded-Proto` = `https` vetëm nga proxy i besuar që e deklaron | nginx real, dy emërtime | VERIFIED LOKALISHT |
+| HSTS hequr nga nginx Enterprise dhe nga aplikacioni; nginx hedh poshtë çdo HSTS nga upstream (**C-3 RESOLVED**) | nginx real (stub me HSTS): asnjë `Strict-Transport-Security` në `/`, `/assets`, API, gabime; test app | VERIFIED LOKALISHT |
+| Header-at e sigurisë: Enterprise `/`, `/assets/*` (edhe 404), SPA fallback, gabime nginx (403/413/429/5xx), API pa dyfishim (**N-1 RESOLVED**); Central kudo | nginx real: secili header një herë | VERIFIED LOKALISHT |
+| Kufizimi: Enterprise 429 (jo 503); zonë e veçantë `hooks` për callback-et; Central 429 | nginx real: 400 kërkesa paralele; 300 callback pa 429/503 | VERIFIED LOKALISHT (vlerat PROPOSED) |
+| Webhook/DLR: path, query, trup, `X-Signature`/`X-Twilio-Signature`, `Host` të paprekur; `proxy_pass` pa URI; testet ekzistuese të firmës kalojnë (261) | nginx real + pytest | VERIFIED LOKALISHT |
+| Central: IP e login-it dhe e `/internal/*` pas `CENTRAL_TRUSTED_PROXY_HOPS` me helper të përbashkët `packages/netutil` (**N-2 RESOLVED**) | pytest (hops 0/1/pamjaftueshëm/spoof) + compose real: `login failed … ip=<klienti real>` | VERIFIED LOKALISHT |
+| `/healthz` dhe `/readyz` vetëm të brendshme (loopback + `*_INTERNAL_ALLOW_CIDRS`), publikisht 403; `/nginx-health` për LB | nginx real + compose real | VERIFIED LOKALISHT |
+| Rruga e brendshme Enterprise→Central: listener `central-web:8082` vetëm për `/internal/*`, allowlist (`CENTRAL_S2S_ALLOW_CIDRS`, parazgjedhja askush) para proxy-t; `/internal` = 404 në 8081; nënshkrimi i shërbimit mbetet autoritativ | compose real: i lejuar → 401 nga `central-api`; jashtë allowlist-ës → 403; rrjet Docker | VERIFIED LOKALISHT |
+| Regjistrimi publik Central mbetet i mbyllur (`/registration` → 404) | nginx real + test | VERIFIED LOKALISHT |
+| Porte: vetëm `127.0.0.1:8080`, `:8081`, `:8082`; asnjë port API | compose real + testet | VERIFIED LOKALISHT |
+| CI (hapi `e2e/edge/check_edge.py` dhe të tjerët) | s'ka ekzekutuar | NOT VERIFIED (CI PENDING) |
+
+**Mbeten të jashtme (asnjë nuk është mbyllur):** emrat/DNS real dhe rekordet; certifikatat (SAN, rinovim, TLS ≥ 1.2); LB/WAF/CDN real dhe sjellja e tij për XFF/Proto; CIDR-t reale (`*_TRUSTED_PROXY_CIDRS`, `CENTRAL_S2S_ALLOW_CIDRS`, `*_INTERNAL_ALLOW_CIDRS`); firewall/rrjeti; ridrejtimi 80→443 dhe HSTS te terminatori; vlerat reale të `limit_req` për provider-in; provat me provider real; testi me dy IP të jashtme përmes terminatorit real.
+
+**Pika të dokumentuara për operatorin:** (1) me proxy në host dhe port të publikuar në loopback, nginx sheh adresën e gateway-t Docker, jo `127.0.0.1`; (2) `*_INTERNAL_ALLOW_CIDRS` ka parazgjedhje `172.16.0.0/12` (rrjetet e parazgjedhura Docker): rregulloje nëse rrjeti yt është tjetër; (3) `CENTRAL_S2S_ALLOW_CIDRS` duhet të jetë IP-ja e Enterprise ashtu siç e sheh nginx pas `real_ip`; (4) `hops>1` nuk është zgjidhje e përgjithshme: normalizimi bëhet nga nginx.
 
 ## 1. Veprimet e ardhshme që heqin bllokuesit (jo të zbatuara)
 
@@ -106,6 +131,7 @@ Zbatuar (vetëm paketim, pa ndryshim të semantikës së biznesit): stage `centr
 | Pronari / varësia | NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur matrica e rrugëve është e saktë dhe e dokumentuar me dalje reale. |
 | Status pas F-01 | **IMPLEMENTED / LOCALLY VERIFIED.** `deploy/nginx.central.conf`: vetëm `/auth`, `/admin`, `/healthz`, `/readyz` te `central-api`; `/v1`, `/webhooks`, `/u`, `/internal`, `/registration` = 404; kufizim `limit_req` (429) për `/auth`; pa HSTS dhe pa TLS (HTTP lokal). Vlera e saktë e `CENTRAL_TRUSTED_PROXY_HOPS` në topologjinë reale = GAP-08 (e hapur). |
+| Status pas F-02 | **IMPLEMENTED / LOCALLY VERIFIED.** Sipërfaqja publike e stafit (8081) kurrë s'shërben `/internal`; listener i brendshëm 8082 për Enterprise→Central me allowlist; `/readyz` i brendshëm; `Cache-Control: no-store` te `/auth` dhe `/admin`. Emri/rruga e jashtme HTTPS për 8082 (central-internal) = EXTERNAL EVIDENCE REQUIRED. |
 
 ### GAP-04 — Infrastruktura e prodhimit (hosting, rrjet, kapacitet)
 
@@ -166,6 +192,7 @@ Zbatuar (vetëm paketim, pa ndryshim të semantikës së biznesit): stage `centr
 | Rikthim / abort | Abort nëse zinxhiri i certifikatës dështon ose DNS nuk zgjidhet. Rikthim: kthe DNS/LB te gjendja e mëparshme (shih rollback). |
 | Pronari / varësia | Pronari i infrastrukturës/DNS — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur provat `curl`/`openssl` kalojnë nga një rrjet i jashtëm. |
+| Status pas F-02 | **PARTIALLY RESOLVED.** Origjinat janë HTTP-only dhe pa HSTS; modeli i terminatorit të jashtëm, DNS/SAN, rinovimi, TLS ≥ 1.2, ridrejtimi 80→443 dhe renditja e HSTS janë dokumentuar (RUNBOOK §2/§2a/§2b). **Mbeten të jashtme:** terminatori real, DNS, certifikatat, aktivizimi real i HSTS, provat `curl`/`openssl` nga jashtë. |
 
 ### GAP-08 — SMS_TRUSTED_PROXY_HOPS dhe CENTRAL_TRUSTED_PROXY_HOPS
 
@@ -181,6 +208,7 @@ Zbatuar (vetëm paketim, pa ndryshim të semantikës së biznesit): stage `centr
 | Rikthim / abort | Abort nëse përdorues legjitim nga IP-B merr 429. Rikthim: kthe vlerën e mëparshme dhe rinis shërbimin. |
 | Pronari / varësia | Infrastrukturë + sigurinë — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur testi me dy IP kalon në të dy shërbimet. |
+| Status pas F-02 | **PARTIALLY RESOLVED.** Modeli `hops=1` pas `real_ip` me CIDR të operatorit (asnjë e besuar si parazgjedhje; `/0` refuzohet); helper i përbashkët Enterprise/Central; Central login/internal përdorin tani hops; provuar me nginx real dhe compose real. **Mbetet e jashtme:** CIDR-t reale dhe testi me dy IP përmes terminatorit real. |
 
 ### GAP-09 — Menaxhimi i sekreteve
 
@@ -327,11 +355,11 @@ Zbatuar (vetëm paketim, pa ndryshim të semantikës së biznesit): stage `centr
 |---|---|---|---|
 | C-1 | `docs/RUNBOOK.md` §7 përmend provider SMS 'HTTP/SMPP'; në `app/providers` ka vetëm `fake`, `http`, `twilio` (asnjë SMPP në `app/`) | `docs/RUNBOOK.md`; `app/providers/__init__.py`; kërkim në `app/` | VERIFIED |
 | C-2 | Komenti i `scripts/backup.sh` thërret `/backup.sh` brenda kontejnerit `db`, por compose monton vetëm `./backups:/backups` (skripti nuk është i montuar) | `scripts/backup.sh`; `docker-compose.prod.yml` | PARTIALLY VERIFIED (nuk është ekzekutuar) |
-| C-3 | Dokumentet thonë 'TLS përfundon në nginx ose LB', por `nginx.conf` dëgjon vetëm `8080` pa certifikata dhe dërgon HSTS | `deploy/nginx.conf`; `docs/RUNBOOK.md` §2 | VERIFIED |
+| C-3 | HSTS dërgohej mbi HTTP të thjeshtë (nginx Enterprise dhe aplikacioni). **RESOLVED (F-02):** hequr nga të dyja; pronari është terminatori i TLS (RUNBOOK §2b). TLS real dhe aktivizimi i HSTS = EXTERNAL EVIDENCE REQUIRED. | `deploy/nginx.conf`; `app/main.py` | VERIFIED LOKALISHT |
 | C-4 | Docstring-u i `app/worker.py` liston vetëm një pjesë të roleve; kodi pranon edhe `pricing_control_plane`, `billing_usage_reporter`, `money_usage_reporter` | `app/worker.py` | VERIFIED (kozmetike) |
 | C-5 | `docs/M10_PROD_OPERATIONS.md` kokat 0032/0029 në kohën e shkrimit; aktualet 0034/0031 (dokumenti e pranon) | `docs/M10_PROD_OPERATIONS.md` | VERIFIED (e shënuar) |
 | C-6 | `.env.example` këshillon përdorues PostgreSQL me të drejta minimale (jo superuser); compose lidh aplikacionin si `sms`, përdoruesi i krijuar nga `POSTGRES_USER` në imazhin zyrtar, që është superuser | `.env.example`; `docker-compose.prod.yml` | PARTIALLY VERIFIED (nga semantika e imazhit; s'është ekzekutuar) |
-| C-3b | Nginx Enterprise humb header-at e sigurisë te `/` dhe `/assets/` (N-1); C-3 (HSTS pa TLS) mbetet i hapur dhe i shtyrë te blloku TLS/reverse-proxy | `deploy/nginx.conf`; provë në imazhin real | VERIFIED LOKALISHT |
+| C-3b | Humbja e header-ave te `/` dhe `/assets/` të nginx Enterprise (N-1). **RESOLVED (F-02).** | `deploy/nginx.conf` | VERIFIED LOKALISHT |
 | C-7 | `docs/RUNBOOK.md` §7 pohonte se Central s'është i paketuar; **zgjidhur nga F-01** (§7 përditësuar, §8 shtuar) | `docs/RUNBOOK.md` | VERIFIED (rregulluar) |
 
 ## 4. Tabela e bllokuesve sipas varësisë
@@ -341,8 +369,8 @@ Rendi është i detyrueshëm: një rresht nuk mund të mbyllet para varësive t�
 | Rendi | Bllokues | Lloji | Varet nga | Evidenca që mbyll |
 |---|---|---|---|---|
 | 1 | GAP-04 Infrastruktura | EXTERNAL | — | Inventar i firmosur i hostit |
-| 2 | GAP-07 TLS/DNS/LB | EXTERNAL | 1 | `curl`/`openssl` nga jashtë |
-| 3 | GAP-08 Trusted proxy hops | EXTERNAL + konfigurim | 2 | Test me dy IP |
+| 2 | GAP-07 TLS/DNS/LB | EXTERNAL (konfigurimi i skajit: **IMPLEMENTED / LOCALLY VERIFIED**, F-02) | 1 | `curl`/`openssl` nga jashtë |
+| 3 | GAP-08 Trusted proxy hops | EXTERNAL + konfigurim (modeli, real_ip dhe testet: **IMPLEMENTED / LOCALLY VERIFIED**, F-02; CIDR-t reale të jashtme) | 2 | Test me dy IP përmes terminatorit real |
 | 4 | GAP-09 Sekretet | EXTERNAL | 1 | Inventar + skanim 0 gjetje |
 | 5 | GAP-05 PG prodhimi, backup, PITR | EXTERNAL | 1, 4 | Restore + `verify_ledger` + PITR i provuar |
 | 6 | GAP-01 Central backend | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** | — | Imazh + migrim 0031 + `/readyz` në staging |
