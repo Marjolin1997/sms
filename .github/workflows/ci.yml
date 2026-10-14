@@ -136,7 +136,7 @@ jobs:
       # vetëm logje + pamje ekrani (asnjë seed.out/.env/DB: përmbajnë çelësa të përkohshëm)
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-enterprise-failure
           path: |
@@ -170,7 +170,7 @@ jobs:
       # vetëm logje + pamje ekrani; kurrë DB, çelës apo ids.json (direktoria work/)
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-central-failure
           path: |
