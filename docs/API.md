@@ -68,9 +68,17 @@ if (!res.ok) throw new Error((await res.json()).detail.message);
 
 **Python**
 ```python
-r = httpx.post("https://api.your-platform.example/v1/messages", timeout=15,
+r = httpx.post(
+    "https://api.your-platform.example/v1/messages",
+    timeout=15,
     headers={"Authorization": f"Bearer {KEY}", "Idempotency-Key": f"order-{oid}-sms"},
-    json={"owner_ref": "acme", "to": "+355691234567", "sender": "ACME", "text": "Kodi juaj është 481516"})
+    json={
+        "owner_ref": "acme",
+        "to": "+355691234567",
+        "sender": "ACME",
+        "text": "Kodi juaj është 481516",
+    },
+)
 r.raise_for_status()
 ```
 

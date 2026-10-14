@@ -27,9 +27,20 @@ Filtrat: `*`, `<prefix>.*`, tip i saktë (`matches`/`valid_filter`) — semantik
 
 ## 3. Envelope aktual (`webhooks.envelope(ev: Event) -> bytes`)
 ```python
-json.dumps({"id": f"evt_{ev.id}", "type": ev.type, "created_at": as_utc(ev.created_at).isoformat(),
-            "data": {"resource_type": ev.resource_type, "resource_id": ev.resource_id, **(ev.data or {})}},
-           separators=(",", ":"), sort_keys=True).encode()
+json.dumps(
+    {
+        "id": f"evt_{ev.id}",
+        "type": ev.type,
+        "created_at": as_utc(ev.created_at).isoformat(),
+        "data": {
+            "resource_type": ev.resource_type,
+            "resource_id": ev.resource_id,
+            **(ev.data or {}),
+        },
+    },
+    separators=(",", ":"),
+    sort_keys=True,
+).encode()
 ```
 - Fusha: `id, type, created_at, data` (renditja në bytes = ALFABETIKE nga `sort_keys=True`, rekursivisht; jo renditja e shkrimit). Brenda `data`: `resource_type`, `resource_id`, pastaj çelësat e `ev.data` — pas sortimit një radhë e vetme alfabetike.
 - Serializim: `separators=(",",":")` (pa hapësira), `sort_keys=True`, `ensure_ascii=True` (default → çdo jo-ASCII del `\uXXXX`, p.sh. `text` i inbound, adresa e consent), `allow_nan` default, `default=` nuk ka (një objekt jo-JSON hedh `TypeError`).
@@ -69,13 +80,14 @@ Nuk ka version në payload, as në URL. Shenjat e vetme: prefiksi `v1=` i nënsh
 ```python
 @dataclass(frozen=True, slots=True)
 class EventEnvelopeV1:
-    id: str            # "evt_<n>"
+    id: str  # "evt_<n>"
     type: str
-    created_at: datetime   # aware UTC
+    created_at: datetime  # aware UTC
     resource_type: str
     resource_id: str
     data: Mapping[str, Any]  # JSON-skalare/None, pa çelësat resource_*
-    def to_bytes(self) -> bytes: ...   # serializer eksplicit, identik me sot
+
+    def to_bytes(self) -> bytes: ...  # serializer eksplicit, identik me sot
 ```
 Mapper `Event → EventEnvelopeV1` jeton te `services` (kufiri ORM), jo në contracts. `to_bytes` përdor të njëjtat `json.dumps(..., separators, sort_keys)` dhe formatin `as_utc(...).isoformat()`; mban sjelljen e mbishkrimit `**data` (ose e refuzon me test, vendim i veçantë).
 
