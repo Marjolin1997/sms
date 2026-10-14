@@ -13,8 +13,9 @@ import time
 
 from playwright.sync_api import Page, sync_playwright
 
+from e2e.browser_util import dump_failure, launch
+
 BASE = os.environ.get("E2E_BASE", "http://127.0.0.1:5173")
-CHROME = os.environ.get("E2E_CHROME", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
 SHOTS = os.environ.get("E2E_SHOTS", "")
 CLIENT, ADMIN = os.environ["E2E_CLIENT_KEY"], os.environ["E2E_ADMIN_KEY"]
 UNIQ = str(int(time.time()))[-6:]  # numër unik për çdo ekzekutim
@@ -193,8 +194,18 @@ def client_flow(b):
         "import preview counts",
     )
     p.click("button.primary:has-text('Import')")
-    p.wait_for_selector(".alert.good:has-text('added')", timeout=6000)
-    check(has("rejected", p.inner_text("main")), "invalid row reported")
+    # M11-F: import i pjesshëm (2 të vlefshëm, 1 i refuzuar) = PARALAJMËRIM, jo sukses i plotë
+    p.wait_for_selector(".alert.warn:has-text('Partly imported')", timeout=6000)
+    summary = p.inner_text(".alert.warn")
+    check(
+        has("2 added", summary) and has("1 rows were rejected", summary),
+        "partial import summary: 2 added, 1 rejected",
+    )
+    check(p.locator(".alert.good").count() == 0, "partial import is not reported as full success")
+    check(
+        has("Row 3", p.inner_text("main")) and has("E.164", p.inner_text("main")),
+        "rejected row is listed with its reason",
+    )
     p.click("[role=tab]:has-text('People')")
     p.fill("input[aria-label='Search people']", "zana")
     p.wait_for_timeout(1000)
@@ -263,7 +274,11 @@ def client_flow(b):
     check(dl.value.suggested_filename.startswith("contact-"), "contact export downloads a file")
     # raporte: përdorim + CSV
     go(p, "reports", 1200)
-    check(has("SMS sent", p.inner_text("main")), "reports page shows usage totals")
+    # M11-G: faqja hapet te «Overview»; totalet e përdorimit dhe eksportet CSV janë te skeda «Usage»
+    p.click("[role=tab]:has-text('Usage')")
+    p.wait_for_selector("main >> text=SMS sent", timeout=6000)
+    sent = re.search(r"SMS sent\s*(\d+)", p.inner_text("main"), re.I)
+    check(sent is not None and int(sent.group(1)) > 0, "usage tab shows SMS sent totals")
     with p.expect_download() as dl2:
         p.click("button:has-text('Export SMS (CSV)')")
     check(dl2.value.suggested_filename.startswith("messages-"), "messages CSV downloads")
@@ -290,6 +305,7 @@ def client_flow(b):
     p.fill("input[placeholder='HELP']", f"promo{UNIQ}")
     p.click("button:has-text('Save keyword')")
     toast(p, "Keyword saved")
+    p.wait_for_selector(f"main >> text=promo{UNIQ}", timeout=6000)  # lista rifreskohet pas toast-it
     check(has(f"promo{UNIQ}", p.inner_text("main")), "keyword listed")
     p.locator(f"tbody tr:has-text('promo{UNIQ}') button:has-text('Delete')").click()
     p.wait_for_selector("[role=dialog]")
@@ -464,9 +480,7 @@ def mobile_flow(b):
 
 
 with sync_playwright() as pw:
-    b = pw.chromium.launch(
-        executable_path=CHROME if os.path.exists(CHROME) else None, args=["--no-sandbox"]
-    )
+    b = launch(pw, args=["--no-sandbox"])
     t0 = time.time()
     try:
         albanian_flow(b)
@@ -475,6 +489,9 @@ with sync_playwright() as pw:
         new_client_checklist(b)
         staff_flow(b)
         mobile_flow(b)
+    except BaseException:
+        dump_failure(b, "enterprise-console")
+        raise
     finally:
         b.close()
 print(f"{passed} checks passed in {time.time() - t0:.1f}s")

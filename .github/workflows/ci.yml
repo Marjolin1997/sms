@@ -11,6 +11,7 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 90  # gjerësisht i gjerë: s'ka ende kohë reale CI (sharding i shtyrë)
     services:
       postgres:
         image: postgres:16
@@ -39,9 +40,13 @@ jobs:
           SMS_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_migrate
         run: |
           psql -h localhost -U sms -d postgres -c "create database sms_migrate"
+          # një kokë e vetme; pas upgrade, DB është saktësisht në atë kokë (pa e ngulitur numrin këtu)
+          test "$(alembic heads | wc -l)" = "1"
           alembic upgrade head
+          test "$(alembic current | cut -d' ' -f1)" = "$(alembic heads | cut -d' ' -f1)"
           alembic downgrade base
           alembic upgrade head
+          test "$(alembic current | cut -d' ' -f1)" = "$(alembic heads | cut -d' ' -f1)"
       - name: Central migrations on a clean PostgreSQL database (head 0031)
         env:
           CENTRAL_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_central_migrate
@@ -87,6 +92,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [backend, frontend]
     services:
       postgres:
@@ -100,6 +106,7 @@ jobs:
       SMS_PII_HMAC_KEY: ci-only-hmac-key-0123456789abcdef0123456789
       SMS_SECRETS_KEY: wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=
       SMS_ADMIN_API_KEY: ci-bootstrap-key
+      E2E_ARTIFACTS: ${{ github.workspace }}/e2e-out/artifacts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -113,20 +120,83 @@ jobs:
       - run: alembic upgrade head
       - name: Seed demo data and start the stack
         run: |
+          mkdir -p e2e-out/logs e2e-out/artifacts
           python -m scripts.seed_demo > seed.out
-          uvicorn app.main:app --port 8000 &
-          (cd frontend && npx vite --port 5173 --host 127.0.0.1 &)
+          uvicorn app.main:app --port 8000 > e2e-out/logs/api.log 2>&1 &
+          (cd frontend && npx vite --port 5173 --host 127.0.0.1 > ../e2e-out/logs/vite.log 2>&1 &)
           for i in $(seq 1 30); do curl -sf localhost:8000/readyz && curl -sf localhost:5173 >/dev/null && break; sleep 1; done
       - name: Browser end-to-end test
         env:
           PYTHONPATH: .
         run: |
+          set -o pipefail
           export E2E_CLIENT_KEY=$(sed -n 's/^CLIENT_KEY=//p' seed.out)
           export E2E_ADMIN_KEY=$(sed -n 's/^ADMIN_KEY=//p' seed.out)
-          python e2e/test_console.py
+          python e2e/test_console.py 2>&1 | tee e2e-out/logs/test_console.out
+      # vetëm logje + pamje ekrani (asnjë seed.out/.env/DB: përmbajnë çelësa të përkohshëm)
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-enterprise-failure
+          path: |
+            e2e-out/logs
+            e2e-out/artifacts
+          retention-days: 7
+          if-no-files-found: ignore
+
+  central-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Gate i përkohshëm JO-bllokues, deri në 3 ekzekutime radhazi të gjelbra në GitHub CI
+    # (pa flake nisjeje/shfletuesi, kohë e pranueshme). Pastaj hiqet `continue-on-error`.
+    continue-on-error: true
+    # Vetëm SQLite i përkohshëm, kredenciale sintetike të gjeneruara, uvicorn + Vite lokalë, Chromium;
+    # asnjë provider/SMTP/pagesë dhe asnjë sekret i repo-s (e2e/run_central_e2e.sh e imponon me roje).
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements-dev.txt}
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm, cache-dependency-path: frontend-central/package-lock.json}
+      - run: pip install -r requirements-dev.txt playwright
+      - run: playwright install --with-deps chromium
+      - run: npm ci
+        working-directory: frontend-central
+      - name: Central browser E2E (console + audit)
+        env:
+          E2E_OUT: ${{ runner.temp }}/central-e2e
+        run: e2e/run_central_e2e.sh
+      # vetëm logje + pamje ekrani; kurrë DB, çelës apo ids.json (direktoria work/)
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-central-failure
+          path: |
+            ${{ runner.temp }}/central-e2e/logs
+            ${{ runner.temp }}/central-e2e/artifacts
+          retention-days: 7
+          if-no-files-found: ignore
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # VETËM peme aktuale e checkout-it (pa histori, pa fetch-depth: 0). Histori e plotë = detyrë manuale e shtyrë.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gitleaks (pinned version, checksum verified)
+        run: |
+          V=8.21.2
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${V}/gitleaks_${V}_linux_x64.tar.gz"
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
+      - name: Scan current tree (values redacted)
+        run: ./gitleaks dir . --no-banner --redact -c .gitleaks.toml
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [backend]
     steps:
       - uses: actions/checkout@v4

@@ -10,3 +10,8 @@ frontend-central/node_modules/
 frontend-central/dist/
 .env.central
 secrets/
+# M11-I/F-04: çelësa dhe mjedise lokale; shembujt mbeten të gjurmuar
+*.pem
+.env.*
+!.env.example
+!.env.central.example

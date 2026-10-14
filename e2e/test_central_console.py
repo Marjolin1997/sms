@@ -6,7 +6,8 @@ frontend-central, me CENTRAL_DATABASE_URL (DB e përkohshme) dhe PYTHONPATH drej
     E2E_BASE=http://127.0.0.1:5174 E2E_IDS=ids.json E2E_ADMIN_PW=... E2E_OP_PW=... \\
     python e2e/test_central_console.py
 
-Nuk ekzekutohet nga pytest/CI; është kontroll dore për ndërfaqen.
+Ekzekutohet nga `e2e/run_central_e2e.sh` (job `central-e2e` i CI, JO-BLLOKUES deri në 3 ekzekutime radhazi
+të gjelbra në GitHub CI) dhe lokalisht me të njëjtin skript. Nuk ekzekutohet nga pytest.
 """
 
 import json
@@ -15,8 +16,9 @@ import re
 
 from playwright.sync_api import Page, sync_playwright
 
+from e2e.browser_util import dump_failure, launch
+
 BASE = os.environ.get("E2E_BASE", "http://127.0.0.1:5174")
-CHROME = os.environ.get("E2E_CHROME", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
 IDS = json.load(open(os.environ["E2E_IDS"]))
 ADMIN_PW, OP_PW = os.environ["E2E_ADMIN_PW"], os.environ["E2E_OP_PW"]
 errors: list[str] = []
@@ -856,18 +858,23 @@ def commercial_e2_flow(b):
 
 if __name__ == "__main__":
     with sync_playwright() as pw:
-        b = pw.chromium.launch(executable_path=CHROME)
-        if os.environ.get("E2E_ONLY") == "commercial":
-            commercial_flow(b)
-            commercial_e2_flow(b)
-        else:
-            admin_flow(b)
-            operator_flow(b)
-            ops_flow(b)
-            ops_enterprise_flow(b)
-            commercial_flow(b)
-            commercial_e2_flow(b)
-        b.close()
+        b = launch(pw)
+        try:
+            if os.environ.get("E2E_ONLY") == "commercial":
+                commercial_flow(b)
+                commercial_e2_flow(b)
+            else:
+                admin_flow(b)
+                operator_flow(b)
+                ops_flow(b)
+                ops_enterprise_flow(b)
+                commercial_flow(b)
+                commercial_e2_flow(b)
+        except BaseException:
+            dump_failure(b, "central-console")
+            raise
+        finally:
+            b.close()
     # skenarët negativë të qëllimshëm: hyrje e gabuar, token i prishur, 404 për sender-in/rrugën e panjohur, shkrim i operatorit
     uniq = sorted(set(re.sub(r"/[0-9a-f-]{36}", "/<id>", e) for e in http_errors))
     expected = [

@@ -13,8 +13,9 @@ import re
 
 from playwright.sync_api import sync_playwright
 
+from e2e.browser_util import dump_failure, launch
+
 BASE = os.environ.get("E2E_BASE", "http://127.0.0.1:5174")
-CHROME = os.environ.get("E2E_CHROME", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
 IDS = json.load(open(os.environ["E2E_IDS"]))
 ADMIN_PW, OP_PW = os.environ["E2E_ADMIN_PW"], os.environ["E2E_OP_PW"]
 errors: list[str] = []
@@ -193,9 +194,14 @@ def main(b):
 
 if __name__ == "__main__":
     with sync_playwright() as pw:
-        br = pw.chromium.launch(executable_path=CHROME)
-        main(br)
-        br.close()
+        br = launch(pw)
+        try:
+            main(br)
+        except BaseException:
+            dump_failure(br, "central-audit")
+            raise
+        finally:
+            br.close()
     print(f"{passed} checks passed")
     print("console/page errors:", errors or "none")
     raise SystemExit(1 if errors else 0)

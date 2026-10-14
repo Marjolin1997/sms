@@ -125,7 +125,7 @@ Siç zbatohet në `production_problems()` (Enterprise) dhe `create_app` (Central
 | Hyrjet (login) e stafit Central në audit | Vetëm në log, jo në tabelë (MEDIUM, M11-H) | VERIFIED (boshllëk) |
 | Ruajtja e audit-it | Vendimi A: nuk nevojitet retention për pilot; rishikim kur >1M rreshta ose >1 GB | VERIFIED (M11-H) |
 | Askush nuk lexon sekrete nga audit-i | `detail` në audit Central kalon nga pastruesi i sekreteve; audit-i klientit lejon vetëm fusha të listuara | VERIFIED (M11-G/H) |
-| Skanim sekretesh në repo, histori dhe imazhe | Nuk ka hap në CI; nuk është ekzekutuar skanim i historisë në këtë fazë | **NOT VERIFIED** — boshllëk (F-04) |
+| Skanim sekretesh në repo, histori dhe imazhe | F-04: gitleaks në CI (`secret-scan`, bllokues) mbi **pemën aktuale** me `.gitleaks.toml` (allowlist e ngushtë: vlera sintetike të emërtuara). Histori e plotë dhe imazhe: **DEFERRED / MANUAL SECURITY TASK** (173 commit-e; pritet baseline). | IMPLEMENTED / LOCALLY VERIFIED (0 gjetje lokale; CI EXECUTION PENDING) për pemën aktuale; historia **NOT VERIFIED** |
 | Qasja te menaxheri i sekreteve e audit-uar (kush lexoi çfarë) | Varet nga menaxheri i zgjedhur | EXTERNAL EVIDENCE REQUIRED |
 
 ## 11. Verdikti

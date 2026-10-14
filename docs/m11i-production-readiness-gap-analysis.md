@@ -7,6 +7,8 @@
 
 **Përditësim M11-I/F-02 (skaji: TLS/DNS/reverse proxy/IP e klientit):** pjesa e KODIT dhe e konfigurimit të skajit është **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** (nginx real në Docker lokal, pa TLS/DNS/LB real). **Mbeten të jashtme:** DNS real, certifikata, LB/WAF real, CIDR-t reale të proxy-ve, rrjeti/firewall-i, emrat reale të hostit, validimi real i TLS, aktivizimi real i HSTS dhe dëshmia e provider-it. Shih §0c.
 
+**Përditësim M11-I/F-04 (forcimi i CI):** shtuar në `.github/workflows/ci.yml` dhe repo: skanim sekretesh (gitleaks, **VETËM peme aktuale**), job `central-e2e` (**JO-BLLOKUES deri në 3 ekzekutime radhazi të gjelbra në GitHub CI**), pohim i kokës Enterprise të migrimit, artefakte dështimi (vetëm logje + pamje ekrani) për E2E Enterprise dhe Central, `timeout-minutes`, Dependabot për `frontend-central`, `.gitignore` për `*.pem` dhe `.env.*`. Statusi: **IMPLEMENTED / LOCALLY VERIFIED; CI EXECUTION PENDING** (GitHub s'ka ekzekutuar kurrë këtë workflow). Skanimi i historisë së plotë: **DEFERRED / MANUAL SECURITY TASK**. Sharding-u i PG: **DEFERRED** (pas kohës reale nga GitHub). Shih §0e.
+
 **Përditësim M11-I/F-03 (nisja/sekretet në prodhim):** pjesa e nisjes dhe e sekreteve e GAP-17 është **RESOLVED / LOCALLY VERIFIED** (gate-t kushtëzuese në `production_problems()` dhe te Central; CI PENDING). **2FA e detyrueshme e stafit Central mbetet EXTERNAL / POLICY DECISION REQUIRED** — GAP-17 si i tërë NUK është mbyllur. Shih §0d.
 
 > **Shënim numërimi:** etiketat F-01/F-02/F-03 të milestone-s së ekzekutimit (F-01 paketimi i Central, F-02 TLS/reverse proxy/trusted proxy, F-03 siguria e nisjes/sekreteve) janë të ndryshme nga etiketat e vjetra F-xx të «veprimeve të ardhshme» të shkruara fillimisht në §1. Etiketat e §1 janë **legacy** dhe nuk e udhëheqin më numërimin; historiku nuk është rinumëruar.
@@ -96,6 +98,24 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 **Ndarja e GAP-17:** (a) mbrojtjet e nisjes/sekreteve — **RESOLVED / LOCALLY VERIFIED; CI PENDING**; (b) 2FA e detyrueshme e stafit Central — **EXTERNAL / POLICY DECISION REQUIRED** (nuk zbatohet në F-03; kontrolli kompensues SC-06 mbetet).
 
 **Mbeten të jashtme:** vlerat reale të sekreteve, kredencialet e provider-it, vendimi i politikës 2FA, CI jeshile.
+
+## 0e. Përditësim M11-I/F-04 — forcimi i CI
+
+| Ndryshim | Detaje | Status |
+|---|---|---|
+| Skanim sekretesh | Job `secret-scan`: gitleaks 8.21.2 i fiksuar me SHA-256, `gitleaks dir .` mbi checkout-in (pa histori, pa `fetch-depth: 0`), `--redact`, `.gitleaks.toml` (rregullat bazë + allowlist e ngushtë: tre vlera sintetike të emërtuara + një skedar test për PEM-in e prishur; asnjë përjashtim i përgjithshëm i `tests/`, `docs/`, `.github/`, `.env*`). BLLOKUES. | IMPLEMENTED / LOCALLY VERIFIED (0 gjetje në pemën aktuale; rrjedhje sintetike e përkohshme zbulohet në `tests/` dhe `docs/`); CI EXECUTION PENDING |
+| Historia e plotë | Jo e përfshirë (173 commit-e; pritet zhurmë nga fixtures të vjetra). | DEFERRED / MANUAL SECURITY TASK |
+| Central E2E | Job `central-e2e` ekzekuton `e2e/run_central_e2e.sh` (SQLite i përkohshëm, kredenciale sintetike të gjeneruara, uvicorn + Vite lokalë, Chromium; roja «pa ofrues të vërtetë» e M11-H; port të lirë ose refuzon). `continue-on-error: true`. | IMPLEMENTED / LOCALLY VERIFIED (3 ekzekutime lokale radhazi: PASS 140+56 kontrolle, ~55 s); **NON-BLOCKING UNTIL 3 CONSECUTIVE GREEN GITHUB CI RUNS** |
+| Chromium portabël | `e2e/browser_util.py`: `E2E_CHROME` nëse është e ekzekutueshme, përndryshe Chromium i Playwright; gabim i qartë nëse s'nis. U hoq rruga e ngulitur `/opt/pw-browsers/...` nga tre skriptat. | IMPLEMENTED / LOCALLY VERIFIED (rruga fallback me Chromium të instaluar nga Playwright provohet vetëm në CI) |
+| Artefakte dështimi | `if: failure()`, `upload-artifact@v4`, 7 ditë: vetëm `logs/` dhe pamje ekrani (`E2E_ARTIFACTS`); kurrë `seed.out`, DB, çelësa, ids. | IMPLEMENTED / LOCALLY VERIFIED (screenshot në dështim provuar lokalisht) |
+| Koka Enterprise | `alembic heads` = një kokë; pas `upgrade head` (dhe pas down/up) `current` = `heads`; pa numër të ngulitur. | IMPLEMENTED / LOCALLY VERIFIED |
+| Dependabot | Shtuar npm `/frontend-central`. | IMPLEMENTED |
+| `timeout-minutes` | backend 90, e2e 30, central-e2e 30, docker 45, secret-scan 10 (të gjera, pa kohë reale CI). | IMPLEMENTED |
+| Teste | `tests/test_f04_ci_hardening.py` (11 kontrolle statike të invariantëve). | VERIFIED LOKALISHT |
+
+**Gjetje (kontradiktë pre-existing, ZGJIDHUR me korrigjim vetëm-teste):** `e2e/test_console.py` (E2E Enterprise, job `e2e` BLLOKUES) dështonte edhe në revision-in para F-04, sepse CI s'kishte ekzekutuar kurrë dhe asertimet ishin të vjetruara nga ndryshimet e miratuara të UI: (1) M11-F: importi i pjesshëm CSV tregon tani paralajmërim (`.alert.warn`, «Partly imported», rreshtat e refuzuar), jo `.alert.good`; (2) M11-G: totalet e përdorimit «SMS sent» dhe eksportet CSV janë te skeda **Usage**, ndërsa faqja hapet te Overview; (3) pritje e munguar pas toast-it «Keyword saved» (race me rifreskimin e listës, i dukshëm në PG). Asertimet tani provojnë rezultatin semantik (2 të shtuar, 1 i refuzuar me arsye, jo sukses i plotë; totalet e Usage > 0). Sjellja e aplikacionit është e saktë dhe e mbuluar nga `tests/test_reports.py`, `frontend/src/__tests__/{reports,messaging}.test.jsx` (kontroll: `usage.sms.count` = `overview.messages.total` = 21 në të dhënat e seed-it). **Asnjë kod aplikacioni nuk u ndryshua; `e2e` mbetet BLLOKUES.** Provë lokale: 3 ekzekutime radhazi PASS mbi PostgreSQL (si CI) dhe 3 mbi SQLite.
+
+**Mbeten (CI/provë e jashtme):** ekzekutimi real në GitHub i të gjitha jobeve, 3 ekzekutime të gjelbra radhazi për `central-e2e`, koha reale e PR (sharding PG i shtyrë), branch protection/required checks dhe GitHub secret scanning (EXTERNAL EVIDENCE REQUIRED). CI i gjelbër NUK mbyll: DNS, TLS, LB/WAF, CIDR reale, menaxherin e sekreteve, backup/PITR, monitorimin, canary-n e provider-it, cutover/rollback.
 
 ## 1. Veprimet e ardhshme që heqin bllokuesit (jo të zbatuara)
 
@@ -241,8 +261,8 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 | Fusha | Përmbajtja |
 |---|---|
 | Gjendja aktuale | `.env` jashtë git (`.gitignore`, `.dockerignore`); `.env.example` ka vetëm placeholder-a; çelësi privat Ed25519 për CP montohet si skedar read-only. Nuk ka vault/KMS, skanim sekretesh në CI, as rrotullim të `SMS_SECRETS_KEY`/`SMS_PII_HMAC_KEY`. |
-| Evidenca | `.gitignore`; `.env.example`; `docker-compose.prod.yml`; `docs/RUNBOOK.md` §7; `.github/workflows/ci.yml` (pa hap skanimi). |
-| Klasifikimi | Higjiena e repo-së: VERIFIED. Vendi real i sekreteve, kush ka qasje: EXTERNAL EVIDENCE REQUIRED. Skanim sekretesh: NOT VERIFIED (mungon). |
+| Evidenca | `.gitignore`; `.env.example`; `docker-compose.prod.yml`; `docs/RUNBOOK.md` §7; `.github/workflows/ci.yml` (hap `secret-scan`, F-04), `.gitleaks.toml`. |
+| Klasifikimi | Higjiena e repo-së: VERIFIED. Vendi real i sekreteve, kush ka qasje: EXTERNAL EVIDENCE REQUIRED. Skanim sekretesh: gitleaks në CI mbi pemën aktuale (F-04: IMPLEMENTED / LOCALLY VERIFIED; CI EXECUTION PENDING); historia e plotë DEFERRED / MANUAL SECURITY TASK. |
 | Rreziku | HIGH. Humbja e `SMS_SECRETS_KEY` ose `SMS_PII_HMAC_KEY` është e pariparueshme (s'mbështetet rrotullimi). |
 | Parakusht | Plan i miratuar sekretesh (`docs/m11i-secrets-and-access-plan.md`) dhe vend ruajtjeje i zgjedhur. |
 | Validim i kërkuar para prodhimit | Inventar i plotë i sekreteve i plotësuar me vendin dhe pronarët; provë që `SMS_SECRETS_KEY` ruhet veçmas nga backup-et; skanim histori git për sekrete (jashtë këtij faze) me 0 gjetje. |
@@ -326,6 +346,7 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 | Pronari / varësia | Inxhinieria — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur CI mbulon Central dhe compose-in prodhimi. |
 | Status pas F-01 | **PARTIALLY IMPLEMENTED; CI PENDING.** Shtuar: Central migrations në PG (kokë 0031), Vitest/build `frontend-central`, imazh Central + smoke, build web Central, `nginx -t` i të dy nginx-eve, `compose config`. **Mbeten:** E2E Central, skanim sekretesh. Asnjë nga hapat s'ka ekzekutuar në CI. |
+| Status pas F-04 | **IMPLEMENTED / LOCALLY VERIFIED; CI EXECUTION PENDING.** Shtuar: skanim sekretesh (**CURRENT TREE ONLY**; historia e plotë **DEFERRED / MANUAL SECURITY TASK**), E2E Central (**NON-BLOCKING UNTIL 3 CONSECUTIVE GREEN GITHUB CI RUNS**), koka Enterprise, artefakte dështimi, timeouts, Dependabot `frontend-central`. **Mbeten:** ekzekutim real në GitHub; sharding PG (DEFERRED); E2E Enterprise u ri-aliniua (vetëm teste, §0e) dhe mbetet bllokues. |
 
 ### GAP-15 — Validimi i compose-it të prodhimit
 
@@ -403,7 +424,7 @@ Rendi është i detyrueshëm: një rresht nuk mund të mbyllet para varësive t�
 | 6 | GAP-01 Central backend | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** | — | Imazh + migrim 0031 + `/readyz` në staging |
 | 7 | GAP-02 Central frontend | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING** | 6 | Build nga imazhi, 0 gabime console |
 | 8 | GAP-03 Proxy për Central | Kod/konfigurim — **IMPLEMENTED / LOCALLY VERIFIED** | 2, 6 | Matrica e rrugëve |
-| 9 | GAP-14 CI, GAP-15 compose | Kod — **PARTIALLY IMPLEMENTED; CI PENDING** | 6, 7 | CI jeshile; staging healthy |
+| 9 | GAP-14 CI, GAP-15 compose | Kod — **IMPLEMENTED / LOCALLY VERIFIED; CI EXECUTION PENDING** (F-04) | 6, 7 | CI jeshile; staging healthy |
 | 10 | GAP-17 Mbrojtje nisjeje/2FA Central | Kod — nisja/sekretet **RESOLVED / LOCALLY VERIFIED** (F-03); 2FA Central: **POLICY DECISION REQUIRED** | 6 | Teste refuzimi |
 | 11 | GAP-06 Backup/restore Central | EXTERNAL | 5, 6 | Restore Central i provuar |
 | 12 | GAP-12 Monitorim/alarme | EXTERNAL | 1 | Test alarmi i kaluar |
