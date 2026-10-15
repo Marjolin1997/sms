@@ -89,7 +89,8 @@ def start_web(image, name, ports, env):
         except OSError:
             pass
         time.sleep(0.3)
-    raise SystemExit(f"{name} did not start:\n" + sh("docker", "logs", name, check=False).stdout)
+    logs = sh("docker", "logs", name, check=False)
+    raise SystemExit(f"{name} did not start; container logs:\n{logs.stdout}\n{logs.stderr}")
 
 
 def main():
@@ -98,6 +99,7 @@ def main():
     gw = sh(
         "docker", "network", "inspect", NET, "-f", "{{(index .IPAM.Config 0).Gateway}}"
     ).stdout.strip()
+    print(f"== Rrjeti i testit: name={NET} subnet={SUBNET} gateway(inspect)={gw!r}")
     stub = sh(
         "docker", "run", "-d", "--name", "stub", "--network", NET, "--network-alias", "api",
         "--network-alias", "central-api", "--label", "edgetest=1",
@@ -129,8 +131,14 @@ def main():
     print("== Enterprise: nginx -t")
     r = sh("docker", "run", "--rm", "--add-host", "api:127.0.0.1", WEB, "nginx", "-t", check=False)
     check(r.returncode == 0, "nginx -t Enterprise (parazgjedhje: asnjë proxy i besuar)")
-    r = sh("docker", "run", "--rm", "--add-host", "api:127.0.0.1", "-e", f"EDGE_TRUSTED_PROXY_CIDRS={gw}/32,{SUBNET}",
+    cidrs = f"{gw}/32,{SUBNET}"
+    r = sh("docker", "run", "--rm", "--add-host", "api:127.0.0.1", "-e", f"EDGE_TRUSTED_PROXY_CIDRS={cidrs}",
            "-e", "EDGE_INTERNAL_ALLOW_CIDRS=192.0.2.0/24", WEB, "nginx", "-t", check=False)  # fmt: skip
+    if r.returncode != 0:
+        print(
+            f"  DIAG EDGE_TRUSTED_PROXY_CIDRS={cidrs!r} returncode={r.returncode}\n"
+            f"  DIAG stdout={r.stdout!r}\n  DIAG stderr={r.stderr!r}"
+        )
     check(r.returncode == 0, "nginx -t Enterprise me CIDR të dhëna")
 
     # W1: peer-i (gateway) i besuar; W2: asnjë proxy i besuar; W3: proxy dhe rrjet i brendshëm i besuar
