@@ -263,7 +263,11 @@ def test_snapshot_contains_no_sender_values_owner_refs_or_secrets(db):
     mk_senders(db, 3, prefix="TOPSECRET")
     sid.request(db, "acme-owner", "AL", "+355691234567")
     db.commit()
-    text = json.dumps(ops.build(db, NOW))
+    doc = ops.build(db, NOW)
+    # `snapshot_id` është një uuid4 i rastësishëm (jo vlerë biznesi): mund të përmbajë rastësisht nënstringje si "c0"
+    # (owner_ref-et e seeded janë c0..c2). E verifikojmë formatin dhe e heqim nga teksti ku kërkohen rrjedhjet.
+    assert str(uuid.UUID(doc["snapshot_id"])) == doc["snapshot_id"]
+    text = json.dumps({k: v for k, v in doc.items() if k != "snapshot_id"})
     for needle in (
         "TOPSECRET",
         "topsecret",
