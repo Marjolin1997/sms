@@ -19,6 +19,9 @@ WEB = os.environ.get("EDGE_WEB_IMAGE", "sms-web")
 CEN = os.environ.get("EDGE_CENTRAL_WEB_IMAGE", "sms-web-central")
 PY = os.environ.get("EDGE_PY_IMAGE", "python:3.12-slim")
 NET, SUBNET = "edgetest", "10.77.0.0/24"
+# Gateway i fiksuar i rrjetit sintetik të testit: logjika e testit nuk varet nga IPAM-i automatik i Docker-it
+# (në runner-in e GitHub `docker network inspect` e ktheu bosh, duke dhënë CIDR '/32' të pavlefshëm).
+GATEWAY = "10.77.0.1"
 HERE = Path(__file__).resolve().parent
 passed = failed = 0
 
@@ -95,11 +98,19 @@ def start_web(image, name, ports, env):
 
 def main():
     cleanup()
-    sh("docker", "network", "create", "--subnet", SUBNET, NET)
-    gw = sh(
-        "docker", "network", "inspect", NET, "-f", "{{(index .IPAM.Config 0).Gateway}}"
+    sh("docker", "network", "create", "--subnet", SUBNET, "--gateway", GATEWAY, NET)
+    gw = GATEWAY
+    # Vetëm informative: s'e drejton korrektësinë e testit.
+    inspected = sh(
+        "docker", "network", "inspect", NET, "-f", "{{(index .IPAM.Config 0).Gateway}}", check=False
     ).stdout.strip()
-    print(f"== Rrjeti i testit: name={NET} subnet={SUBNET} gateway(inspect)={gw!r}")
+    print(
+        f"== Rrjeti i testit: name={NET} subnet={SUBNET} gateway={GATEWAY!r} gateway(inspect)={inspected!r}"
+    )
+    if inspected != GATEWAY:
+        print(
+            f"  NOTE docker inspect raporton {inspected!r}, jo {GATEWAY!r}; përdoret GATEWAY i fiksuar"
+        )
     stub = sh(
         "docker", "run", "-d", "--name", "stub", "--network", NET, "--network-alias", "api",
         "--network-alias", "central-api", "--label", "edgetest=1",
