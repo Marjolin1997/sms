@@ -419,7 +419,9 @@ def test_pg_two_reporters_generating_at_once_never_duplicate_a_report_seq(db, mo
     from tests.test_m9c_money_authority import mk_world
 
     mk_world(db, "10", None)
-    barrier = threading.Barrier(3, timeout=20)
+    # Topologjia e dokumentuar: një reporter aktiv për DB (PollerLock); `generate` toleron mbivendosjen
+    # aksidentale të DY reporterëve (një riprovim te kufizimi UNIQUE). Prandaj 2 garues, të dy kalojnë.
+    barrier = threading.Barrier(2, timeout=20)
     errors = []
 
     def go(i):
@@ -429,12 +431,67 @@ def test_pg_two_reporters_generating_at_once_never_duplicate_a_report_seq(db, mo
         except BaseException as e:  # noqa: BLE001
             errors.append(repr(e))
 
-    ts = [threading.Thread(target=go, args=(i,)) for i in range(3)]
+    ts = [threading.Thread(target=go, args=(i,)) for i in range(2)]
     [t.start() for t in ts]
     [t.join(40) for t in ts]
     assert not errors, errors
     seqs = [r.report_seq for r in local(db)]
     assert seqs == sorted(set(seqs)) and seqs[0] == 1
+
+
+@pg
+def test_pg_three_contenders_never_persist_a_duplicate_or_partial_report_seq(db):
+    """N>2 reporterë njëkohësisht janë jashtë topologjisë normale (një aktiv për DB, retry i vetëm). Kontrata
+    këtu NUK është «të tre kalojnë», por integriteti: asnjë `report_seq` i dyfishtë i commit-uar, sekuencë
+    e njëpasnjëshme, asnjë rresht i pjesshëm nga transaksioni i humbur, dhe humbësit dështojnë vetëm me
+    konfliktin e pritur UNIQUE. S'pohon që duhet të ndodhë gabim (planifikimi mund t'i lejojë të tre)."""
+    from sqlalchemy.exc import IntegrityError
+
+    from tests.test_m9c_money_authority import mk_world
+
+    mk_world(db, "10", None)
+    barrier = threading.Barrier(3, timeout=20)
+    outcomes: dict[
+        int, object
+    ] = {}  # i → listë report_id të krijuara, ose përjashtimi i kapur (pa fshehje)
+
+    def go(i):
+        try:
+            barrier.wait()
+            outcomes[i] = mu.generate(engine, SessionLocal, now=T0 + timedelta(minutes=20 * i))
+        except BaseException as e:  # noqa: BLE001
+            outcomes[i] = e
+
+    ts = [threading.Thread(target=go, args=(i,)) for i in range(3)]
+    [t.start() for t in ts]
+    [t.join(40) for t in ts]
+    assert set(outcomes) == {0, 1, 2}, "every contender must finish (no hang)"
+
+    errors = [v for v in outcomes.values() if isinstance(v, BaseException)]
+    created = [rid for v in outcomes.values() if not isinstance(v, BaseException) for rid in v]
+    for e in errors:  # humbësi lejohet vetëm me konfliktin e pritur
+        assert isinstance(e, IntegrityError), repr(e)
+        assert "uq_sms_usage_reports_seq" in str(e.orig), repr(e)
+
+    rows = local(db)
+    seqs = [r.report_seq for r in rows]
+    keys = {(r.enterprise_id, r.product_id, r.currency, r.report_seq) for r in rows}
+    assert len(keys) == len(rows), (
+        "no duplicate (enterprise, product, currency, report_seq) committed"
+    )
+    assert sorted(seqs) == list(range(1, len(rows) + 1)), seqs  # e njëpasnjëshme, pa vrima
+    assert {r.report_id for r in rows} == set(created), (
+        "committed rows are exactly the ones reported as created"
+    )
+    for r in rows:  # asnjë rresht i pjesshëm/i prishur: payload përputhet me kolonat
+        assert r.payload["report_seq"] == r.report_seq and r.payload["report_id"] == str(
+            r.report_id
+        )
+
+    # baza mbetet e përdorshme pas konfliktit: një gjenerim i ri (jashtë dritares heartbeat) fiton seq-in tjetër
+    nxt = mu.generate(engine, SessionLocal, now=T0 + timedelta(minutes=300))
+    assert len(nxt) == 1
+    assert [r.report_seq for r in local(db)][-1] == len(rows) + 1
 
 
 @pg

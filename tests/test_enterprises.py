@@ -109,7 +109,9 @@ def test_each_existing_owner_ref_becomes_exactly_one_enterprise(legacy):
         eng,
         "select owner_ref, status, legal_name, short_name, external_id from sms_enterprises order by owner_ref",
     )
-    assert [r[0] for r in rows] == ["Initech", "acme", "globex"]
+    # pa varësi nga collation-i i DB (C vs en_US): krahasim i renditur në Python; listat e barabarta
+    # provojnë saktësisht një Enterprise për owner_ref (as të munguar, as dublikatë)
+    assert sorted(r[0] for r in rows) == sorted(["acme", "globex", "Initech"])
     assert all(
         r[1] == "active" and r[2] is None and r[3] is None and r[4] is None for r in rows
     )  # pa supozime

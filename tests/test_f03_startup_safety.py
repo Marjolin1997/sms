@@ -117,7 +117,8 @@ def test_validate_production_still_raises_existing_gates():
     with pytest.raises(RuntimeError, match="unsafe production configuration"):
         prod(webhook_allow_http=True).validate_production()
     assert any("SMS_EMAIL_PROVIDER must not be 'fake'" in p for p in problems())  # parazgjedhja
-    assert any("PostgreSQL" in p for p in problems())  # SQLite default
+    # hermetik: URL SQLite i shprehur (conftest vendos SMS_DATABASE_URL te PG kur ka SMS_TEST_DATABASE_URL)
+    assert any("PostgreSQL" in p for p in problems(database_url="sqlite:///./x.db"))
 
 
 # ---- Central -----------------------------------------------------------------------------
