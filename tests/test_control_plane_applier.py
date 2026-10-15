@@ -463,11 +463,19 @@ def test_m7d_tables_have_no_owner_ref_and_only_expected_schema_added():
 
 def test_dockerfile_copies_packages_and_container_layout_imports_cleanly(tmp_path):
     """Simulon shtresën e imazhit: VETËM ajo që COPY-t e Dockerfile sillnin, pa PYTHONPATH."""
-    copies = [
-        ln.split()[1].lstrip("./")
-        for ln in (ROOT / "Dockerfile").read_text().splitlines()
-        if ln.startswith("COPY ") and not ln.startswith("COPY requirements")
-    ]
+    # Dockerfile është multi-stage (F-01): simulohet vetëm faza finale `enterprise`; COPY-t e fazës
+    # `central` (apps/, packages/) janë të vlefshme veçmas dhe s'hyjnë në këtë imazh.
+    copies, stage = [], None
+    for ln in (ROOT / "Dockerfile").read_text().splitlines():
+        if ln.startswith("FROM "):
+            stage = ln.split()[-1] if " AS " in ln.upper() else None
+        elif (
+            stage == "enterprise"
+            and ln.startswith("COPY ")
+            and not ln.startswith("COPY requirements")
+        ):
+            copies.append(ln.split()[1].lstrip("./"))
+    assert stage == "enterprise", "the final Dockerfile stage must be the Enterprise image"
     assert "packages" in copies and "app" in copies
     srv = tmp_path / "srv"
     srv.mkdir()

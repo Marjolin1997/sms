@@ -48,7 +48,7 @@ def _unbackfilled(db) -> str | None:
             continue
         # emri i tabelës vjen nga konstanta e mësipërme, jo nga input i jashtëm
         row = db.execute(
-            text(f"select 1 from {t} where enterprise_id is null and owner_ref is not null limit 1")  # noqa: S608
+            text(f"select 1 from {t} where enterprise_id is null and owner_ref is not null limit 1")  # noqa: S608  # nosec B608 - fixed legacy table allowlist
         ).first()
         if row:
             reason = (
@@ -67,7 +67,7 @@ def check() -> str | None:
             db.execute(text("select 1"))
             if not inspect(engine).has_table(VERSION_TABLE):
                 return None  # dev/test pa Alembic (create_all)
-            current = db.execute(text(f"select version_num from {VERSION_TABLE}")).scalar()  # noqa: S608
+            current = db.execute(text(f"select version_num from {VERSION_TABLE}")).scalar()  # noqa: S608  # nosec B608 - fixed Alembic version table
     except Exception:
         return "database unavailable"
     head = _head()

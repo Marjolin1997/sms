@@ -21,7 +21,7 @@ def check(engine: Engine, migrations_dir: Path = MIGRATIONS_DIR) -> str | None:
             conn.execute(text("select 1"))
             if not inspect(conn).has_table(VERSION_TABLE):
                 return "schema not initialized (run central migrations)"
-            current = conn.execute(text(f"select version_num from {VERSION_TABLE}")).scalar()  # noqa: S608
+            current = conn.execute(text(f"select version_num from {VERSION_TABLE}")).scalar()  # noqa: S608  # nosec B608 - fixed Alembic version table
     except Exception:
         return "database unavailable"
     try:

@@ -68,10 +68,10 @@ def audit_owner_refs(db: Session) -> OwnerRefAudit:
     where: dict[str, set[str]] = defaultdict(set)
     for table in _existing_tables(db):
         # emri i tabelës vjen nga konstanta e mësipërme, jo nga input i jashtëm
-        for (v,) in db.execute(text(f"SELECT DISTINCT owner_ref FROM {table}")):  # noqa: S608
+        for (v,) in db.execute(text(f"SELECT DISTINCT owner_ref FROM {table}")):  # noqa: S608  # nosec B608 - fixed legacy table allowlist
             if v is None:
                 n = db.execute(
-                    text(f"SELECT count(*) FROM {table} WHERE owner_ref IS NULL")
+                    text(f"SELECT count(*) FROM {table} WHERE owner_ref IS NULL")  # nosec B608 - fixed legacy table allowlist
                 ).scalar()  # noqa: S608
                 out.null_counts[table] = int(n)
             else:
@@ -206,18 +206,26 @@ def check_consistency(db: Session) -> ConsistencyReport:
     for t in _existing_tables(db):
         if "enterprise_id" not in {c["name"] for c in insp.get_columns(t)}:
             continue
-        rows = db.execute(text(f"SELECT count(*) FROM {t}")).scalar()  # noqa: S608
+        rows = db.execute(text(f"SELECT count(*) FROM {t}")).scalar()  # noqa: S608  # nosec B608 - fixed legacy table allowlist
         nulls = db.execute(
-            text(f"SELECT count(*) FROM {t} WHERE owner_ref IS NOT NULL AND enterprise_id IS NULL")  # noqa: S608
+            text(f"SELECT count(*) FROM {t} WHERE owner_ref IS NOT NULL AND enterprise_id IS NULL")  # noqa: S608  # nosec B608 - fixed legacy table allowlist
         ).scalar()
         bad = db.execute(
             text(  # noqa: S608
-                f"SELECT count(*) FROM {t} x WHERE x.enterprise_id IS NOT NULL AND NOT EXISTS "
+                f"SELECT count(*) FROM {t} x WHERE x.enterprise_id IS NOT NULL AND NOT EXISTS "  # nosec B608 - fixed legacy table allowlist
                 "(SELECT 1 FROM sms_enterprises e WHERE e.id = x.enterprise_id AND e.owner_ref = x.owner_ref)"
             )
         ).scalar()
         out.append(TableConsistency(t, int(rows), int(nulls), int(bad)))
     return ConsistencyReport(out)
+
+
+def _require_legacy_tables(names) -> None:
+    """Lista e lejuar është LEGACY_OWNER_TABLES (autoritative): emrat e tabelave interpolohen në SQL,
+    prandaj çdo emër jashtë saj refuzohet PARA çdo SQL-je (pa heshtur, pa pyetur DB-në për të)."""
+    unknown = sorted({str(t) for t in names if t not in LEGACY_OWNER_TABLES})
+    if unknown:
+        raise ValueError(f"unknown table(s) for enterprise_id backfill: {', '.join(unknown)}")
 
 
 def backfill_enterprise_ids(
@@ -227,12 +235,14 @@ def backfill_enterprise_ids(
     pa kyçje të gjata). Idempotent dhe i rifillueshëm: prek vetëm rreshtat me `enterprise_id` NULL;
     ecën me kursor `id` që të mos ziejë kurrë te rreshtat pa Enterprise (anomali). Krijon Enterprise-t
     që mungojnë (vetëm nëse auditi është i pastër). → {tabela: rreshta të përditësuar}."""
+    _require_legacy_tables(tables or ())  # fail-closed para çdo SQL-je
     with session_factory() as db:
         backfill_missing(db)
         db.commit()
     done: dict[str, int] = {}
     with session_factory() as db:
         names = [t for t in (tables or _existing_tables(db))]
+    _require_legacy_tables(names)  # emrat që interpolohen më poshtë janë vetëm nga lista e lejuar
     for table in names:
         total, last = 0, 0
         while True:
@@ -240,7 +250,7 @@ def backfill_enterprise_ids(
                 ids = list(
                     db.execute(
                         text(  # noqa: S608
-                            f"SELECT id FROM {table} WHERE id > :last AND enterprise_id IS NULL "
+                            f"SELECT id FROM {table} WHERE id > :last AND enterprise_id IS NULL "  # nosec B608 - validated against LEGACY_OWNER_TABLES
                             "AND owner_ref IS NOT NULL ORDER BY id LIMIT :n"
                         ),
                         {"last": last, "n": batch},
@@ -250,7 +260,7 @@ def backfill_enterprise_ids(
                     break
                 res = db.execute(
                     text(  # noqa: S608
-                        f"UPDATE {table} SET enterprise_id = "
+                        f"UPDATE {table} SET enterprise_id = "  # nosec B608 - validated against LEGACY_OWNER_TABLES
                         "(SELECT e.id FROM sms_enterprises e WHERE e.owner_ref = "
                         f"{table}.owner_ref) WHERE id >= :lo AND id <= :hi AND enterprise_id IS NULL"
                     ),

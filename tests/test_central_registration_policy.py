@@ -490,13 +490,16 @@ def test_production_refuses_to_start_with_the_unverified_gate_open(monkeypatch):
     from apps.central.core import tokens
 
     monkeypatch.setattr(settings, "env", "production")
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)  # F-03: gate i ndarë (nuk dobësohet)
     monkeypatch.setattr(settings, "auth_secret", "x" * 64)
     monkeypatch.setattr(tokens, "configured", lambda: True)
     monkeypatch.setattr(settings, "allow_unverified_auto_registration", True)
     with pytest.raises(RuntimeError, match="UNVERIFIED_AUTO_REGISTRATION"):
         main.create_app(create_engine("sqlite://"))
     monkeypatch.setattr(settings, "allow_unverified_auto_registration", False)
-    assert main.create_app(create_engine("sqlite://")) is not None
+    # F-01: në prodhim DB duhet të jetë PostgreSQL; dialekti mjafton (create_engine nuk lidhet)
+    pg = create_engine("postgresql+psycopg://u:p@localhost/db")
+    assert main.create_app(pg) is not None
 
 
 def test_no_email_or_network_is_used_by_registration_modules():

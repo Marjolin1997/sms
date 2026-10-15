@@ -34,7 +34,7 @@ def migration_state() -> tuple[str | None, str | None]:
     try:
         with engine.connect() as c:
             cur = c.execute(
-                text(f"select version_num from {core_readiness.VERSION_TABLE}")
+                text(f"select version_num from {core_readiness.VERSION_TABLE}")  # nosec B608 - fixed Alembic version table
             ).scalar()
     except Exception:  # noqa: BLE001
         cur = None

@@ -22,6 +22,8 @@ GOOD = dict(
     webhook_allow_http=False,
     email_provider="smtp",
     payment_provider="disabled",
+    trusted_proxy_hops=1,  # F-03: topologjia e skajit (nginx real_ip)
+    smtp_host="smtp.example.com",  # F-03: e detyrueshme kur email_provider="smtp"
 )
 
 

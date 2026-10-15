@@ -483,3 +483,80 @@ def test_consent_orm_is_still_append_only_and_new_events_get_enterprise_id(db):
 
 
 _ = Session
+
+
+# --- M11-I/F-04: emrat e tabelave të backfill-it vërtetohen kundër LEGACY_OWNER_TABLES ----------------
+
+
+def _no_session():
+    raise AssertionError("a DB session was opened: validation must run before any SQL")
+
+
+def test_backfill_accepts_a_known_table_and_only_touches_it(db):
+    _legacy_rows(db, n_tenants=1, per=3)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    done = svc.backfill_enterprise_ids(factory, batch=2, tables=("sms_contacts",))
+    assert list(done) == ["sms_contacts"] and done["sms_contacts"] == 3
+    db.expire_all()
+    assert (
+        db.execute(text("select count(*) from sms_wallets where enterprise_id is null")).scalar()
+        == 1
+    )  # tabela që s'u kërkua mbeti e pa-plotësuar
+
+
+def test_backfill_accepts_multiple_known_tables(db):
+    _legacy_rows(db, n_tenants=1, per=3)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    done = svc.backfill_enterprise_ids(factory, tables=("sms_contacts", "sms_wallets"))
+    assert set(done) == {"sms_contacts", "sms_wallets"}
+    assert done["sms_contacts"] == 3 and done["sms_wallets"] == 1
+
+
+def test_backfill_unknown_table_raises_before_any_sql():
+    with pytest.raises(ValueError, match="unknown table.*arbitrary_unknown_name"):
+        svc.backfill_enterprise_ids(_no_session, tables=("arbitrary_unknown_name",))
+
+
+def test_backfill_mixed_known_and_unknown_fails_closed(db):
+    _legacy_rows(db, n_tenants=1, per=2)
+    before = svc.check_consistency(db).unbackfilled
+    with pytest.raises(ValueError, match="unknown table.*nope"):
+        svc.backfill_enterprise_ids(_no_session, tables=("sms_contacts", "nope"))
+    db.expire_all()
+    assert svc.check_consistency(db).unbackfilled == before  # asgjë nuk u plotësua
+
+
+def test_backfill_rejects_sql_shaped_table_names_and_keeps_the_table(db):
+    evil = "sms_contacts; DROP TABLE sms_contacts"
+    with pytest.raises(ValueError, match="unknown table"):
+        svc.backfill_enterprise_ids(_no_session, tables=(evil,))
+    assert inspect(db.get_bind()).has_table("sms_contacts")
+
+
+def test_backfill_default_discovery_is_unchanged(db):
+    _legacy_rows(db, n_tenants=1, per=2)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    done = svc.backfill_enterprise_ids(factory)  # tables=None
+    assert set(done) == set(svc._existing_tables(db))
+    assert set(done) <= set(svc.LEGACY_OWNER_TABLES)
+    assert svc.check_consistency(db).complete
+
+
+def test_backfill_script_rejects_an_unknown_table_cleanly(db):
+    _legacy_rows(db, n_tenants=1, per=2)
+    r = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.backfill_enterprise_id",
+            "--table",
+            "arbitrary_unknown_name",
+        ],
+        env={**os.environ},
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 2
+    assert "unknown table" in r.stderr and "arbitrary_unknown_name" in r.stderr
+    assert "Traceback" not in r.stderr and "Traceback" not in r.stdout
+    assert db.execute(text("select count(*) from sms_contacts")).scalar() == 2  # asgjë e prekur

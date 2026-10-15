@@ -18,9 +18,13 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="vetëm kontrollo konsistencën")
     a = ap.parse_args()
     if not a.check:
-        done = enterprises.backfill_enterprise_ids(
-            SessionLocal, a.batch, tuple(a.table) if a.table else None, log_fn=print
-        )
+        try:
+            done = enterprises.backfill_enterprise_ids(
+                SessionLocal, a.batch, tuple(a.table) if a.table else None, log_fn=print
+            )
+        except ValueError as e:  # tabelë jashtë listës së lejuar: refuzohet para çdo SQL-je
+            print(f"refuzuar: {e}", file=sys.stderr)
+            return 2
         print(
             "përditësuar:",
             {t: n for t, n in done.items() if n} or "asgjë (gjithçka ishte e plotësuar)",
