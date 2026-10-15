@@ -25,10 +25,12 @@ def test_permissions_and_concurrency_unchanged():
     assert "write" not in re.search(r"^permissions:\n(.*?)\n\w", CI, re.M | re.S).group(1)
 
 
-def test_central_e2e_is_non_blocking_and_isolated():
+def test_central_e2e_is_blocking_and_isolated():
     j = job("central-e2e")
-    assert "continue-on-error: true" in j
-    assert "3 ekzekutime radhazi" in j  # arsyeja e dokumentuar pranë gate-it
+    assert "continue-on-error" not in code(
+        j
+    )  # bllokues pas 3 ekzekutimesh të gjelbra (82b1895, 256f282, 4162d99)
+    assert "BLLOKUES" in j
     assert "e2e/run_central_e2e.sh" in j
     assert "timeout-minutes:" in j
     # asnjë sekret i repo-s dhe asnjë kredencial provider-i në job
@@ -36,11 +38,16 @@ def test_central_e2e_is_non_blocking_and_isolated():
     assert not re.search(r"(TWILIO|SMTP|STRIPE|PAYPAL|PROVIDER)", code(j), re.I)
 
 
-def test_blocking_jobs_have_timeouts_and_central_e2e_is_the_only_non_blocking_new_job():
-    for name in ("backend", "e2e", "central-e2e", "docker", "secret-scan"):
-        assert "timeout-minutes:" in job(name), name
-    assert "continue-on-error" not in job("secret-scan")
-    assert "continue-on-error" not in job("backend")
+def test_all_new_jobs_have_realistic_timeouts_and_only_audit_is_advisory():
+    expected = {
+        "backend-static": 15, "pytest-pg": 60, "pytest-sqlite": 60, "migrations-backup": 30,
+        "backend-ci-gate": 5, "e2e": 30, "central-e2e": 30, "docker": 45, "secret-scan": 10,
+    }  # fmt: skip
+    for name, minutes in expected.items():
+        assert f"timeout-minutes: {minutes}" in job(name), name
+    for name in expected:
+        assert "continue-on-error" not in code(job(name)), name  # të gjitha bllokuese
+    assert "continue-on-error: true" in job("audit")  # i vetmi këshillues
 
 
 def test_failure_artifacts_are_logs_and_screenshots_only():
@@ -61,7 +68,7 @@ def test_secret_scan_is_current_tree_only_with_pinned_checked_binary():
 
 
 def test_enterprise_migration_head_assertion_is_not_hardcoded():
-    j = job("backend")
+    j = job("migrations-backup")
     assert 'alembic heads | wc -l)" = "1"' in j
     assert "alembic current | cut -d' ' -f1)\" = \"$(alembic heads" in j
     # kokat e ngulitura të migrimeve nuk shtohen për Enterprise në CI (Central ka gate-in e vet 0031)
@@ -116,3 +123,51 @@ def test_central_e2e_runner_is_synthetic_local_only():
     assert re.search(r"secrets\.token_urlsafe", sh)  # kredenciale të gjeneruara, jo të ngulitura
     assert not re.search(r"(postgresql|https?://(?!127\.0\.0\.1))", sh)
     assert (ROOT / "e2e" / "run_central_e2e.sh").stat().st_mode & 0o111
+
+
+# --- M11-I/F-04 performancë: shardim, paralelizim, porta përfundimtare -----------------------------------
+
+
+def test_pytest_is_sharded_deterministically_with_isolated_databases():
+    pg, lite = job("pytest-pg"), job("pytest-sqlite")
+    assert re.search(r"shard: \[0, 1, 2, 3\]", pg) and "--shard-count 4" in pg
+    assert re.search(r"shard: \[0, 1\]", lite) and "--shard-count 2" in lite
+    for j in (pg, lite):
+        # `python -m pytest` (cwd në sys.path): `pytest` i zhveshur s'e gjen `-p tests.ci_shard`
+        assert (
+            "python -m pytest -q -p tests.ci_shard" in j
+            and "--shard-index ${{ matrix.shard }}" in j
+        )
+        assert "fail-fast: false" in j  # çdo shard raporton veçmas
+        assert "needs:" not in code(j)  # paralel: s'presin jobe të tjera
+    assert "services:" in pg and "image: postgres:16" in pg  # çdo shard: PG i vet
+    assert "SMS_TEST_DATABASE_URL" in pg
+    assert (
+        "SMS_TEST_DATABASE_URL" not in code(lite) and "services:" not in lite
+    )  # SQLite i përkohshëm
+
+
+def test_migrations_backup_runs_in_its_own_job_not_with_pytest():
+    m = job("migrations-backup")
+    for needle in ("alembic downgrade base", "apps/central/alembic.ini", "scripts/backup.sh",
+                   "scripts/restore.sh", "scripts.verify_ledger", "image: postgres:16"):  # fmt: skip
+        assert needle in m, needle
+    for name in ("pytest-pg", "pytest-sqlite", "backend-static"):
+        assert "alembic" not in job(name) and "backup.sh" not in job(name), name
+
+
+def test_gate_collects_every_backend_job_and_independent_jobs_are_parallel():
+    g = job("backend-ci-gate")
+    assert re.search(r"needs: \[backend-static, pytest-pg, pytest-sqlite, migrations-backup\]", g)
+    assert "always()" in g and "needs.*.result" in g
+    assert "needs:" not in code(job("docker"))  # Docker është i pavarur
+    assert re.search(r"needs: \[frontend\]", job("e2e"))  # E2E Enterprise: vetëm frontend
+    assert "backend" not in re.search(r"needs: (\[.*?\])", job("e2e")).group(1)
+    assert "needs:" not in code(job("backend-static"))
+
+
+def test_backend_static_proves_the_shard_partition_in_ci():
+    j = job("backend-static")
+    assert "scripts.ci_shard_proof --mode pg --shards 4" in j
+    assert "scripts.ci_shard_proof --mode sqlite --shards 2" in j
+    assert "ruff check ." in j and "ruff format --check ." in j and "bandit" in j

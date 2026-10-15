@@ -6,7 +6,7 @@ frontend-central, me CENTRAL_DATABASE_URL (DB e përkohshme) dhe PYTHONPATH drej
     E2E_BASE=http://127.0.0.1:5174 E2E_IDS=ids.json E2E_ADMIN_PW=... E2E_OP_PW=... \\
     python e2e/test_central_console.py
 
-Ekzekutohet nga `e2e/run_central_e2e.sh` (job `central-e2e` i CI, JO-BLLOKUES deri në 3 ekzekutime radhazi
+Ekzekutohet nga `e2e/run_central_e2e.sh` (job `central-e2e` i CI, BLLOKUES pas 3 ekzekutimesh radhazi
 të gjelbra në GitHub CI) dhe lokalisht me të njëjtin skript. Nuk ekzekutohet nga pytest.
 """
 

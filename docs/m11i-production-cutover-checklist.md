@@ -253,7 +253,7 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
 - [ ] **CE-00** — Revision-i ka CI jeshile për hapat Central (imazh `--target central`, build web Central, `nginx -t`, `compose config`, Vitest/build `frontend-central`, migrim Central në PG).  
   Prova: statusi CI i atij commit-i  
   Pritet: të gjitha punët `backend`, `frontend-central`, `docker` = success  
-  Klas.: NOT VERIFIED (CI nuk ka ekzekutuar mbi paketimin; F-04 shton skanim sekretesh dhe `central-e2e` jo-bllokues — CI EXECUTION PENDING)  
+  Klas.: NOT VERIFIED (CI nuk ka ekzekutuar mbi paketimin; F-04 shton skanim sekretesh dhe `central-e2e` (tani bllokues, 3/3 GREEN); backend ndahet në shard-e paralele — CI EXECUTION PENDING për gjelbërimin e plotë)  
   NO-GO/abort: ndonjë punë e kuqe ose e munguar → NO-GO
 - [ ] **CE-01** — Central është opt-in: nisja e zakonshme mbetet vetëm-Enterprise.  
   Prova: `docker compose -f docker-compose.prod.yml --env-file .env config --services` (pa profile) dhe `… --profile central config --services`  
