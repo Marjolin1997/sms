@@ -130,6 +130,15 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 
 **Gjetje të rregulluara:** `restore.sh` printonte URL-në me fjalëkalim në dalje; kredencialet shkonin si argumente procesi; emri `sms-*.dump` përzinte bazat; mungonte kontrolli i kokës dhe ledger-i i Central; restore i dështuar linte bazë të gjysmë; checksum i munguar ishte vetëm paralajmërim. **Klasifikimi:** F-05A = LOCAL/STAGING RECOVERY READINESS VERIFIED — PRODUCTION PITR EVIDENCE STILL REQUIRED. F-05B (WAL/PITR real, off-host + enkriptim, alarme, pronar, RPO/RTO të matur) = **BLOCKED — REAL PRODUCTION INFRASTRUCTURE REQUIRED**. RPO/RTO janë **POLICY PROPOSAL**, jo të arritur. Gatishmëria e prodhimit mbetet **BLOCKED**.
 
+
+## 0g. Përditësim M11-I/F-06 — monitorimi, alarmimi dhe operacionet e planifikuara (lokal)
+
+**Çfarë u zbatua (vetëm mjete/inventar/doc/teste; ASNJË kod aplikacioni ose biznesi):** `scripts/job_runner.py` (kyç `flock` jo-bllokues, timeout që vret grupin e proceseve, status JSON pa argumente/mjedis, **pa retry**), `scripts/ops_freshness.py` (job FAILED/STALE/MISSING/STUCK + freskia e backup-it, kode 0/1/2), inventari `deploy/scheduled-jobs.json` (11 job cron + 9 shërbime workers; vetëm komanda ekzistuese), `tests/test_f06_operations.py` (33 teste), dokumentet `m11i-monitoring-alerting-runbook.md`, `m11i-scheduled-operations-runbook.md`, `m11i-alert-matrix.md` (AL-01..AL-23, P1/P2/P3).
+
+**Gjetje:** nuk ka `/metrics`, Prometheus, OpenTelemetry, Sentry, log JSON, as `log_format` nginx me latencë; `X-Request-ID` nuk shkruhet te log-et e aplikacionit. Të gjitha job-et financiare/sender kanë mbrojtje nga mbivendosja (kyç advisory / `FOR UPDATE` / `SKIP LOCKED`); `retention --apply` (Enterprise/Central) s'ka kyç por është idempotent dhe **nuk planifikohet**. Asnjë log nuk merr vlerë sekret (kontroll AST). **Propozime pa zbatuar (kërkojnë miratim):** log JSON me `request_id`/`enterprise_id`, `log_format` nginx, metrikë latence DLR, endpoint metrikash.
+
+**Klasifikimi:** F-06 = LOCAL OPERATIONAL MONITORING READINESS VERIFIED — REAL MONITORING/ON-CALL INTEGRATION STILL REQUIRED. Platforma e monitorimit, kanali/pager, on-call, planifikuesi real, agregimi i log-eve dhe metrikat e hostit/PG/WAL: **PRODUCTION-ONLY**. Gatishmëria e prodhimit mbetet **BLOCKED**.
+
 ## 1. Veprimet e ardhshme që heqin bllokuesit (jo të zbatuara)
 
 | ID | Veprimi i ardhshëm | Heq |
@@ -318,7 +327,7 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 
 | Fusha | Përmbajtja |
 |---|---|
-| Gjendja aktuale | Në repo: healthcheck-e Docker, `/healthz`, `/readyz`, `X-Request-ID`, CLI 'pull' (`sender_alerts`, `financial_ops`, `queue_readiness`, readiness) dhe alarme të llogaritura brenda aplikacionit. Nuk ka Prometheus/Alertmanager/pager, as formatim log-esh me latencë. |
+| Gjendja aktuale | Në repo: healthcheck-e Docker, `/healthz`, `/readyz`, `X-Request-ID`, CLI 'pull' (`sender_alerts`, `financial_ops`, `queue_readiness`, readiness) dhe alarme të llogaritura brenda aplikacionit. Nuk ka Prometheus/Alertmanager/pager, as formatim log-esh me latencë. **Pas F-06:** matrica e alarmeve (`m11i-alert-matrix.md`), `job_runner` + `ops_freshness` + inventari i job-eve dhe testet lokale; monitorimi real mbetet EXTERNAL. |
 | Evidenca | `docs/RUNBOOK.md` §5; `docs/M10_PROD_OPERATIONS.md` §4; `docs/m11i-observability-alerting-plan.md`. |
 | Klasifikimi | Burimet në kod: VERIFIED. Sistem monitorimi dhe on-call: EXTERNAL EVIDENCE REQUIRED. Log latence nginx: NOT VERIFIED. |
 | Rreziku | HIGH. |
@@ -391,6 +400,7 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 | Rikthim / abort | Abort nëse `due_unprocessed` rritet. Rikthim: ndalo `billing_run` (M9G §rikthim). |
 | Pronari / varësia | Operacione — NUK ËSHTË CAKTUAR (jashtë repo-së) |
 | Kriteri GO/NO-GO | GO kur proceset janë planifikuar dhe të monitoruara. |
+| Status pas F-06 | Inventari dhe kontrolli i freskisë janë në repo (`deploy/scheduled-jobs.json`, `scripts/ops_freshness.py`); planifikimi real (cron/timer) mbetet **PRODUCTION-ONLY**. Shih `m11i-scheduled-operations-runbook.md`. |
 | Status pas F-01 | **PACKAGED (explicit/manual), NOT SCHEDULED.** Profili `central-jobs`: `central-billing-run` (refuzon kur autoriteti ≠ central), `central-send-notifications` (një kalim), `central-tool` (parazgjedhje `sender_central_readiness`). Planifikimi, heartbeat-i dhe monitorimi mbeten EXTERNAL EVIDENCE REQUIRED. |
 
 ### GAP-17 — Mbrojtjet e nisjes që mungojnë (kod, veprim i ardhshëm)

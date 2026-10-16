@@ -1,5 +1,7 @@
 # M11-I — Plani i monitorimit dhe alarmeve
 
+**Shënim F-06:** modeli i alarmeve me P1/P2/P3, inventari i job-eve dhe mjetet lokale janë tani te `docs/m11i-alert-matrix.md`, `docs/m11i-scheduled-operations-runbook.md` dhe `docs/m11i-monitoring-alerting-runbook.md`; ky dokument mbetet si histori e burimeve.
+
 **Revision i bazës:** `6020026`. Plan; **asgjë nuk është ngritur**. Statusi: **BLOCKED** (nuk ka sistem monitorimi, kanal alarmesh as on-call; **EXTERNAL EVIDENCE REQUIRED**).
 
 ## 0. Gjendja e verifikuar

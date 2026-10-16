@@ -113,7 +113,7 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 | Klasifikimi / evidenca | Mjetet: VERIFIED (`worker_health`, `scripts.queue_readiness`, kill switches). Sjellja në kontejnerë të compose: PARTIALLY VERIFIED (M11-H përdori procese lokale). |
 | Rreziku | Workers të ngecur; mesazhe UNKNOWN/SENDING të pazgjidhur. |
 | Parakusht | Faza 6. |
-| Validim para prodhimit | `docker compose ... ps worker webhook-worker` = healthy; `docker compose ... exec api python -m scripts.queue_readiness --json` pa FAIL; kill switch `dispatch` te konsola (Admin → Kill switches) në pauzë deri te canary. |
+| Validim para prodhimit | `docker compose ... ps worker webhook-worker` = healthy; job-et e planifikuara të instaluara përmes `scripts.job_runner` sipas `docs/m11i-scheduled-operations-runbook.md` dhe `python -m scripts.ops_freshness --state-dir … --backup-dir … ` pa FAIL (inventari `deploy/scheduled-jobs.json`); `docker compose ... exec api python -m scripts.queue_readiness --json` pa FAIL; kill switch `dispatch` te konsola (Admin → Kill switches) në pauzë deri te canary. |
 | Veprimi (NUK ekzekutohet në M11-I) | Mbaje `dispatch` në pauzë; çaktivizo çdo rrugë provider-i derisa të nisë canary. |
 | Abort / rikthim | FAIL te `queue_readiness` ose heartbeat >90 s: abort. |
 | Pronari / varësia | Operatori — NUK ËSHTË CAKTUAR |

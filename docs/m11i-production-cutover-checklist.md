@@ -354,7 +354,7 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
 ## 8. OBSERVABILITY
 
 - [ ] **OB-01** — Alarmet kritike ekzistojnë dhe kanë pronar.  
-  Prova: Lista e alarmeve nga `m11i-observability-alerting-plan.md` të lidhura me kanal  
+  Prova: Lista e alarmeve nga `m11i-alert-matrix.md` (F-06; zëvendëson planin e vjetër `m11i-observability-alerting-plan.md`) të lidhura me kanal  
   Pritet: çdo alarm S1/S2 ka pranues  
   Klas.: EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: pa pronar → NO-GO
@@ -373,6 +373,16 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
   Pritet: alarm i marrë  
   Klas.: EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: s'ka alarm → NO-GO
+- [ ] **OB-06** — Job-et e planifikuara përmes `job_runner` dhe kontrolli i freskisë.  
+  Prova: `python -m scripts.ops_freshness --state-dir "$SMS_JOB_STATE_DIR" --backup-dir <backup_dir>` (inventari `deploy/scheduled-jobs.json`); alarmi ngrihet kur një job ndalon  
+  Pritet: kod 0; një job i ndaluar në staging shkakton STALE/FAILED dhe arrin pranuesin  
+  Klas.: VERIFIED lokalisht (F-06); planifikuesi dhe alarmimi EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: FAIL ose mungon → NO-GO
+- [ ] **OB-07** — Matrica e alarmeve (`docs/m11i-alert-matrix.md`) e lidhur me kanal dhe pronarë të emëruar.  
+  Prova: çdo alarm P1/P2 ka pranues; një P1 i provokuar arrin pranuesin brenda 5 min  
+  Pritet: pranues i konfirmuar për AL-01, AL-02, AL-05, AL-07..AL-10, AL-14, AL-20, AL-22  
+  Klas.: EXTERNAL EVIDENCE REQUIRED  
+  NO-GO/abort: pa pronar → NO-GO
 - [ ] **OB-05** — Alarm skadence certifikate.  
   Prova: Alarm i konfiguruar me prag ≥ 21 ditë (PROPOSED)  
   Pritet: alarm aktiv  
