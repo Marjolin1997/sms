@@ -9,6 +9,8 @@
 
 **Përditësim M11-I/F-04 (forcimi i CI):** shtuar në `.github/workflows/ci.yml` dhe repo: skanim sekretesh (gitleaks, **VETËM peme aktuale**), job `central-e2e` (**BLLOKUES** pas 3 ekzekutimesh radhazi të gjelbra në GitHub CI mbi commit-e të ndryshme), pohim i kokës Enterprise të migrimit, artefakte dështimi (vetëm logje + pamje ekrani) për E2E Enterprise dhe Central, `timeout-minutes`, Dependabot për `frontend-central`, `.gitignore` për `*.pem` dhe `.env.*`. Statusi: **IMPLEMENTED / LOCALLY VERIFIED; CI EXECUTION PENDING** (GitHub s'ka ekzekutuar kurrë këtë workflow). Skanimi i historisë së plotë: **DEFERRED / MANUAL SECURITY TASK**. Sharding-u i PG: **DEFERRED** (pas kohës reale nga GitHub). Shih §0e.
 
+**Përditësim M11-I/F-07A (provider, DLR, canary sintetik, kontrolli i cutover-it):** pjesa lokale/staging-grade është **IMPLEMENTED / LOCALLY VERIFIED; CI PENDING**: harness-i sintetik `scripts/provider_canary.py` (provider të rremë, pa rrjet, DB e hedhshme), gate-i vetëm-lexim `scripts/provider_readiness.py` (pre/post, GO/NO-GO, plani i rikthimit), matrica e kontratës/dështimeve dhe runbook-et `m11i-provider-dlr-runbook.md`, `m11i-canary-cutover-runbook.md`, `m11i-provider-failure-matrix.md`, `m11i-provider-evidence-checklist.md`. Gjetje pa ndryshim semantike: s'ka kanal voice/flashcall; s'ka fallback automatik (çaktivizimi i rrugës s'ridrejton QUEUED); s'ka throttling për provider; id e dyfishtë e provider-it zbulohet jo parandalohet; `DlrReceipt` pa retention, email pa receipts. **F-07B (provider real, URL publik, dorëzim real) = BLOCKED / PRODUCTION-ONLY** — GAP-10 dhe GAP-11 NUK mbyllen.
+
 **Përditësim M11-I/F-03 (nisja/sekretet në prodhim):** pjesa e nisjes dhe e sekreteve e GAP-17 është **RESOLVED / LOCALLY VERIFIED** (gate-t kushtëzuese në `production_problems()` dhe te Central; CI PENDING). **2FA e detyrueshme e stafit Central mbetet EXTERNAL / POLICY DECISION REQUIRED** — GAP-17 si i tërë NUK është mbyllur. Shih §0d.
 
 > **Shënim numërimi:** etiketat F-01/F-02/F-03 të milestone-s së ekzekutimit (F-01 paketimi i Central, F-02 TLS/reverse proxy/trusted proxy, F-03 siguria e nisjes/sekreteve) janë të ndryshme nga etiketat e vjetra F-xx të «veprimeve të ardhshme» të shkruara fillimisht në §1. Etiketat e §1 janë **legacy** dhe nuk e udhëheqin më numërimin; historiku nuk është rinumëruar.
@@ -312,7 +314,7 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 
 | Fusha | Përmbajtja |
 |---|---|
-| Gjendja aktuale | Asnjë SMS/DLR real nuk është dërguar kurrë; M11-H përdori vetëm FakeProvider me DLR të simuluar të nënshkruar. Plani i canary ekziston te `docs/M10_PROD_OPERATIONS.md` §8 (nuk dërgohet). |
+| Gjendja aktuale | **F-07A:** canary sintetik lokal + gate `provider_readiness` (VERIFIED LOKALISHT, pa rrjet; shih `m11i-canary-cutover-runbook.md`). Asnjë SMS/DLR real nuk është dërguar kurrë; M11-H përdori vetëm FakeProvider me DLR të simuluar të nënshkruar. Plani i canary ekziston te `docs/M10_PROD_OPERATIONS.md` §8 (nuk dërgohet). |
 | Evidenca | M11-H (FakeProvider, 0 SMS reale); `docs/M10_PROD_OPERATIONS.md` §8; `docs/M9_PRODUCTION_CHECKLIST.md` §1 (provë idempotence e provider-it). |
 | Klasifikimi | EXTERNAL EVIDENCE REQUIRED. |
 | Rreziku | HIGH. |

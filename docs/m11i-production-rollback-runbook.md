@@ -87,7 +87,7 @@ Pragjet janë **PROPOSED** (asnjë nuk është verifikuar në prodhim) përveç 
 | Rreziku | SMS e dërguar nuk kthehet; mesazhet UNKNOWN nuk lirohen automatikisht (vetëm stafi ose një DLR autoritativ). |
 | Parakusht | Qasje stafi me 2FA. |
 | Validim para prodhimit | Në staging: pauzo `dispatch` → mesazhet mbledhen në radhë → rifillo → dalin. |
-| Veprimi | 1) Pauzo `dispatch` (dhe `submit` nëse duhet). 2) Çaktivizo rrugën e provider-it. 3) Nëse kredencialet dyshohen: rrotullo te provider-i dhe hiq nga `.env`. 4) Trajto UNKNOWN sipas `docs/M9_MONEY_AUDIT.md`/queue readiness. |
+| Veprimi | 1) Pauzo `dispatch` (dhe `submit` nëse duhet). 2) Çaktivizo rrugën e provider-it — **kujdes (F-07A, provuar): kjo NUK ridrejton mesazhet që janë tashmë QUEUED** (mbeten të lidhura me provider-in e tyre; s'ka API anulimi për mesazh të vetëm) ⇒ mbaji me `dispatch` të pauzuar derisa të vendosë njeriu. Plani vetëm-lexim: `python -m scripts.provider_readiness rollback-plan --provider <emri>`; procedura e plotë: `m11i-canary-cutover-runbook.md` §5. 3) Nëse kredencialet dyshohen: rrotullo te provider-i dhe hiq nga `.env`. 4) Trajto UNKNOWN sipas `docs/M9_MONEY_AUDIT.md`/queue readiness. |
 | Abort | — |
 | Pronari | Operatori + pronari i provider-it — NUK ËSHTË CAKTUAR |
 | GO/NO-GO | `queue_readiness` pa FAIL; asnjë mesazh i ri në `sending`. |

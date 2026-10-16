@@ -163,6 +163,7 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 | Fusha | Përmbajtja |
 |---|---|
 | Klasifikimi / evidenca | Kodi: VERIFIED. Provider real: EXTERNAL EVIDENCE REQUIRED; canary: GAP-11. |
+| Mjetet (F-07A, vetëm-lexim) | `python -m scripts.provider_readiness check --provider <emri> --phase pre --strict` (gate), `python -m scripts.provider_canary` (canary sintetik lokal), `…rollback-plan`. Docs: `m11i-provider-dlr-runbook.md`, `m11i-canary-cutover-runbook.md`, `m11i-provider-failure-matrix.md`, `m11i-provider-evidence-checklist.md`. **Canary real = F-07B, BLOCKED.** |
 | Rreziku | SMS reale/faturim gabim; DLR i falsifikuar. |
 | Parakusht | GAP-10, GAP-11; `SMS_DLR_SECRETS` të vendosur; `SMS_PUBLIC_BASE_URL` i arritshëm nga provider-i. |
 | Validim para prodhimit | Provë idempotence e provider-it (M9 checklist §1); callback i nënshkruar pranohet, i pasaktë refuzohet (401/4xx). |

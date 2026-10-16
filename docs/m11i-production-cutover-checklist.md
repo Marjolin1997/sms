@@ -351,6 +351,27 @@ Paketimi i Central (M11-I/F-01) është **IMPLEMENTED / LOCALLY VERIFIED; CI VER
   Klas.: VERIFIED (mekanizmi)  
   NO-GO/abort: e hapur → NO-GO
 
+- [ ] **PV-06** — Gate-i i provider-it para canary-t (F-07A).  
+  Prova: `python -m scripts.provider_readiness check --provider <emri> --phase pre --strict`  
+  Pritet: `verdict: GO` (provider i regjistruar, sekret/token i fortë, URL https, rrugë që fiton prioritetin, kill switch-et aktive, pa UNKNOWN/SENDING të ngecur)  
+  Klas.: VERIFIED LOKALISHT (mjeti, provider të rremë); vlerat/arritshmëria reale EXTERNAL  
+  NO-GO/abort: `NO-GO` → NO-GO
+- [ ] **PV-07** — Plani i rikthimit i njohur dhe i ushtruar në staging.  
+  Prova: `python -m scripts.provider_readiness rollback-plan --provider <emri>` + procedura te `m11i-canary-cutover-runbook.md` §5 (përfshin: çaktivizimi i rrugës NUK ridrejton QUEUED; pauzo `dispatch`)  
+  Pritet: rruga e mëparshme e shkruar; `must_not_resend` kuptuar  
+  Klas.: VERIFIED LOKALISHT (helper vetëm-lexim); ushtrimi real PRODUCTION-ONLY  
+  NO-GO/abort: rikthim i paushtruar → NO-GO
+- [ ] **PV-08** — Canary sintetik lokal i gjelbër në revision-in e deployment-it (F-07A).  
+  Prova: `python -m scripts.provider_canary --json`  
+  Pritet: `ok:true`, `network_attempts:0`, `cleaned_up:true`  
+  Klas.: VERIFIED LOKALISHT (NUK zëvendëson canary-n real)  
+  NO-GO/abort: dështim → NO-GO
+- [ ] **PV-09** — Canary real me provider real (F-07B) dhe GO sipas `m11i-canary-cutover-runbook.md` §4.  
+  Prova: JSON `provider_readiness check --phase post` para/pas + paneli i provider-it + `verify_ledger`  
+  Pritet: 100% DELIVERED, 0 UNKNOWN, 0 dublikime  
+  Klas.: **BLOCKED / PRODUCTION-ONLY (F-07B)**  
+  NO-GO/abort: mungon → NO-GO
+
 ## 8. OBSERVABILITY
 
 - [ ] **OB-01** — Alarmet kritike ekzistojnë dhe kanë pronar.  
