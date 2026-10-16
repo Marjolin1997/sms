@@ -371,9 +371,10 @@ def test_runner_usage_errors_and_status_without_arguments_or_secrets(tmp_path):
         ).returncode
         == 2
     )
-    runner(tmp_path, "sec", ["sh", "-c", "exit 0", "TOKEN=Zq7-secret-argument"])
+    runner(tmp_path, "sec", ["sh", "-c", "exit 0", "Zq7-secret-argument"])
     raw = (tmp_path / "sec.json").read_text()
-    assert "Zq7" not in raw and "TOKEN" not in raw and status(tmp_path, "sec")["command"] == "sh"
+    assert "Zq7" not in raw and "secret-argument" not in raw
+    assert status(tmp_path, "sec")["command"] == "sh"
     runner(tmp_path, "mod", [sys.executable, "-m", "json.tool", "--help"])
     assert status(tmp_path, "mod")["command"] == "python -m json.tool"
 
@@ -610,7 +611,7 @@ def test_freshness_output_never_contains_commands_or_environment(tmp_path):
     write_status(
         tmp_path,
         "queue-readiness",
-        command="python -m x TOKEN=Zq7-hidden",
+        command="python -m x Zq7-hidden",
         last_success_utc=ts(10),
         last_end_utc=ts(10),
     )
