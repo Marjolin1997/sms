@@ -1,0 +1,106 @@
+[
+ {
+  "body_file": "empty_first_report.body",
+  "content_hash": "f4f6010cc152fd38943b7b087d64e1862b2c101ebbc68a1da547dd9aa054e244",
+  "input": {
+   "cumulative_billable_count": 0,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000701",
+   "report_seq": 1,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 0
+  },
+  "name": "empty_first_report",
+  "parsed": {
+   "cumulative_billable_count": 0,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000701",
+   "report_seq": 1,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 0
+  },
+  "payload_hash": "6f6918bc55cf081bf53b849c9faf5b5fc6b29d92820dd2b16439efd4ca468686"
+ },
+ {
+  "body_file": "with_usage.body",
+  "content_hash": "7e479d5f643edf255f0265436c188cc94f31afbd5922a7aeeeaf000a5f144bba",
+  "input": {
+   "cumulative_billable_count": 15,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-02T00:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000702",
+   "report_seq": 2,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 17
+  },
+  "name": "with_usage",
+  "parsed": {
+   "cumulative_billable_count": 15,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-02T00:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000702",
+   "report_seq": 2,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 17
+  },
+  "payload_hash": "73d4c86147fba502ff5017e72a2172883fb7e093194b81f50ca8893ff1d17b11"
+ },
+ {
+  "body_file": "gaps_in_ids_are_allowed.body",
+  "content_hash": "0ed6ceb34c775b3382af0b25ed3108abff1a5a2108738e723f8c9f07a28cdfc1",
+  "input": {
+   "cumulative_billable_count": 3,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000703",
+   "report_seq": 3,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 1000
+  },
+  "name": "gaps_in_ids_are_allowed",
+  "parsed": {
+   "cumulative_billable_count": 3,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000703",
+   "report_seq": 3,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 1000
+  },
+  "payload_hash": "40e9a97ddf38324961b10aa534937730d201adee30d8702de37e7be90de5cd2c"
+ },
+ {
+  "body_file": "edge_high_values.body",
+  "content_hash": "7519c737d965d4915b29160f585908ff9fc2248aaebdbac1c5b2d08385b6d1e3",
+  "input": {
+   "cumulative_billable_count": 9223372036854775807,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000704",
+   "report_seq": 4611686018427387904,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 9223372036854775807
+  },
+  "name": "edge_high_values",
+  "parsed": {
+   "cumulative_billable_count": 9223372036854775807,
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "generated_at": "2030-01-01T12:00:00.000000+00:00",
+   "product_id": "00000000-0000-0000-0000-0000000000b1",
+   "report_id": "00000000-0000-0000-0000-000000000704",
+   "report_seq": 4611686018427387904,
+   "schema": "cp.billing.usage.v1",
+   "watermark": 9223372036854775807
+  },
+  "payload_hash": "3646229f2cb11320750ee71bd807724f9e887e8174faef2dbd0c8ede24d14897"
+ }
+]

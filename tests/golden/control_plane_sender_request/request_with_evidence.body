@@ -1,0 +1,1 @@
+{"country":"AL","display_value":"Acme","enterprise_id":"00000000-0000-0000-0000-000000000111","evidence_ref":"ticket-4711","external_ref":"sms-sender-7","operation":"request","operation_id":"00000000-0000-0000-0000-0000000000a4","schema":"sender.request.v1","sender_kind":"alphanumeric"}

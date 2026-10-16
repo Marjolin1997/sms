@@ -26,3 +26,17 @@ def test_bad_amount_rejected(client):
     r = client.post(f"/v1/wallets/{w['id']}/topups", json={"amount": "-5", "method": "cash"})
     assert r.status_code == 422
     assert client.post("/v1/topups/999/confirm").status_code == 404
+
+
+def test_security_headers_and_body_limit(client):
+    r = client.get("/healthz")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["cache-control"] == "no-store"
+    big = client.post("/v1/wallets", content=b"x" * (300 * 1024))
+    assert big.status_code == 413
+
+
+def test_text_length_capped(client):
+    body = {"owner_ref": "c", "to": "+355691230003", "sender": "ACME", "text": "x" * 1601}
+    r = client.post("/v1/messages", json=body, headers={"Idempotency-Key": "k"})
+    assert r.status_code == 422

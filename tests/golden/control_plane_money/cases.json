@@ -1,0 +1,460 @@
+[
+ {
+  "name": "issued_standard",
+  "body_file": "issued_standard.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "40.000000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000001",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 1
+  },
+  "row": {
+   "seq": 1,
+   "event_id": "00000000-0000-0000-0000-000000000001",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "40.000000",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "reversed_standard",
+  "body_file": "reversed_standard.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "40.000000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000002",
+   "event_type": "credit_grant.reversed",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 2
+  },
+  "row": {
+   "seq": 2,
+   "event_id": "00000000-0000-0000-0000-000000000002",
+   "event_type": "credit_grant.reversed",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "40.000000",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "reversed",
+    "reversed_at": "2030-01-02T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "issued_bootstrap",
+  "body_file": "issued_bootstrap.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "1200.000000",
+    "baseline_ref": "abababababababababababababababababababababababababababababababab",
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "bootstrap"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000003",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 3
+  },
+  "row": {
+   "seq": 3,
+   "event_id": "00000000-0000-0000-0000-000000000003",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "1200.000000",
+    "currency": "EUR",
+    "purpose": "bootstrap",
+    "baseline_ref": "abababababababababababababababababababababababababababababababab",
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "reversed_bootstrap",
+  "body_file": "reversed_bootstrap.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "1200.000000",
+    "baseline_ref": "abababababababababababababababababababababababababababababababab",
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "bootstrap"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000004",
+   "event_type": "credit_grant.reversed",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 4
+  },
+  "row": {
+   "seq": 4,
+   "event_id": "00000000-0000-0000-0000-000000000004",
+   "event_type": "credit_grant.reversed",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "1200.000000",
+    "currency": "EUR",
+    "purpose": "bootstrap",
+    "baseline_ref": "abababababababababababababababababababababababababababababababab",
+    "status": "reversed",
+    "reversed_at": "2030-01-02T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "legacy_payload_without_purpose",
+  "body_file": "legacy_payload_without_purpose.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "40.000000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000005",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 5
+  },
+  "row": {
+   "seq": 5,
+   "event_id": "00000000-0000-0000-0000-000000000005",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "40.000000",
+    "currency": "EUR",
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_smallest_amount",
+  "body_file": "edge_smallest_amount.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "0.000001",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000006",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 6
+  },
+  "row": {
+   "seq": 6,
+   "event_id": "00000000-0000-0000-0000-000000000006",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "0.000001",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_largest_amount",
+  "body_file": "edge_largest_amount.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "99999999999999.999999",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000007",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 7
+  },
+  "row": {
+   "seq": 7,
+   "event_id": "00000000-0000-0000-0000-000000000007",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "99999999999999.999999",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_high_seq",
+  "body_file": "edge_high_seq.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "40.000000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000008",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 9007199254740993
+  },
+  "row": {
+   "seq": 9007199254740993,
+   "event_id": "00000000-0000-0000-0000-000000000008",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "40.000000",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ },
+ {
+  "name": "edge_microseconds_nonzero",
+  "body_file": "edge_microseconds_nonzero.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "40.000000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-000000000009",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.123456+00:00",
+   "schema": "cp.money.v1",
+   "seq": 10
+  },
+  "row": {
+   "seq": 10,
+   "event_id": "00000000-0000-0000-0000-000000000009",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "40.000000",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00.123456+00:00"
+  }
+ },
+ {
+  "name": "edge_offset_created_at",
+  "body_file": "edge_offset_created_at.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "40.000000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-00000000000a",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 11
+  },
+  "row": {
+   "seq": 11,
+   "event_id": "00000000-0000-0000-0000-00000000000a",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "40.000000",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T14:00:00+02:00"
+  }
+ },
+ {
+  "name": "edge_trailing_zero_amount",
+  "body_file": "edge_trailing_zero_amount.body",
+  "parsed": {
+   "data": {
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "amount": "10.500000",
+    "baseline_ref": null,
+    "currency": "EUR",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "purpose": "standard"
+   },
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "event_id": "00000000-0000-0000-0000-00000000000b",
+   "event_type": "credit_grant.issued",
+   "grant_id": "00000000-0000-0000-0000-000000000333",
+   "occurred_at": "2030-01-01T12:00:00.000000+00:00",
+   "schema": "cp.money.v1",
+   "seq": 12
+  },
+  "row": {
+   "seq": 12,
+   "event_id": "00000000-0000-0000-0000-00000000000b",
+   "event_type": "credit_grant.issued",
+   "enterprise_id": "00000000-0000-0000-0000-000000000111",
+   "entity_id": "00000000-0000-0000-0000-000000000333",
+   "payload": {
+    "grant_id": "00000000-0000-0000-0000-000000000333",
+    "account_id": "00000000-0000-0000-0000-000000000222",
+    "enterprise_id": "00000000-0000-0000-0000-000000000111",
+    "product_id": "00000000-0000-0000-0000-0000000000a1",
+    "amount": "10.500000",
+    "currency": "EUR",
+    "purpose": "standard",
+    "baseline_ref": null,
+    "status": "active",
+    "source_payment_id": null,
+    "created_at": "2030-01-01T12:00:00+00:00"
+   },
+   "created_at": "2030-01-01T12:00:00+00:00"
+  }
+ }
+]

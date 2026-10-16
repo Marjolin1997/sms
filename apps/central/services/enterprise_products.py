@@ -1,0 +1,200 @@
+"""Assignment-i Enterprise <-> Product (control plane): konkret, pa commit, pa fshirje.
+
+Matrica e statuseve:
+- assign i ri: kërkon Enterprise `active` DHE Product `active` (përndryshe Conflict).
+- suspend: gjithmonë i lejuar (veprim i sigurt).
+- activate (suspended → active): kërkon Enterprise `active` DHE Product `active`.
+- statusi i njëjtë → no-op (pa kontroll, pa ndryshim).
+- Suspendimi i Enterprise dhe `retired` i Product NUK prekin assignment-et ekzistuese.
+"""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from apps.central.core.errors import Conflict, Invalid, NotFound
+from apps.central.core.timeutil import utcnow
+from apps.central.models.enterprise import EnterpriseStatus
+from apps.central.models.enterprise_product import AssignmentStatus, EnterpriseProduct
+from apps.central.models.product import Channel, Product, ProductStatus
+from apps.central.services import enterprises as enterprise_svc
+from apps.central.services import sync
+
+
+def _uuid(value: uuid.UUID | str, field: str) -> uuid.UUID:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except ValueError as e:
+        raise Invalid(f"invalid {field}") from e
+
+
+def _status(value) -> AssignmentStatus:
+    try:
+        return AssignmentStatus(value)
+    except ValueError as e:
+        raise Invalid("invalid status") from e
+
+
+def assign_product(
+    db: Session,
+    enterprise_id: uuid.UUID | str,
+    product_id: uuid.UUID | str,
+    *,
+    now: datetime | None = None,
+) -> tuple[EnterpriseProduct, Product]:
+    """Krijon assignment `active`. Çifti ekziston (çdo status) → Conflict, pa e ndryshuar."""
+    enterprise = enterprise_svc.get(db, enterprise_id)
+    product = db.get(Product, _uuid(product_id, "product id"))
+    if product is None:
+        raise NotFound("product not found")
+    if enterprise.status != EnterpriseStatus.ACTIVE.value:
+        raise Conflict("enterprise is suspended; new assignments are not allowed")
+    if product.status != ProductStatus.ACTIVE.value:
+        raise Conflict("product is retired; new assignments are not allowed")
+    existing = db.scalar(
+        select(EnterpriseProduct).where(
+            EnterpriseProduct.enterprise_id == enterprise.id,
+            EnterpriseProduct.product_id == product.id,
+        )
+    )
+    if existing is not None:
+        raise Conflict(f"assignment already exists (id={existing.id}, status={existing.status})")
+    now = now or utcnow()
+    sync.lock_sequence(db)  # numëruesi global fillon (rendi i kyçjeve)
+    row = EnterpriseProduct(
+        enterprise_id=enterprise.id, product_id=product.id, revision=1,
+        status=AssignmentStatus.ACTIVE.value, created_at=now, updated_at=now,
+    )  # fmt: skip
+    db.add(row)
+    try:
+        db.flush()
+    except (
+        IntegrityError
+    ) as e:  # garë: unique(enterprise_id, product_id) është burimi i së vërtetës
+        raise Conflict("assignment already exists") from e
+    _emit(db, row, product, now)
+    return row, product
+
+
+def get_assignment(
+    db: Session, enterprise_id: uuid.UUID | str, assignment_id: uuid.UUID | str
+) -> tuple[EnterpriseProduct, Product]:
+    """Assignment i këtij Enterprise; i një Enterprise tjetër → NotFound."""
+    eid = _uuid(enterprise_id, "enterprise id")
+    row = db.scalar(
+        select(EnterpriseProduct).where(
+            EnterpriseProduct.id == _uuid(assignment_id, "assignment id"),
+            EnterpriseProduct.enterprise_id == eid,
+        )
+    )
+    if row is None:
+        raise NotFound("assignment not found")
+    return row, db.get(Product, row.product_id)
+
+
+def list_enterprise_products(
+    db: Session,
+    enterprise_id: uuid.UUID | str,
+    *,
+    status: AssignmentStatus | None = None,
+    channel: Channel | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[tuple[EnterpriseProduct, Product]]:
+    """Join me produktin (identiteti i produktit nuk denormalizohet te assignment)."""
+    enterprise = enterprise_svc.get(db, enterprise_id)
+    q = (
+        select(EnterpriseProduct, Product)
+        .join(Product, Product.id == EnterpriseProduct.product_id)
+        .where(EnterpriseProduct.enterprise_id == enterprise.id)
+    )
+    if status is not None:
+        q = q.where(EnterpriseProduct.status == _status(status).value)
+    if channel is not None:
+        q = q.where(Product.channel == Channel(channel).value)
+    q = q.order_by(EnterpriseProduct.created_at, EnterpriseProduct.id)
+    q = q.limit(max(1, min(limit, 500))).offset(max(0, offset))
+    return [(ep, p) for ep, p in db.execute(q)]
+
+
+def _emit(db: Session, ep: EnterpriseProduct, product: Product, now) -> None:
+    sync.emit(
+        db, entity_type=sync.ENTITY_ASSIGNMENT, entity_id=ep.id, enterprise_id=ep.enterprise_id,
+        revision=ep.revision, event_type=sync.EVENT_ASSIGNMENT,
+        payload=sync.assignment_payload(ep, product), now=now,
+    )  # fmt: skip
+
+
+def _set_status(db, enterprise_id, assignment_id, target: AssignmentStatus, now):
+    row, product = get_assignment(db, enterprise_id, assignment_id)
+    if row.status == target.value:
+        return row, product, {}
+    if target is AssignmentStatus.ACTIVE:
+        enterprise = enterprise_svc.get(db, row.enterprise_id)
+        if enterprise.status != EnterpriseStatus.ACTIVE.value:
+            raise Conflict("enterprise is suspended; assignment cannot be activated")
+        if product.status != ProductStatus.ACTIVE.value:
+            raise Conflict("product is retired; assignment cannot be activated")
+    sync.lock_entity(db, row)  # numëruesi global, pastaj assignment-i (rilexim nën kyç)
+    if row.status == target.value:  # u ndryshua njëkohësisht nga tx tjetër
+        return row, product, {}
+    before, now = row.status, now or utcnow()
+    row.status, row.updated_at = target.value, now
+    row.revision += 1
+    db.flush()
+    _emit(db, row, product, now)
+    return row, product, {"before": {"status": before}, "after": {"status": target.value}}
+
+
+def suspend_assignment(db, enterprise_id, assignment_id, *, now: datetime | None = None):
+    """→ (assignment, product, changes); changes == {} = no-op."""
+    return _set_status(db, enterprise_id, assignment_id, AssignmentStatus.SUSPENDED, now)
+
+
+def activate_assignment(db, enterprise_id, assignment_id, *, now: datetime | None = None):
+    return _set_status(db, enterprise_id, assignment_id, AssignmentStatus.ACTIVE, now)
+
+
+def set_status(db, enterprise_id, assignment_id, status, *, now: datetime | None = None):
+    target = _status(status)
+    return _set_status(db, enterprise_id, assignment_id, target, now)
+
+
+RATE_LIMIT_MAX = 1_000_000
+
+
+def _rate_limit(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= RATE_LIMIT_MAX:
+        raise Invalid(f"rate_limit_per_min must be null or an integer 1..{RATE_LIMIT_MAX}")
+    return value
+
+
+def set_rate_limit(
+    db, enterprise_id, assignment_id, value, *, now: datetime | None = None
+):  # fmt: skip
+    """Kufi/min i assignment-it (NULL = default lokal). Ndryshim real ⇒ revision +1 dhe outbox;
+    vlera e njëjtë ⇒ no-op (pa revision, pa outbox). → (assignment, product, changes)."""
+    value = _rate_limit(value)
+    row, product = get_assignment(db, enterprise_id, assignment_id)
+    if row.rate_limit_per_min == value:
+        return row, product, {}
+    sync.lock_entity(db, row)  # numëruesi global, pastaj assignment-i (rilexim nën kyç)
+    if row.rate_limit_per_min == value:
+        return row, product, {}
+    before, now = row.rate_limit_per_min, now or utcnow()
+    row.rate_limit_per_min, row.updated_at = value, now
+    row.revision += 1
+    db.flush()
+    _emit(db, row, product, now)
+    return (
+        row,
+        product,
+        {"before": {"rate_limit_per_min": before}, "after": {"rate_limit_per_min": value}},
+    )

@@ -1,0 +1,1 @@
+{"created_at":"2030-01-01T12:00:00+00:00","data":{"invoice_id":"INV-2030-0001","resource_id":"INV-2030-0001","resource_type":"invoice","total":"12.500000","via":"wallet"},"id":"evt_117","type":"invoice.paid"}

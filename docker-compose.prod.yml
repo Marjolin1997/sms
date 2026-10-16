@@ -1,0 +1,293 @@
+# Prodhim (një host): docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# .env krijohet nga .env.example (SEKRETE TË VËRTETA, kurrë në git). Shih docs/RUNBOOK.md.
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    SMS_ENV: production
+    SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+    SMS_TRUSTED_PROXY_HOPS: "1"
+  depends_on:
+    db: {condition: service_healthy}
+    migrate: {condition: service_completed_successfully}
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+# Central (M11-I/F-01): imazh i VEÇANTË (target `central`), konfigurim i VEÇANTË (.env.central, prefiks CENTRAL_), DB logjike e veçantë `sms_central`.
+# Asnjë sekret/DB i përbashkët me Enterprise: shërbimet Central NUK lexojnë `.env`. DB `sms_central` krijohet me hap infrastrukture (docs/RUNBOOK.md §8).
+# OPT-IN: shërbimet Central ndodhen te profili `central` (serving: central-migrate, central-api, central-web) dhe `central-jobs` (komanda manuale).
+# `docker compose up -d` i zakonshëm mbetet VETËM-ENTERPRISE (as `.env.central` as DB `sms_central` nuk kërkohen); Central niset me `--profile central`.
+x-central: &central
+  build:
+    context: .
+    target: central
+  restart: unless-stopped
+  env_file: .env.central
+  environment:
+    CENTRAL_ENV: production
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sms
+      POSTGRES_USER: sms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes: [dbdata:/var/lib/postgresql/data, ./backups:/backups]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sms -d sms"]
+      interval: 5s
+      retries: 20
+    # asnjë port i publikuar: vetëm rrjeti i brendshëm i compose
+
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+    depends_on:
+      db: {condition: service_healthy}
+    command: alembic upgrade head
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--workers", "2"]
+
+  worker:
+    <<: *app
+    command: python -m app.worker
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "90"]
+      interval: 30s
+      start_period: 30s
+
+  webhook-worker:
+    <<: *app
+    command: python -m app.worker --role webhooks
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "90"]
+      interval: 30s
+      start_period: 30s
+
+  # M7-e (opsional, `docker compose --profile control-plane up -d`): poller i Control Plane në modalitet
+  # shadow. Një aktiv për DB (kyç advisory). Çelësi privat Ed25519 vetëm si mount sekret; konfigurimi
+  # SMS_CP_* vjen nga .env (SMS_CP_SYNC_MODE=shadow duhet edhe te `api` që të vëzhgohet krahasimi).
+  cp-sync:
+    <<: *app
+    profiles: ["control-plane"]
+    command: python -m app.worker --role control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-c (opsional, `--profile money-sync`): consumer i `cp.money.v1`. Boshe kur SMS_MONEY_AUTHORITY=local.
+  # Një aktiv për DB (kyç advisory i veçantë). Kredenciali Ed25519 duhet të ketë scope `money:read` te Central
+  # (`create_service_credential --scope money:read`); mund të jetë i njëjti klient me sync:read.
+  money-sync:
+    <<: *app
+    profiles: ["money-sync"]
+    command: python -m app.worker --role money_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-d (opsional, `--profile money-report`): raportuesi i përdorimit financiar drejt Central. Boshe kur
+  # SMS_MONEY_REPORTING=false. Kredenciali Ed25519 duhet të ketë scope `money:report` (+ autorizim per enterprise).
+  money-report:
+    <<: *app
+    profiles: ["money-report"]
+    command: python -m app.worker --role money_usage_reporter
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-g2 (opsional, `--profile billing-report`): raportuesi i email-eve të faturueshme drejt Central. Boshe kur
+  # SMS_BILLING_USAGE_REPORTING=false. Kredenciali Ed25519 duhet të ketë scope `billing:report` (+ autorizim per enterprise).
+  billing-report:
+    <<: *app
+    profiles: ["billing-report"]
+    command: python -m app.worker --role billing_usage_reporter
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M9-e (opsional, `--profile pricing-sync`): konsumatori i çmimeve Central (`cp.pricing.v1`). Boshe kur SMS_PRICING_AUTHORITY=local.
+  # Kredenciali Ed25519 duhet të ketë scope `pricing:read` (+ autorizim per enterprise).
+  pricing-sync:
+    <<: *app
+    profiles: ["pricing-sync"]
+    command: python -m app.worker --role pricing_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # M10 (opsional, `docker compose --profile sender up -d sender-sync sender-report`): VETËM kur nisen shprehimisht; asnjë nga të dyja s'nis me `up -d` të zakonshëm.
+  # Autoriteti i sender-ave NUK ndryshon këtu (SMS_SENDER_AUTHORITY mbetet `local` derisa të vendoset shprehimisht). Çelësi Ed25519 vetëm si mount sekret (read-only);
+  # kredenciali duhet të ketë skopet `sender:read` (sender-sync) dhe `sender:report` (sender-report) + autorizim për enterprise-et. Pa port të publikuar.
+  # Askush nuk varet nga Central në nisje: kur Central s'përgjigjet punonjësi riprovon/ruan projeksionin ekzistues (fail-static). Shih docs/M10_PROD_OPERATIONS.md.
+  #
+  # sender-sync: konsumatori i `cp.sender.v1` (projeksioni lokal). Boshe kur SMS_SENDER_SYNC_ENABLED=false. NJË aktiv për DB (kyç advisory) — mos e shkallëzo >1 pa nevojë;
+  # kopjet shtesë janë të sigurta (qëndrojnë në pritje), por s'shtojnë kapacitet.
+  sender-sync:
+    <<: *app
+    profiles: ["sender"]
+    command: python -m app.worker --role sender_control_plane
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  # sender-report: raportuesi i kërkesave të sender-ave drejt Central (outbox S3). Boshe kur SMS_SENDER_REQUEST_REPORTING=false. NJË aktiv për DB (kyç advisory +
+  # claim me SKIP LOCKED); kopjet shtesë janë të sigurta, s'ka dërgim të dyfishtë (operation_id idempotent te Central).
+  sender-report:
+    <<: *app
+    profiles: ["sender"]
+    command: python -m app.worker --role sender_request_reporter
+    environment:
+      SMS_ENV: production
+      SMS_DATABASE_URL: postgresql+psycopg://sms:${POSTGRES_PASSWORD}@db:5432/sms
+      SMS_CP_PRIVATE_KEY_PATH: /run/secrets/cp_private_key
+    volumes: ["./secrets/cp_private_key.pem:/run/secrets/cp_private_key:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health", "180"]
+      interval: 30s
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+    # M11-I/F-02: origjinë HTTP-only pas terminatorit të jashtëm të TLS (LB/WAF/proxy). CIDR-t vijnë nga `.env` (interpolim compose; shih `.env.example`).
+    # Parazgjedhja: asnjë proxy i besuar; /healthz dhe /readyz vetëm nga loopback dhe rrjeti i parazgjedhur Docker (host -> port i publikuar).
+    environment:
+      EDGE_TRUSTED_PROXY_CIDRS: ${WEB_TRUSTED_PROXY_CIDRS:-}
+      EDGE_INTERNAL_ALLOW_CIDRS: ${WEB_INTERNAL_ALLOW_CIDRS:-172.16.0.0/12}
+    ports: ["127.0.0.1:8080:8080"]  # terminatori i TLS/LB vendoset para këtij porti; mos e publiko në 0.0.0.0
+
+  # ----- Central (staf admin/operator) -----
+  # Hapi 1 (EKSPLICIT, i dukshëm): migrimi i Central. Kërkon që DB `sms_central` të ekzistojë (hap infrastrukture) dhe refuzon një DB Enterprise.
+  #   docker compose -f docker-compose.prod.yml --profile central run --rm central-migrate
+  central-migrate:
+    <<: *central
+    profiles: ["central"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["alembic", "-c", "apps/central/alembic.ini", "upgrade", "head"]
+
+  # API-ja Central: vetëm rrjeti i brendshëm i compose (asnjë port i publikuar); i vetmi mekanizëm gatishmërie është /readyz këtu.
+  central-api:
+    <<: *central
+    profiles: ["central"]
+    depends_on:
+      db: {condition: service_healthy}
+      central-migrate: {condition: service_completed_successfully}
+    command: ["uvicorn", "apps.central.main:app", "--host", "0.0.0.0", "--port", "8001", "--no-proxy-headers", "--workers", "2"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 4s
+      start_period: 20s
+      retries: 4
+
+  # Konsola e stafit Central + proxy VETËM drejt central-api (/auth, /admin, /healthz, /readyz); asnjë rrugë drejt Enterprise.
+  # HTTP i thjeshtë, pa HSTS: TLS/load balancer vendoset para këtij porti (blloku "TLS / reverse proxy").
+  central-web:
+    profiles: ["central"]
+    build:
+      context: .
+      dockerfile: deploy/web-central.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      central-api: {condition: service_healthy}
+    # 8081 = sipërfaqja publike e stafit; 8082 = listener i BRENDSHËM Enterprise->Central (/internal/* me allowlist; parazgjedhja: askush).
+    # Të dy vetëm në loopback: terminatori i TLS i ekspozon veçmas (central.<domen> dhe emri i brendshëm central-internal.<domen>).
+    environment:
+      EDGE_TRUSTED_PROXY_CIDRS: ${CENTRAL_WEB_TRUSTED_PROXY_CIDRS:-}
+      EDGE_INTERNAL_ALLOW_CIDRS: ${CENTRAL_WEB_INTERNAL_ALLOW_CIDRS:-172.16.0.0/12}
+      EDGE_S2S_ALLOW_CIDRS: ${CENTRAL_S2S_ALLOW_CIDRS:-}
+    ports: ["127.0.0.1:8081:8081", "127.0.0.1:8082:8082"]
+
+  # ----- Komanda të planifikuara Central (profili `central-jobs`; ASNJË nuk niset me `up -d` të zakonshëm) -----
+  # Central s'ka scheduler: operatori i nis me `docker compose --profile central-jobs run --rm <shërbimi>` (cron/systemd i jashtëm).
+  # Faturimi NUK aktivizohet vetvetiu: `billing_run` refuzon (kod 3) kur autoriteti i faturimit s'është `central`; CENTRAL_BILLING_WORKER_CONFIGURED
+  # është vetëm konfirmim operativ. Asnjë nga këto s'ka restart dhe s'ka port.
+  central-billing-run:
+    <<: *central
+    profiles: ["central-jobs"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["python", "-m", "apps.central.tools.billing_run", "--json"]
+
+  # Një kalim i outbox-it të njoftimeve (verifikim regjistrimi). Për proces të vazhdueshëm: komanda `... send_notifications --loop --interval 15`.
+  central-send-notifications:
+    <<: *central
+    profiles: ["central-jobs"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["python", "-m", "apps.central.tools.send_notifications"]
+
+  # Mjet i përgjithshëm operacional: parazgjedhja është `sender_central_readiness` (vetëm-lexim, vetëm Central). Komandat e tjera ekzistuese
+  # që punojnë brenda imazhit Central (p.sh. billing_final_readiness, billing_readiness, registration_readiness, money_reconciliation, retention (dry-run))
+  # jepen si argument: `run --rm central-tool <modul> [opsione]`. Inventari i mbështetur: docs/RUNBOOK.md §8 (tabela). `financial_readiness` NUK është
+  # në inventar: thërret `scripts.*` të Enterprise (subproces) dhe nuk ekzekutohet brenda imazhit Central (ekzekutohet nga një checkout me të dy mjediset).
+  central-tool:
+    <<: *central
+    profiles: ["central-jobs"]
+    restart: "no"
+    depends_on:
+      db: {condition: service_healthy}
+    entrypoint: ["python", "-m"]
+    command: ["apps.central.tools.sender_central_readiness"]
+
+volumes:
+  dbdata:

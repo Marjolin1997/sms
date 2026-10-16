@@ -92,8 +92,8 @@ def test_refund_after_capture_idempotent(db):
     w = funded(db, "5")
     h = svc.reserve(db, w.id, "2", "m")
     svc.capture(db, h.id)
-    svc.refund(db, w.id, "2", "dlr-failed-m")
-    svc.refund(db, w.id, "2", "dlr-failed-m")
+    svc.refund(db, h.id, "2", "dlr-failed-m")
+    svc.refund(db, h.id, "2", "dlr-failed-m")
     db.commit()
     assert svc.balances(db, w.id) == (D("5"), D("0"))
 
