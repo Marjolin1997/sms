@@ -47,8 +47,8 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
 ## 2. DB / BACKUP
 
 - [ ] **DB-01** — Backup i ri i Enterprise DB.  
-  Prova: `scripts/backup.sh` (me `DATABASE_URL`, `BACKUP_DIR`)  
-  Pritet: rreshti `OK <rruga> (<madhësia>)` dhe kod daljeje 0  
+  Prova: `BACKUP_LABEL=enterprise scripts/backup.sh` (me `DATABASE_URL`, `BACKUP_DIR`)  
+  Pritet: rreshti `OK <rruga> (<madhësia>) label=enterprise …` dhe kod daljeje 0  
   Klas.: VERIFIED (skripti); prodhimi EXTERNAL  
   NO-GO/abort: dështim → NO-GO
 - [ ] **DB-02** — Checksum i backup-it.  
@@ -57,9 +57,9 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   Klas.: VERIFIED  
   NO-GO/abort: FAILED → NO-GO
 - [ ] **DB-03** — Backup i ri i Central DB.  
-  Prova: `scripts/backup.sh` me `DATABASE_URL` të Central  
-  Pritet: rreshti `OK …`  
-  Klas.: PARTIALLY VERIFIED (skripti gjenerik; s'është dokumentuar për Central)  
+  Prova: `BACKUP_LABEL=central scripts/backup.sh` me `DATABASE_URL` të Central  
+  Pritet: rreshti `OK … label=central …`  
+  Klas.: VERIFIED (skripti + drill lokal, F-05A); prodhimi EXTERNAL  
   NO-GO/abort: dështim → NO-GO
 - [ ] **DB-04** — Kopje off-host e të dy backup-eve.  
   Prova: Listim i objektit në ruajtjen e jashtme me madhësi dhe checksum  
@@ -67,14 +67,14 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   Klas.: EXTERNAL EVIDENCE REQUIRED  
   NO-GO/abort: mungon → NO-GO
 - [ ] **DB-05** — Restore i provuar i Enterprise.  
-  Prova: `ADMIN_URL=… scripts/restore.sh <dump> <db_e_re>` pastaj `SMS_DATABASE_URL=… python -m scripts.verify_ledger`  
-  Pritet: `OK restored` dhe `verify_ledger` PASS  
+  Prova: `ADMIN_URL=… scripts/restore.sh <dump> <db_e_re>` pastaj `SMS_DATABASE_URL=… python -m scripts.recovery_verify head --label enterprise` dhe `python -m scripts.verify_ledger`  
+  Pritet: `OK restored`, `OK` te `head` dhe `verify_ledger` PASS  
   Klas.: VERIFIED (CI round-trip); prodhimi EXTERNAL  
   NO-GO/abort: FAIL → NO-GO
 - [ ] **DB-06** — Restore i provuar i Central.  
-  Prova: Restore në DB të re + `docker compose … --profile central-jobs run --rm central-tool apps.central.tools.billing_readiness --strict` (komandë e inventarit Central; `financial_readiness` s'punon në imazhin Central — shih CE-07)  
-  Pritet: pa FAIL; `central_alembic_version` = 0031  
-  Klas.: NOT VERIFIED  
+  Prova: `ADMIN_URL=… scripts/restore.sh <dump_central> <db_central_e_re>` + `CENTRAL_DATABASE_URL=… python -m scripts.recovery_verify head --label central` + `python -m scripts.recovery_verify central-ledger` (+ opsionale `billing_readiness --strict` si më parë)  
+  Pritet: `OK`; `central_alembic_version` = 0031; `central-ledger` OK  
+  Klas.: VERIFIED lokalisht (F-05A drill/CI); prodhimi EXTERNAL  
   NO-GO/abort: FAIL ose mungon → NO-GO
 - [ ] **DB-07** — PITR/WAL aktiv dhe i provuar.  
   Prova: Rikthim në një kohë të caktuar në një instancë të veçantë; koha e kërkuar dhe koha e arritur të regjistruara  

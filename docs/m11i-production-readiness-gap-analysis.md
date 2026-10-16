@@ -121,6 +121,15 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 
 **Mbeten (CI/provë e jashtme):** ekzekutimi real në GitHub i të gjitha jobeve, 3 ekzekutime të gjelbra radhazi për `central-e2e`, koha reale e PR (sharding PG i shtyrë), branch protection/required checks dhe GitHub secret scanning (EXTERNAL EVIDENCE REQUIRED). CI i gjelbër NUK mbyll: DNS, TLS, LB/WAF, CIDR reale, menaxherin e sekreteve, backup/PITR, monitorimin, canary-n e provider-it, cutover/rollback.
 
+
+## 0f. Përditësim M11-I/F-05A — backup, restore dhe gatishmëria e rikuperimit (lokal/staging-grade)
+
+**Numërimi i miratuar i milestone-it:** F-05 = backup PostgreSQL, PITR dhe gatishmëria e restore (tabela e vjetër e "F-04/F-05" më poshtë është histori e propozimit, jo numërimi i miratuar). Ndarja: **F-05A** = kod/konfig/runbook + drill lokal; **F-05B** = dëshmi reale prodhimi (BLOCKED, kërkon infrastrukturë).
+
+**Çfarë u zbatua (vetëm skripte/doc/teste; ASNJË kod aplikacioni ose biznesi):** `scripts/backup.sh` dhe `scripts/restore.sh` të forcuar (etiketë enterprise|central e detyrueshme dhe e verifikuar nga përmbajtja, checksum i detyrueshëm, validim i plotë i dump-it, `.meta.json` pa kredenciale, rotacion për etiketë, restore atomik në bazë të re me pastrim të bazës së dështuar, kontroll kokë migrimesh); `scripts/recovery_verify.py` (`head`, `fingerprint`, `compare`, `central-ledger`); `scripts/recovery_drill.py` (drill i plotë për të dyja bazat); `tests/test_f05_recovery.py` (12 teste); round-trip i `migrations-backup` në CI shtrirë te Central + kontroll koke. Dokumente: `m11i-postgres-backup-restore-runbook.md`, `m11i-postgres-pitr-runbook.md`, `m11i-recovery-evidence-checklist.md`.
+
+**Gjetje të rregulluara:** `restore.sh` printonte URL-në me fjalëkalim në dalje; kredencialet shkonin si argumente procesi; emri `sms-*.dump` përzinte bazat; mungonte kontrolli i kokës dhe ledger-i i Central; restore i dështuar linte bazë të gjysmë; checksum i munguar ishte vetëm paralajmërim. **Klasifikimi:** F-05A = LOCAL/STAGING RECOVERY READINESS VERIFIED — PRODUCTION PITR EVIDENCE STILL REQUIRED. F-05B (WAL/PITR real, off-host + enkriptim, alarme, pronar, RPO/RTO të matur) = **BLOCKED — REAL PRODUCTION INFRASTRUCTURE REQUIRED**. RPO/RTO janë **POLICY PROPOSAL**, jo të arritur. Gatishmëria e prodhimit mbetet **BLOCKED**.
+
 ## 1. Veprimet e ardhshme që heqin bllokuesit (jo të zbatuara)
 
 | ID | Veprimi i ardhshëm | Heq |
@@ -202,9 +211,9 @@ Mbrojtjet ekzistuese mbeten: SQLite/jo-PG, fshehtësitë PII/Fernet, çelësi ad
 
 | Fusha | Përmbajtja |
 |---|---|
-| Gjendja aktuale | Në repo: `scripts/backup.sh` (pg_dump custom + checksum + rotacion 14 ditë + `pg_restore --list`) dhe `scripts/restore.sh` (në DB të re). CI bën round-trip backup/restore + `verify_ledger` në PG 16. Compose përdor `postgres:16-alpine` me volum lokal. |
+| Gjendja aktuale | Në repo: `scripts/backup.sh` (pg_dump custom + checksum + rotacion 14 ditë + `pg_restore --list`) dhe `scripts/restore.sh` (në DB të re). CI bën round-trip backup/restore + kokë + ledger për Enterprise dhe Central në PG 16 (F-05A). Compose përdor `postgres:16-alpine` me volum lokal. |
 | Evidenca | `scripts/backup.sh`, `scripts/restore.sh`, `.github/workflows/ci.yml`; `docs/RUNBOOK.md` §4; `docs/M10_PROD_OPERATIONS.md` §5 (PITR/WAL = EXTERNAL BLOCKER). |
-| Klasifikimi | Skriptet dhe round-trip në CI: VERIFIED. PG prodhimi, backup off-host, PITR/WAL, restore i provuar në infrastrukturën reale: EXTERNAL EVIDENCE REQUIRED. Rreshti `/backup.sh` në koment të `backup.sh` supozon skriptin brenda kontejnerit `db`, por compose monton vetëm `./backups` (PARTIALLY VERIFIED, shih kontradiktat). |
+| Klasifikimi | Skriptet, drill-i lokal dhe round-trip në CI (Enterprise + Central, F-05A): VERIFIED; PITR i dokumentuar, pa provë (`m11i-postgres-pitr-runbook.md`). PG prodhimi, backup off-host, PITR/WAL, restore i provuar në infrastrukturën reale: EXTERNAL EVIDENCE REQUIRED. Rreshti `/backup.sh` në koment të `backup.sh` supozon skriptin brenda kontejnerit `db`, por compose monton vetëm `./backups` (PARTIALLY VERIFIED, shih kontradiktat). |
 | Rreziku | HIGH. Pa PITR, humbja e të dhënave arrin deri në ndërprerjen e fundit të backup-it; `alembic downgrade` humb të dhëna (RUNBOOK §3). |
 | Parakusht | PG në prodhim me rol aplikacioni pa superuser, TLS (`sslmode=require` te URL), WAL arkivim ose replikë, backup i enkriptuar off-host. |
 | Validim i kërkuar para prodhimit | Backup real i kryer → kopjuar off-host → restore në DB të re (`restore.sh`) → `python -m scripts.verify_ledger` PASS; vërtetim PITR: rikthim në një kohë të caktuar në një instancë të veçantë me dokumentim të kohës. |

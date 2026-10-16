@@ -109,14 +109,22 @@ jobs:
           test "$(alembic -c apps/central/alembic.ini heads | cut -d' ' -f1)" = "0031"
           alembic -c apps/central/alembic.ini upgrade head
           test "$(alembic -c apps/central/alembic.ini current | cut -d' ' -f1)" = "0031"
-      - name: Backup, restore and ledger verification round-trip
+      - name: Backup, restore, migration-head and ledger verification round-trip (Enterprise + Central)
         env:
-          SMS_DATABASE_URL: postgresql+psycopg://sms:sms@localhost:5432/sms_migrate
           SMS_PII_HMAC_KEY: ci-only-hmac-key-0123456789abcdef0123456789
         run: |
-          DATABASE_URL=postgresql://sms:sms@localhost:5432/sms_migrate BACKUP_DIR=/tmp/bk scripts/backup.sh
-          ADMIN_URL=postgresql://sms:sms@localhost:5432/postgres scripts/restore.sh /tmp/bk/sms-*.dump sms_restored
-          SMS_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_restored python -m scripts.verify_ledger
+          # Enterprise: backup -> restore në bazë të re -> kokë migrimesh -> ledger
+          BACKUP_LABEL=enterprise DATABASE_URL=postgresql://sms:sms@localhost:5432/sms_migrate BACKUP_DIR=/tmp/bk scripts/backup.sh
+          ADMIN_URL=postgresql://sms:sms@localhost:5432/postgres scripts/restore.sh /tmp/bk/sms-enterprise-*.dump sms_restored
+          export SMS_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_restored
+          python -m scripts.recovery_verify head --label enterprise
+          python -m scripts.verify_ledger
+          # Central: e njëjta rrugë, bazë logjike e veçantë
+          BACKUP_LABEL=central DATABASE_URL=postgresql://sms:sms@localhost:5432/sms_central_migrate BACKUP_DIR=/tmp/bk scripts/backup.sh
+          ADMIN_URL=postgresql://sms:sms@localhost:5432/postgres scripts/restore.sh /tmp/bk/sms-central-*.dump sms_central_restored
+          export CENTRAL_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_central_restored
+          python -m scripts.recovery_verify head --label central
+          python -m scripts.recovery_verify central-ledger
 
   # Porta e vetme që mbledh gjithë backend-in: dështon nëse ndonjë jo-`success` (përfshin shard-et e anuluara).
   backend-ci-gate:

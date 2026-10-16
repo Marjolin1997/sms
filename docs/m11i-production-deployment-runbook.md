@@ -61,7 +61,7 @@ Dokumentet shoqëruese: `m11i-production-cutover-checklist.md`, `m11i-production
 | Klasifikimi / evidenca | Skriptet: VERIFIED (CI round-trip). Backup/restore në prodhim: EXTERNAL EVIDENCE REQUIRED. |
 | Rreziku | Pa backup të provuar, rikthimi i migrimeve me humbje të dhënash është i pamundur (`alembic downgrade` humb të dhëna, RUNBOOK §3). |
 | Parakusht | GAP-05 dhe GAP-06 të mbyllura. |
-| Validim para prodhimit | Backup i ri i të dy bazave me `scripts/backup.sh`; `sha256sum -c <dump>.sha256` = OK; kopjim off-host; restore në DB të re me `ADMIN_URL=... scripts/restore.sh <dump> <db_e_re>` dhe `python -m scripts.verify_ledger` mbi bazën e restauruar = PASS. |
+| Validim para prodhimit | Backup i ri i të dy bazave (`BACKUP_LABEL=enterprise|central scripts/backup.sh`); `sha256sum -c <dump>.sha256` = OK; kopjim off-host; restore në DB të re me `ADMIN_URL=... scripts/restore.sh <dump> <db_e_re>`, pastaj `scripts.recovery_verify head` + `scripts.verify_ledger` (Enterprise) / `recovery_verify central-ledger` (Central) = PASS. Detaje: `docs/m11i-postgres-backup-restore-runbook.md`. |
 | Veprimi (NUK ekzekutohet në M11-I) | Ekzekutimi i backup-it para ndryshimit (jo të restore-it në bazën e prodhimit). |
 | Abort / rikthim | Nëse checksum, restore ose `verify_ledger` dështon: abort; asnjë migrim. |
 | Pronari / varësia | DBA — NUK ËSHTË CAKTUAR |

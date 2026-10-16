@@ -58,10 +58,10 @@ HSTS nuk duhet aktivizuar para se HTTPS të jetë provuar: pasi shfletuesit e mb
 3. **Rikthim:** migrimet kanë `downgrade`, por një rikthim që heq kolona me të dhëna humb ato: rikthimi i sigurt është *imazhi i vjetër + backup-i i marrë para përditësimit* te një bazë e re (seksioni 4).
 
 ## 4. Backup dhe restore
-- Backup (format custom, checksum, rotacion 14 ditë): `docker compose -f docker-compose.prod.yml exec -T db sh -c 'pg_dump --format=custom --no-owner -U sms -d sms -f /backups/sms-$(date -u +%Y%m%dT%H%M%SZ).dump'` ose `scripts/backup.sh` nga një host me `pg_dump` (shton checksum dhe rotacion). Skedarët dalin te `./backups`.
-- Cron (çdo natë 02:30): `30 2 * * * cd /opt/sms && DATABASE_URL=postgresql://… BACKUP_DIR=/opt/sms/backups scripts/backup.sh >> /var/log/sms-backup.log 2>&1`
+- Backup (format custom, checksum, meta, rotacion 14 ditë, një skedar për etiketë): `BACKUP_LABEL=enterprise DATABASE_URL=postgresql://… BACKUP_DIR=/opt/sms/backups scripts/backup.sh` (dhe `BACKUP_LABEL=central` për Central) nga një host me klientët PostgreSQL. Detajet, garancitë dhe verifikimi: `docs/m11i-postgres-backup-restore-runbook.md`; PITR: `docs/m11i-postgres-pitr-runbook.md` (pg_dump NUK është PITR).
+- Cron (çdo natë 02:30, një rresht për etiketë): `30 2 * * * cd /opt/sms && BACKUP_LABEL=enterprise DATABASE_URL=postgresql://… BACKUP_DIR=/opt/sms/backups scripts/backup.sh >> /var/log/sms-backup.log 2>&1`
 - **Kopjoni backup-et jashtë hostit** (objekt-storage me enkriptim); një backup që jeton vetëm në të njëjtin disk nuk është backup.
-- **Provoni restore-in çdo muaj:** `ADMIN_URL=postgresql://…/postgres scripts/restore.sh backups/sms-….dump sms_restored` (kurrë mbi bazën ekzistuese; skripti refuzon), pastaj `SMS_DATABASE_URL=postgresql+psycopg://…/sms_restored python -m scripts.verify_ledger` (balanca = SUM(delta) për çdo wallet, faturat pa boshllëqe). Dalja 0 = në rregull.
+- **Provoni restore-in çdo muaj:** `ADMIN_URL=postgresql://…/postgres scripts/restore.sh backups/sms-enterprise-….dump sms_restored` (kurrë mbi bazën ekzistuese; skripti refuzon; checksum i detyrueshëm; Central: `sms-central-….dump` → emër me `central`), pastaj `python -m scripts.recovery_verify head --label enterprise` dhe `SMS_DATABASE_URL=postgresql+psycopg://…/sms_restored python -m scripts.verify_ledger` (balanca = SUM(delta) për çdo wallet, faturat pa boshllëqe). Dalja 0 = në rregull.
 - Për të kaluar prodhimin te baza e restauruar: ndalni `api` dhe workers, ndryshoni emrin e bazës te `SMS_DATABASE_URL`/compose, nisni.
 
 ## 5. Monitorimi
