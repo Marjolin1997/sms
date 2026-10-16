@@ -15,7 +15,8 @@ Fjalor klasifikimi (si te dokumentet e tjera M11-I): VERIFIED = provuar nga kodi
 |---|---|
 | `scripts/backup.sh` | backup i një baze (`BACKUP_LABEL=enterprise\|central`), validim, checksum, meta, rotacion |
 | `scripts/restore.sh` | restore vetëm në bazë të RE, me kontrolle etiketë/checksum/kokë |
-| `scripts/recovery_verify.py` | `head` (kokë migrimesh), `fingerprint`/`compare` (gishti i DB-së), `central-ledger` |
+| `scripts/recovery_verify.py` | `head` (kokë migrimesh), `fingerprint`/`compare` (gishti i DB-së); nuk importon kurrë `apps.*` |
+| `apps/central/tools/recovery_ledger.py` | ledger tregtar i Central pas restore (mjet i Central, vetëm-lexim; ekzekutohet edhe brenda imazhit Central) |
 | `scripts/verify_ledger.py` | integriteti i parave të Enterprise (balanca = SUM(delta), faturat pa boshllëqe) |
 | `scripts/recovery_drill.py` | drill i plotë i përkohshëm për të dyja bazat (seed → backup → burimi i fshirë → restore → verifikim → pastrim) |
 | `scripts/lib_pg.sh` | funksione të përbashkëta (URL → ndryshore libpq; etiketa nga përmbajtja) |
@@ -67,7 +68,7 @@ python -m scripts.verify_ledger                              # wallets/ledger/fa
 # Central
 export CENTRAL_DATABASE_URL='postgresql+psycopg://…/sms_central_restored'
 python -m scripts.recovery_verify head --label central
-python -m scripts.recovery_verify central-ledger            # ledger tregtar + invariantet e faturimit; money_sequence nuk është pas ledger-it
+python -m apps.central.tools.recovery_ledger               # ledger tregtar + invariantet e faturimit; money_sequence nuk është pas ledger-it
 ```
 
 - [ ] sha256 u verifikua (restore.sh e bën), etiketa dhe kokat përputhen.
@@ -109,7 +110,7 @@ Kjo është politikë e propozuar; rotacioni në repo zbaton vetëm nivelin "dit
 
 ## 8. Kushte abort / rikthim
 
-Abort (asnjë ndryshim në prodhim) nëse: checksum nuk përputhet; `restore.sh` del ≠ 0; kokat e migrimeve nuk përputhen; `verify_ledger` ose `central-ledger` raporton FAIL; gishti ndryshon; etiketa është e paqartë. Restore nuk ndryshon kurrë bazën aktive, kështu rikthimi nga një drill i dështuar është thjesht fshirja e bazës së përkohshme. `alembic downgrade` NUK është mjet rikthimi në prodhim (RUNBOOK §3).
+Abort (asnjë ndryshim në prodhim) nëse: checksum nuk përputhet; `restore.sh` del ≠ 0; kokat e migrimeve nuk përputhen; `verify_ledger` ose `apps.central.tools.recovery_ledger` raporton FAIL; gishti ndryshon; etiketa është e paqartë. Restore nuk ndryshon kurrë bazën aktive, kështu rikthimi nga një drill i dështuar është thjesht fshirja e bazës së përkohshme. `alembic downgrade` NUK është mjet rikthimi në prodhim (RUNBOOK §3).
 
 ## 9. Çfarë mbetet e bllokuar derisa të ketë infrastrukturë prodhimi
 

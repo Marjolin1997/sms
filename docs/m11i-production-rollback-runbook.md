@@ -73,7 +73,7 @@ Pragjet janë **PROPOSED** (asnjë nuk është verifikuar në prodhim) përveç 
 | Rreziku | Humbje e të dhënave të krijuara pas backup-it (RPO = koha nga backup-i i fundit, ose nga PITR nëse ekziston; PITR NOT VERIFIED). |
 | Parakusht | Dump + `.sha256` të vlefshme; ruajtja off-host e arritshme; `SMS_SECRETS_KEY`/`SMS_PII_HMAC_KEY` të njëjtë me ata të dump-it (të ruajtur veçmas). |
 | Validim para prodhimit | Restore muaj-pas-muaji i provuar (RUNBOOK §4). |
-| Veprimi | 1) Ndalo `api` dhe workers. 2) `ADMIN_URL=postgresql://…/postgres scripts/restore.sh <dump> sms_restored`. 3) `SMS_DATABASE_URL=postgresql+psycopg://…/sms_restored python -m scripts.verify_ledger` → PASS. 4) Ndrysho emrin e DB-së te `SMS_DATABASE_URL`/compose. 5) Nis shërbimet. Central: e njëjta procedurë me DB-në e Central (FUTURE: s'ka shërbim compose). |
+| Veprimi | 1) Ndalo `api` dhe workers. 2) `ADMIN_URL=postgresql://…/postgres scripts/restore.sh <dump_enterprise> sms_restored` (dump nga `BACKUP_LABEL=enterprise`). 3) `SMS_DATABASE_URL=postgresql+psycopg://…/sms_restored python -m scripts.verify_ledger` → PASS. 4) Ndrysho emrin e DB-së te `SMS_DATABASE_URL`/compose. 5) Nis shërbimet. Central: `BACKUP_LABEL=central`; restore me `scripts/restore.sh <dump_central> <db_me_emër_që_përmban_central>` (një dump Central refuzohet te emër pa `central`; një dump Enterprise te emër me `central`), pastaj `python -m scripts.recovery_verify head --label central` dhe `python -m apps.central.tools.recovery_ledger` (shih `docs/m11i-postgres-backup-restore-runbook.md`). |
 | Abort | `verify_ledger` FAIL ose checksum FAILED: mos kalo shërbimet te baza e restauruar. |
 | Pronari | DBA — NUK ËSHTË CAKTUAR |
 | GO/NO-GO | GO kur `verify_ledger` PASS dhe `readyz` ready. |

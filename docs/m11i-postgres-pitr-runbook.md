@@ -16,7 +16,7 @@ Prova reale (F-05B) është **BLOCKED — kërkohet infrastrukturë prodhimi**. 
 | WAL archiving / base backup | nga provider-i (backup automatik + WAL i vazhdueshëm) | duhet ndërtuar (më poshtë) |
 | Rikthim në kohë | funksion i provider-it: "restore to point in time" → instancë e RE | procedurë manuale (§4) |
 | Retention i WAL | konfigurim provider-i (dritare PITR, p.sh. 7–35 ditë) | lifecycle i vetë-menaxhuar |
-| Çfarë provohet | rikthim real në instancë të re + `recovery_verify` + `verify_ledger`/`central-ledger` | e njëjta + arkivimi i WAL |
+| Çfarë provohet | rikthim real në instancë të re + `recovery_verify` + `verify_ledger`/`recovery_ledger` | e njëjta + arkivimi i WAL |
 | Rreziku kryesor | varësi nga provider-i; kontrolloni që dritarja PITR mbulon RPO/RTO | gabime konfigurimi, WAL i humbur pa alarm |
 
 Edhe me provider të menaxhuar duhet **provë e vetë ne** (drill në instancë të re), jo vetëm pohimi i provider-it.
@@ -48,7 +48,7 @@ Edhe me provider të menaxhuar duhet **provë e vetë ne** (drill në instancë 
 3. Krijo `recovery.signal`; vendos `restore_command`, `recovery_target_time`, `recovery_target_action = 'pause'` te `postgresql.auto.conf`.
 4. Nise instancën; ndiq log-un deri sa raporton arritjen e objektivit (`recovery stopping before/after …`).
 5. **Validimi i kohës së arritur:** regjistro koha_e_kërkuar dhe koha_e_arritur (`select pg_last_xact_replay_timestamp()`); arritja duhet të jetë ≤ kërkuarës dhe brenda kufirit të WAL-it (më e afërta e mundshme). Regjistro edhe `pg_is_in_recovery()`.
-6. Verifiko: `recovery_verify head`, `verify_ledger` (Enterprise), `recovery_verify central-ledger` (Central) në bazën e rikthyer; krahaso rreshta të njohur (p.sh. një pagesë e bërë para dhe një pas kohës së synuar: e para duhet të ekzistojë, e dyta jo).
+6. Verifiko: `recovery_verify head`, `verify_ledger` (Enterprise), `python -m apps.central.tools.recovery_ledger` (Central) në bazën e rikthyer; krahaso rreshta të njohur (p.sh. një pagesë e bërë para dhe një pas kohës së synuar: e para duhet të ekzistojë, e dyta jo).
 7. Vetëm pas kontrollit: `pg_wal_replay_resume()`/promovim dhe vendimi i veçantë i kalimit të aplikacionit (ndalo `api`/workers; ndrysho URL-në; nis; monitoro `cursor_ahead`).
 8. Fshi instancën e provës dhe të dhënat (përmbajnë PII/para).
 

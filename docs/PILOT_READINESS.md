@@ -81,7 +81,7 @@ python -m scripts.sender_alerts --json ; python -m scripts.sender_cutover status
 Central `#ops`: pa snapshot ⇒ UNKNOWN, i vjetër ⇒ stale/expired, drift kritik / bootstrap i pazgjidhur ⇒ alarm (provuar). Alarmet e Enterprise ruhen në cache deri 300 s para se të shfaqen te Central.
 
 ## 16. Backup
-`scripts/backup.sh` + WAL/PITR i dy bazave; `SMS_SECRETS_KEY`, `SMS_PII_HMAC_KEY`, çelësi Ed25519 dhe `CENTRAL_AUTH_SECRET` ruhen **veçmas** nga backup-i i DB-së. Provë restore (`scripts/restore.sh` + `scripts.verify_ledger`) para pilotit.
+`scripts/backup.sh` (`BACKUP_LABEL=enterprise|central`) + WAL/PITR i dy bazave; `SMS_SECRETS_KEY`, `SMS_PII_HMAC_KEY`, çelësi Ed25519 dhe `CENTRAL_AUTH_SECRET` ruhen **veçmas** nga backup-i i DB-së. Provë restore (`scripts/restore.sh` + `scripts.verify_ledger`) para pilotit.
 
 ## 17. Parakushtet e rikthimit
 Imazh i vjetër + backup i marrë para përditësimit; `SMS_SENDER_AUTHORITY` central→shadow/local sipas `M10_SENDER_RUNBOOK` §7; asnjë `alembic downgrade` në prodhim.

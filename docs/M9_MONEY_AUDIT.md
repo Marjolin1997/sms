@@ -435,7 +435,7 @@ Zero thirrje rrjeti/Central në asnjë modalitet (httpx + `socket.connect` të b
 ### 10. Backup / restore financiar
 **Central (burim i së vërtetës për paranë dhe çmimin e klientit):** `money_sequence`, `commercial_ledger_entries`, `credit_accounts`, `payments`, `credit_grants`, `money_events`, `usage_reports`, `price_books|versions|rules|assignments`, `pricing_sequence`, `users`, `audit_log`, `service_*`.
 **Enterprise:** `sms_ledger_entries`, `sms_holds`, `sms_wallets`, `sms_money_cursor|baselines|grants`, `sms_usage_reports`, `sms_pricing_state|snapshots|books|versions|rules|assignments|comparisons`, `sms_messages` (foto), `sms_invoices/lines`, `sms_audit_log`.
-Çdo bazë: `scripts/backup.sh` (pg_dump custom + checksum) **plus WAL archiving/PITR për Central** (shih 11). Restore vetëm në bazë të re (`scripts/restore.sh`), pastaj verifikim:
+Çdo bazë: `BACKUP_LABEL=enterprise|central scripts/backup.sh` (pg_dump custom + checksum) **plus WAL archiving/PITR për Central** (shih 11). Restore vetëm në bazë të re (`scripts/restore.sh`), pastaj verifikim:
 Enterprise `python -m scripts.verify_ledger`; Central `python -m apps.central.tools.money_reconciliation --strict` dhe `python -m apps.central.tools.financial_readiness`.
 **Rendi i rikuperimit:** (1) Central DB → migrime në kokë (`0021`) → verifiko `usage_reports`/ledger; (2) Enterprise DB → migrime (`0026`) → `verify_ledger`; (3) shërbimet Central; (4) workers Enterprise në rend:
 `pricing_control_plane`, `money_control_plane` (kursori), `money_usage_reporter`; (5) `financial_readiness --strict`; (6) hap trafikun. Authority qëndron `shadow` (mint i bllokuar) deri në PASS.

@@ -6,9 +6,8 @@
         gishti i DB-së: numri i rreshtave për tabelë, trigger-at, indekset, kufizimet, sekuencat, revizioni
     python -m scripts.recovery_verify compare a.json b.json
         dy gishta duhet të jenë identikë (burimi para backup-it vs. baza e rikthyer)
-    python -m scripts.recovery_verify central-ledger [--url-env VAR]
-        integriteti i ledger-it tregtar të Central (nga ledger-i, jo nga balanca të ruajtura) + invariantet e faturimit
-    (ledger-i i Enterprise: `python -m scripts.verify_ledger`)
+    (ledger-i i Enterprise: `python -m scripts.verify_ledger`; ledger-i i Central: `python -m apps.central.tools.recovery_ledger` —
+     mjet i Central, pasi `scripts/` nuk importon kurrë `apps.*`)
 
 URL-ja lexohet nga ndryshorja e mjedisit (parazgjedhje: SMS_DATABASE_URL për enterprise, CENTRAL_DATABASE_URL për central).
 Kodi: 0 në rregull · 1 gjetje/mospërputhje · 2 gabim përdorimi/lidhjeje."""
@@ -23,7 +22,6 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
 
 ROOT = Path(__file__).resolve().parent.parent
 LABELS = {
@@ -164,51 +162,6 @@ def cmd_compare(a: str, b: str) -> int:
     return 0 if not diffs else 1
 
 
-def cmd_central_ledger(url_env: str | None) -> int:
-    from sqlalchemy import func, select
-
-    from apps.central.models.money import (  # importohen vetëm këtu: pa ngarkuar Central për nën-komandat e tjera
-        CommercialLedgerEntry,
-        CreditAccount,
-        MoneyEvent,
-    )
-    from apps.central.services import billing_closure, commercial_ledger, money_sequence
-
-    eng = _engine("central", url_env)
-    problems: list[str] = []
-    try:
-        with Session(eng) as db:
-            _, last_seq = money_sequence.current(db)
-            max_ledger = db.scalar(select(func.max(CommercialLedgerEntry.seq))) or 0
-            max_event = db.scalar(select(func.max(MoneyEvent.seq))) or 0
-            if max(max_ledger, max_event) > last_seq:
-                problems.append(
-                    f"money_sequence ({last_seq}) is behind issued seq (ledger {max_ledger}, events {max_event})"
-                )
-            accounts = db.scalars(select(CreditAccount).order_by(CreditAccount.id)).all()
-            entries = 0
-            for a in accounts:
-                t = commercial_ledger.totals(db, a.id)
-                entries += t.entries
-                if t.funds < 0 or t.available_to_grant < 0:
-                    problems.append(
-                        f"account {a.id}: negative funds/available_to_grant ({t.funds}/{t.available_to_grant})"
-                    )
-            for c in billing_closure.invariants(db):
-                if c.level == "FAIL":
-                    problems.append(f"invariant {c.name}: {c.reason}")
-    except Usage:
-        raise
-    except Exception as exc:
-        raise Usage(f"cannot verify the Central ledger ({type(exc).__name__})") from None
-    for p in problems:
-        print("PROBLEM:", p)
-    print(
-        f"checked {len(accounts)} credit accounts, {entries} ledger entries: {'OK' if not problems else 'FAILED'}"
-    )
-    return 1 if problems else 0
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -221,17 +174,13 @@ def main(argv: list[str] | None = None) -> int:
     pc = sub.add_parser("compare")
     pc.add_argument("a")
     pc.add_argument("b")
-    pl = sub.add_parser("central-ledger")
-    pl.add_argument("--url-env")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "head":
             return cmd_head(args.label, args.url_env)
         if args.cmd == "fingerprint":
             return cmd_fingerprint(args.label, args.url_env, args.out)
-        if args.cmd == "compare":
-            return cmd_compare(args.a, args.b)
-        return cmd_central_ledger(args.url_env)
+        return cmd_compare(args.a, args.b)
     except Usage as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

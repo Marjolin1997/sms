@@ -72,8 +72,8 @@ Formati: `[ ] ID — kërkesa | Prova | Pritet | Klas. | NO-GO/abort`
   Klas.: VERIFIED (CI round-trip); prodhimi EXTERNAL  
   NO-GO/abort: FAIL → NO-GO
 - [ ] **DB-06** — Restore i provuar i Central.  
-  Prova: `ADMIN_URL=… scripts/restore.sh <dump_central> <db_central_e_re>` + `CENTRAL_DATABASE_URL=… python -m scripts.recovery_verify head --label central` + `python -m scripts.recovery_verify central-ledger` (+ opsionale `billing_readiness --strict` si më parë)  
-  Pritet: `OK`; `central_alembic_version` = 0031; `central-ledger` OK  
+  Prova: `ADMIN_URL=… scripts/restore.sh <dump_central> <db_central_e_re>` + `CENTRAL_DATABASE_URL=… python -m scripts.recovery_verify head --label central` + `python -m apps.central.tools.recovery_ledger` (+ opsionale `billing_readiness --strict` si më parë)  
+  Pritet: `OK`; `central_alembic_version` = 0031; `recovery_ledger` OK  
   Klas.: VERIFIED lokalisht (F-05A drill/CI); prodhimi EXTERNAL  
   NO-GO/abort: FAIL ose mungon → NO-GO
 - [ ] **DB-07** — PITR/WAL aktiv dhe i provuar.  

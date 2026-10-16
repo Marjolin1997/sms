@@ -17,7 +17,7 @@ Klasat: VERIFIED · PARTIAL · MISSING · PRODUCTION-ONLY.
 | G | Procedura e restore | VERIFIED (një DB) | **VERIFIED** | runbook i ri |
 | H | Restore në DB të pastër | VERIFIED | **VERIFIED** | + pastrim i bazës së dështuar, transaksion i vetëm |
 | I | Kokë migrimesh pas restore | MISSING | **VERIFIED** | `recovery_verify head` + kontroll te `restore.sh` (kod 6) |
-| J | Integritet financiar/ledger | PARTIAL (vetëm Enterprise) | **VERIFIED** | `verify_ledger` + `central-ledger` |
+| J | Integritet financiar/ledger | PARTIAL (vetëm Enterprise) | **VERIFIED** | `verify_ledger` + `apps.central.tools.recovery_ledger` |
 | K | Restore i Central DB | MISSING | **VERIFIED** (drill + CI) | |
 | L | Restore i Enterprise DB | PARTIAL (CI round-trip) | **VERIFIED** | |
 | M | Përkufizim RPO | MISSING | **PROPOSED** (§3) | politikë, jo e arritur |
@@ -42,7 +42,7 @@ Provat: `tests/test_f05_recovery.py` (12 teste), drill `python -m scripts.recove
 - [x] Backup Enterprise dhe Central me checksum + meta (pa kredenciale)
 - [x] Restore në bazë të re për të dyja; burimi i fshirë para restore (pa varësi)
 - [x] Kokë migrimesh: Enterprise 0034, Central 0031 = koka e kodit
-- [x] Ledger: Enterprise (`verify_ledger`), Central (`central-ledger`); gishti i bazës = identik me burimin
+- [x] Ledger: Enterprise (`verify_ledger`), Central (`apps.central.tools.recovery_ledger`); gishti i bazës = identik me burimin
 - [x] Rrugë dështimi: backup ≠ 0 kur `pg_dump` dështon/DB e paarritshme; etiketë e gabuar (të dyja drejtimet); checksum i ndryshuar; dump i prerë; pa checksum; target ekzistues; Enterprise↔Central i refuzuar; restore i dështuar fshin vetëm bazën e vet; verifikim kokë/ledger/gisht dështon kur baza është e prishur
 - [x] Rotacion vetëm brenda etiketës; asnjë bazë e përkohshme e mbetur pas drill-it
 

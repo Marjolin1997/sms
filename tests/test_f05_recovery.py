@@ -5,12 +5,14 @@ të tjerat kërkojnë PostgreSQL (SMS_TEST_DATABASE_URL) me të drejtë CREATEDB
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from sqlalchemy import text
@@ -26,6 +28,29 @@ needs_pg = pytest.mark.skipif(
     not (TEST_URL.startswith("postgresql") and TOOLS),
     reason="needs PostgreSQL + pg_dump/pg_restore/psql",
 )
+
+
+# Sekret sintetik, unik dhe me simbole: nuk mund të shfaqet legjitimisht te emra skedarësh/përmbajtje (ndryshe nga një fjalë e shkurtër si «sms»).
+SECRET = "Zq7!vK9#xL2$mW4%pR8&tY1^uB5*"
+LEAK_TOKENS = (
+    "PGPASSWORD=",
+    "SMS_DATABASE_URL=",
+    "CENTRAL_DATABASE_URL=",
+    "postgresql://",
+    "postgres://",
+)
+URL_WITH_CREDENTIALS = re.compile(r"(?:[a-z][a-z0-9+.-]*)?://[^\s/@]*:[^\s/@]*@")
+
+
+def assert_no_credential_leak(blob, secrets=()):
+    """Kontroll semantik (jo nënstring i lirë): URL me kredenciale, ndryshore me sekret, URL të papërpunuara; sekretet e njohura vetëm nëse janë unike."""
+    m = URL_WITH_CREDENTIALS.search(blob)
+    assert m is None, f"credential-bearing URL in output: {m.group(0)[:12]}…"
+    for tok in LEAK_TOKENS:
+        assert tok not in blob, tok
+    for sec in secrets:
+        assert len(sec) >= 16, "use a unique, high-entropy secret for direct substring checks"
+        assert sec not in blob and quote(sec, safe="") not in blob
 
 
 def sh(args, env=None, cwd=ROOT, **kw):
@@ -122,10 +147,7 @@ def test_full_drill_restores_both_databases_without_the_source(tmp_path):
     assert (
         _names(rd.Drill(admin_url().render_as_string(hide_password=False), tmp_path)) == before
     )  # asnjë bazë e mbetur
-    assert (
-        make_url(TEST_URL).password is None
-        or make_url(TEST_URL).password not in r.stdout + r.stderr
-    )
+    assert_no_credential_leak(r.stdout + r.stderr)
 
 
 def _names(d):
@@ -141,7 +163,6 @@ def _names(d):
 @needs_pg
 def test_backup_artifacts_contain_no_credentials_and_record_label_and_head(dbs, tmp_path):
     d, db = dbs
-    pw = d.admin.password
     for label in ("enterprise", "central"):
         r = backup(d, label, db[label], tmp_path)
         assert r.returncode == 0, r.stderr
@@ -160,8 +181,7 @@ def test_backup_artifacts_contain_no_credentials_and_record_label_and_head(dbs, 
             + Path(f"{dump}.meta.json").read_text()
             + Path(f"{dump}.sha256").read_text()
         )
-        if pw:
-            assert pw not in blob
+        assert_no_credential_leak(blob)
         assert d.admin.host not in Path(f"{dump}.meta.json").read_text()
         assert oct(dump.stat().st_mode & 0o777) == "0o600"  # umask 077
 
@@ -302,7 +322,7 @@ def test_head_and_ledger_verification_fail_on_a_bad_database(dbs, tmp_path):
     eng = rd.create_engine(env["CENTRAL_DATABASE_URL"], isolation_level="AUTOCOMMIT")
     with eng.connect() as c:
         c.exec_driver_sql("update money_sequence set last_seq = 0")  # sekuenca prapa ledger-it
-    r = sh([sys.executable, "-m", "scripts.recovery_verify", "central-ledger"], env)
+    r = sh([sys.executable, "-m", "apps.central.tools.recovery_ledger"], env)
     assert r.returncode == 1 and "money_sequence" in r.stdout
     with eng.connect() as c:
         c.exec_driver_sql("update central_alembic_version set version_num = '0001'")
@@ -373,3 +393,121 @@ def test_rotation_only_touches_the_same_label(dbs, tmp_path):
     )  # i vjetri Enterprise u fshi (të treja skedarët)
     assert all(f.exists() for f in keep)  # Central i paprekur nga rotacioni i Enterprise
     assert dump_of(tmp_path, "enterprise").exists()  # i riu ekziston
+
+
+# ------------------------------------------------------------------ kufiri Enterprise/Central dhe ledger-i i Central
+def _imported_roots(path):
+    import ast
+
+    out = set()
+    for n in ast.walk(ast.parse(path.read_text())):
+        if isinstance(n, ast.Import):
+            out |= {a.name for a in n.names}
+        elif isinstance(n, ast.ImportFrom) and n.module:
+            out.add(n.module)
+    return out
+
+
+def test_scripts_import_nothing_from_apps_and_central_tooling_lives_under_central():
+    for f in (ROOT / "scripts").rglob("*.py"):
+        bad = {m for m in _imported_roots(f) if m == "apps" or m.startswith("apps.")}
+        assert not bad, (f.name, bad)  # kufiri: Enterprise/shared scripts s'importojnë Central
+    text = (ROOT / "scripts/recovery_drill.py").read_text()
+    assert "e2e.recovery_central_seed" in text and "apps.central.tools.recovery_ledger" in text
+    assert (ROOT / "apps/central/tools/recovery_ledger.py").exists()
+    assert (ROOT / "e2e/recovery_central_seed.py").exists()
+    # mjeti i Central nuk varet nga kodi Enterprise (rregull i inventarit të imazhit Central)
+    src = (ROOT / "apps/central/tools/recovery_ledger.py").read_text()
+    assert "subprocess" not in src and "import scripts" not in src and "from scripts" not in src
+
+
+def test_central_ledger_tool_is_read_only_and_fails_closed_without_leaking_the_url(monkeypatch):
+    r = sh([sys.executable, "-m", "apps.central.tools.recovery_ledger", "--help"])
+    assert r.returncode == 0 and "usage:" in r.stdout
+    r = sh(
+        [sys.executable, "-m", "apps.central.tools.recovery_ledger", "--url-env", "F05_UNSET_VAR"]
+    )
+    assert r.returncode == 2 and "not set" in r.stderr
+    leaky = "postgresql+psycopg://leakuser:Unique-Secret-9f3k2!@127.0.0.1:1/nodb"
+    r = sh(
+        [sys.executable, "-m", "apps.central.tools.recovery_ledger", "--url-env", "F05_LEAKY"],
+        {"F05_LEAKY": leaky},
+    )
+    assert r.returncode == 2 and "cannot verify" in r.stderr  # baza e paarritshme
+    assert_no_credential_leak(r.stdout + r.stderr, ["Unique-Secret-9f3k2!"])
+    src = (ROOT / "apps/central/tools/recovery_ledger.py").read_text()
+    assert not re.search(r"\.(add|delete|merge|commit|execute)\(", src)  # vetëm lexim
+
+
+@pytest.fixture(scope="module")
+def leak_role(dbs):
+    """Rol i përkohshëm me SEKRET unik dhe të drejtat minimale të nevojshme (CREATEDB + lexim); fshihet në fund."""
+    d, _ = dbs
+    role = f"f05drill_role_{d.tag}"
+    with d.eng.connect() as c:
+        c.execute(text(f"create role {role} login createdb password '{SECRET}'"))
+        c.execute(text(f"grant pg_read_all_data to {role}"))
+    try:
+        yield d, d.admin.set(username=role, password=SECRET)
+    finally:
+        with d.eng.connect() as c:
+            c.execute(text(f"drop owned by {role}"))
+            c.execute(text(f"drop role if exists {role}"))
+
+
+@needs_pg
+def test_no_credential_leaks_with_a_unique_high_entropy_secret(dbs, leak_role, tmp_path):
+    d, url = leak_role
+    _, db = dbs
+    out, restored = [], []
+    try:
+        for label, other in (("enterprise", "central"), ("central", "enterprise")):
+            env = {
+                **d.base_env,
+                "BACKUP_LABEL": label,
+                "BACKUP_DIR": str(tmp_path),
+                "DATABASE_URL": rd._url(url, db[label], "postgresql"),
+            }
+            r = sh([BACKUP], env)
+            assert r.returncode == 0, r.stderr
+            dump = dump_of(tmp_path, label)
+            out += [
+                r.stdout,
+                r.stderr,
+                Path(f"{dump}.meta.json").read_text(),
+                Path(f"{dump}.sha256").read_text(),
+            ]
+            bad = sh(
+                [BACKUP], {**env, "BACKUP_LABEL": other}
+            )  # rruga e dështimit: etiketë e gabuar
+            assert bad.returncode == 5
+            out += [bad.stdout, bad.stderr]
+            renv = {**d.base_env, "ADMIN_URL": rd._url(url, "postgres", "postgresql")}
+            tgt = d.name(label, "lk")
+            r = sh([RESTORE, dump, tgt], renv)
+            assert r.returncode == 0, r.stderr
+            restored.append(tgt)
+            again = sh([RESTORE, dump, tgt], renv)  # rruga e dështimit: target ekzistues
+            assert again.returncode == 3
+            out += [r.stdout, r.stderr, again.stdout, again.stderr]
+            cut = tmp_path / f"sms-{label}-cut.dump"  # rruga e dështimit: checksum i gabuar
+            cut.write_bytes(dump.read_bytes())
+            Path(f"{cut}.sha256").write_text(f"{'0' * 64}  {cut.name}\n")
+            bad = sh([RESTORE, cut, d.name(label, "lk2")], renv)
+            assert bad.returncode == 4
+            out += [bad.stdout, bad.stderr]
+        # drill i plotë me të njëjtin rol/sekret
+        r = sh(
+            [sys.executable, "-m", "scripts.recovery_drill", "--workdir", tmp_path / "drill"],
+            {"ADMIN_URL": url.render_as_string(hide_password=False)},
+        )
+        assert r.returncode == 0 and "DRILL OK" in r.stdout, r.stdout + r.stderr
+        out += [r.stdout, r.stderr]
+        blob = "\n".join(out)
+        assert (
+            "sms-enterprise-" in blob
+        )  # fjalë të zakonshme mbeten të paprekura (pa «redaktim» të gjerë)
+        assert_no_credential_leak(blob, [SECRET])
+    finally:
+        for t in restored:
+            d.drop_db(t)

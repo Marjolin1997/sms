@@ -118,6 +118,7 @@ Vetëm këto janë të dokumentuara si të ekzekutueshme në imazhin Central (`p
 | `apps.central.tools.billing_final_readiness` | gatishmëria përfundimtare e faturimit |
 | `apps.central.tools.registration_readiness` | gatishmëria e regjistrimit |
 | `apps.central.tools.money_reconciliation` | rakordimi i parave |
+| `apps.central.tools.recovery_ledger` | verifikimi i ledger-it tregtar pas restore (vetëm-lexim; M11-I/F-05A) |
 | `apps.central.tools.retention` | retention i raporteve të përdorimit (plan/dry-run si parazgjedhje; `--apply` fshin) |
 | `apps.central.tools.create_admin` | krijimi i administratorit/operatorit (fjalëkalimi në terminal) |
 | `apps.central.tools.create_service_credential` | kredencial shërbimi (çelës publik) për Enterprise |

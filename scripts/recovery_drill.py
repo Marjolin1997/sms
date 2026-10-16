@@ -7,13 +7,14 @@ Për Enterprise dhe Central, me radhë:
   2) gishti i burimit (rreshta, trigger-a, indekse, kufizime, sekuenca, revizion);
   3) scripts/backup.sh → dump + .sha256 + .meta.json;
   4) FSHIN bazën burim (provon që restore nuk varet nga burimi);
-  5) scripts/restore.sh në një bazë të RE; kontroll kokë migrimesh; verifikim ledger (Enterprise: verify_ledger; Central: central-ledger);
+  5) scripts/restore.sh në një bazë të RE; kontroll kokë migrimesh; verifikim ledger (Enterprise: scripts.verify_ledger; Central: apps.central.tools.recovery_ledger);
   6) gishti i bazës së rikthyer duhet të jetë IDENTIK me atë të burimit;
   7) fshin bazat e restore-it. Asnjëherë nuk prek baza që nuk i ka krijuar vetë (prefiksi `f05drill_`); URL/kredencialet nuk printohen.
 Kodi: 0 të gjitha hapat kaluan · 1 dështoi një hap. Kjo NUK është PITR dhe NUK është provë prodhimi."""
 
 import argparse
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -50,19 +51,14 @@ def _run(
     return r
 
 
+_URL_CRED = re.compile(r"([a-z][a-z0-9+.-]*://)[^\s/@:]+(?::[^\s/@]*)?@")
+
+
 def _scrub(s: str, env: dict[str, str]) -> str:
-    for k in (
-        "PGPASSWORD",
-        "ADMIN_URL",
-        "DATABASE_URL",
-        "SMS_DATABASE_URL",
-        "CENTRAL_DATABASE_URL",
-    ):
-        v = env.get(k)
-        if v:
-            s = s.replace(v, "<redacted>")
+    """Vetëm për mesazhet e gabimit: heq kredencialet nga URL-të. Nuk zëvendëson fjalë të zakonshme (p.sh. «sms»)."""
+    s = _URL_CRED.sub(r"\1<redacted>@", s)
     pw = make_url(env["ADMIN_URL"]).password if env.get("ADMIN_URL") else None
-    return s.replace(pw, "<redacted>") if pw else s
+    return s.replace(pw, "<redacted>") if pw and len(pw) >= 12 else s
 
 
 class Drill:
@@ -136,7 +132,7 @@ class Drill:
                 env,
                 "central migrate",
             )
-            seed_central(env["CENTRAL_DATABASE_URL"])
+            _run([sys.executable, "-m", "e2e.recovery_central_seed"], env, "central seed")
         else:
             _run([sys.executable, "-m", "alembic", "upgrade", "head"], env, "enterprise migrate")
             _run(
@@ -150,8 +146,12 @@ class Drill:
             env,
             f"{label} head check",
         )
-        _run([sys.executable, "-m", "scripts.recovery_verify", "central-ledger"] if label == "central"
-             else [sys.executable, "-m", "scripts.verify_ledger"], env, f"{label} ledger verification")  # fmt: skip
+        ledger = (
+            [sys.executable, "-m", "apps.central.tools.recovery_ledger"]
+            if label == "central"
+            else [sys.executable, "-m", "scripts.verify_ledger"]
+        )
+        _run(ledger, env, f"{label} ledger verification")
         if out:
             _run(
                 [
@@ -183,7 +183,7 @@ class Drill:
         env = {**self.env_for(label, src), "BACKUP_LABEL": label, "BACKUP_DIR": str(bdir)}
         env["DATABASE_URL"] = _url(self.admin, src, "postgresql")
         r = _run(["scripts/backup.sh"], env, f"{label} backup")
-        print(f"[{label}] backup: {_scrub(r.stdout.strip().splitlines()[-1], env)}")
+        print(f"[{label}] backup: {r.stdout.strip().splitlines()[-1]}")
         dump = sorted(bdir.glob(f"sms-{label}-*.dump"))[-1]
 
         self.drop_db(src)  # restore pa burimin
@@ -202,34 +202,6 @@ class Drill:
             f"[{label}] head OK · ledger OK · {cmp.stdout.strip().splitlines()[-1]} (source dropped before restore)"
         )
         self.drop_db(rst)
-
-
-def seed_central(url: str) -> None:
-    """Të dhëna përfaqësuese Central: enterprise, produkt, 2 admin (maker/checker), llogari, pagesë e miratuar, grant."""
-    from sqlalchemy.orm import sessionmaker
-
-    from apps.central.services import credit_accounts as accts
-    from apps.central.services import enterprises, grants, payments, users
-    from apps.central.services import products as prod_svc
-
-    eng = create_engine(url)
-    pw = "drill only battery staple"
-    with sessionmaker(bind=eng, expire_on_commit=False)() as s:
-        ent = enterprises.create(s, "Drill Enterprise").id
-        sms = prod_svc.create(s, "sms", "SMS", "sms").id
-        a1 = users.create_user(s, "drill-a1@example.com", pw, "admin")
-        a2 = users.create_user(s, "drill-a2@example.com", pw, "admin")
-        s.commit()
-        acct = accts.create(s, ent, sms, "EUR", a1)
-        s.commit()
-        p = payments.create(
-            s, acct.id, "250.00", system="system:payment_import", external_reference="drill-ref-1"
-        )
-        payments.approve(s, p.id, a2)
-        s.commit()
-        grants.issue(s, acct.id, "75.00", idempotency_key="drill-grant-0001", actor=a1)
-        s.commit()
-    eng.dispose()
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,7 +4,7 @@
 Konventa: `ENT$` = ekzekutim në hostin Enterprise (me `SMS_*`), `CEN$` = në hostin Central (me `CENTRAL_*`).
 
 ## 0. Parakushte
-- [ ] Backup i freskët i të dy bazave (`scripts/backup.sh`) + restore i provuar muajin e fundit (`scripts/restore.sh` + `python -m scripts.verify_ledger`).
+- [ ] Backup i freskët i të dy bazave (`BACKUP_LABEL=enterprise|central scripts/backup.sh`) + restore i provuar muajin e fundit (`scripts/restore.sh` + `python -m scripts.verify_ledger` / `python -m apps.central.tools.recovery_ledger`).
 - [ ] **Central ka PITR/WAL archiving ose replikë sinkrone** (RPO≈0 për tabelat e parave) — bllokues (shih `M9_MONEY_AUDIT.md` §11).
 - [ ] Migrime në kokë: Central `0021`, Enterprise `0026` (`alembic upgrade head` / `python -m alembic -c apps/central/alembic.ini upgrade head`).
 - [ ] `CENTRAL_ENV=production`, `SMS_ENV=production`, sekretet e vendosura (`CENTRAL_AUTH_SECRET`, `SMS_SECRETS_KEY`, `SMS_PII_HMAC_KEY`).

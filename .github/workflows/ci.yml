@@ -124,7 +124,7 @@ jobs:
           ADMIN_URL=postgresql://sms:sms@localhost:5432/postgres scripts/restore.sh /tmp/bk/sms-central-*.dump sms_central_restored
           export CENTRAL_DATABASE_URL=postgresql+psycopg://sms:sms@localhost:5432/sms_central_restored
           python -m scripts.recovery_verify head --label central
-          python -m scripts.recovery_verify central-ledger
+          python -m apps.central.tools.recovery_ledger
 
   # Porta e vetme që mbledh gjithë backend-in: dështon nëse ndonjë jo-`success` (përfshin shard-et e anuluara).
   backend-ci-gate:
