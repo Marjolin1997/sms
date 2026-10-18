@@ -18,7 +18,7 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.core.config import _weak_secret, settings
 from app.core.db import SessionLocal
@@ -26,8 +26,10 @@ from app.models.sending import DlrReceipt, Message, MessageStatus, Route
 from app.providers import _registry, register_configured
 from app.providers.base import is_idempotent
 from app.services import switches
+from app.services.messages import DUPLICATE_PROVIDER_ID
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
+AUTH_CODES = ("twilio_auth", "twilio_forbidden", "http_401", "http_403")
 IN_FLIGHT = (MessageStatus.QUEUED, MessageStatus.SENDING, MessageStatus.SENT, MessageStatus.UNKNOWN)
 
 
@@ -162,6 +164,16 @@ def config_checks(db, provider: str, *, phase: str, registry=None) -> list[Check
                 else "no competing route with equal/higher priority",
             )
         )
+    rate, conc = (
+        settings.provider_rate_per_sec.get(provider),
+        settings.provider_max_concurrency.get(provider),
+    )
+    out.append(
+        Check(
+            "throttle_config", PASS,
+            f"rate_per_sec={rate or 'unlimited'} (per worker process), max_concurrency={conc or 'unlimited'} (DB-wide, best-effort)",
+        )
+    )  # fmt: skip
     for name in sorted(switches.NAMES):
         on = switches.is_enabled(db, name)
         out.append(
@@ -285,18 +297,63 @@ def metric_checks(
             f"{dup} provider message id(s) shared by several messages" if dup else "none",
         )
     )
+    dupc = db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.provider == provider,
+            Message.error_code == DUPLICATE_PROVIDER_ID,
+            Message.status == MessageStatus.UNKNOWN,
+        )
+    )
+    out.append(
+        Check(
+            "duplicate_provider_id_conflicts",
+            PASS if not dupc else WARN,
+            f"{dupc} message(s) UNKNOWN: the provider returned an id owned by another message; reconcile with its panel (never resend)"
+            if dupc
+            else "none",
+        )
+    )
+    auth = db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(
+            *base,
+            Message.status == MessageStatus.FAILED,
+            or_(Message.error_code.in_(AUTH_CODES), Message.error_code.like("twilio_200%")),
+        )
+    )
+    out.append(
+        Check(
+            "provider_auth_failures",
+            PASS if not auth else FAIL,
+            f"{auth} message(s) failed with an authentication/permission error ({', '.join(AUTH_CODES)}): fix credentials, pause dispatch"
+            if auth
+            else "none",
+        )
+    )
+    recent = or_(DlrReceipt.received_at > since, DlrReceipt.last_seen_at > since)
     probs = {
-        o: n
+        o: int(n)
         for o, n in db.execute(
-            select(DlrReceipt.outcome, func.count())
-            .where(
-                DlrReceipt.provider == provider,
-                DlrReceipt.outcome != "applied",
-                DlrReceipt.received_at > since,
-            )
+            select(DlrReceipt.outcome, func.coalesce(func.sum(DlrReceipt.seen_count), 0))
+            .where(DlrReceipt.provider == provider, DlrReceipt.outcome != "applied", recent)
             .group_by(DlrReceipt.outcome)
         )
     }
+    replays = db.scalar(
+        select(func.coalesce(func.sum(DlrReceipt.seen_count - 1), 0)).where(
+            DlrReceipt.provider == provider, recent
+        )
+    )
+    out.append(
+        Check(
+            "dlr_replays",
+            PASS,
+            f"{int(replays or 0)} deduplicated replayed/retried callback(s) (idempotent, no side effect)",
+        )
+    )
     out.append(
         Check(
             "dlr_problems",
@@ -360,6 +417,35 @@ def verdict(checks, *, strict: bool = False) -> str:
     return "NO-GO" if any(c.level in bad for c in checks) else "GO"
 
 
+def duplicate_groups(db, limit: int = 200) -> list[dict]:
+    """Vetëm lexim: grupe (provider, provider_message_id) të ndara nga ≥ 2 mesazhe (histori para M11-J). Pa tekst/numra."""
+    grp = (
+        select(Message.provider, Message.provider_message_id, func.count().label("n"))
+        .where(Message.provider_message_id.is_not(None))
+        .group_by(Message.provider, Message.provider_message_id)
+        .having(func.count() > 1)
+        .order_by(func.count().desc())
+        .limit(limit)
+        .subquery()
+    )
+    out = []
+    for prov, pid, n in db.execute(select(grp.c.provider, grp.c.provider_message_id, grp.c.n)):
+        ids = db.scalars(
+            select(Message.public_id)
+            .where(Message.provider == prov, Message.provider_message_id == pid)
+            .order_by(Message.id)
+        ).all()
+        out.append(
+            {
+                "provider": prov,
+                "provider_message_id": pid,
+                "messages": int(n),
+                "public_ids": list(ids),
+            }
+        )
+    return out
+
+
 ROLLBACK_STEPS = (
     "1. Stop new canary traffic: disable the provider's routes (PUT /v1/admin/routes enabled=false) and, if needed, pause `dispatch` (kill switch).",
     "2. Restore the previous route/provider (re-enable the previous route with a higher priority) and re-run `provider_readiness check` for it.",
@@ -413,6 +499,10 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--max-sent-age-seconds", type=int, default=3600)
     c.add_argument("--max-queued-age-seconds", type=int, default=900)
     c.add_argument("--strict", action="store_true")
+    d = sub.add_parser(
+        "duplicate-ids", help="list historical duplicate provider message ids (read-only)"
+    )
+    d.add_argument("--json", action="store_true")
     r = sub.add_parser("rollback-plan")
     r.add_argument("--provider", required=True)
     for p in (c, r):
@@ -422,6 +512,17 @@ def main(argv: list[str] | None = None) -> int:
         register_configured()  # vetëm regjistron adapterët e konfiguruar; asnjë kërkesë rrjeti
         with SessionLocal() as db:
             try:
+                if a.cmd == "duplicate-ids":
+                    groups = duplicate_groups(db)
+                    if a.json:
+                        print(json.dumps(groups, indent=2))
+                    else:
+                        for g in groups:
+                            print(
+                                f"{g['provider']} {g['provider_message_id']}: {g['messages']} messages {g['public_ids']}"
+                            )
+                        print(f"{len(groups)} duplicate group(s)")
+                    return 1 if groups else 0
                 if a.cmd == "rollback-plan":
                     plan = rollback_plan(db, a.provider)
                     if a.json:

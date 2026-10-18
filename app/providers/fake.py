@@ -1,3 +1,5 @@
+import uuid
+
 from app.providers.base import ProviderError, SendRequest, SendResult
 
 
@@ -10,9 +12,12 @@ class FakeProvider:
     # Provuar nga kodi dhe testet: e njëjta `reference` ⇒ i njëjti SendResult (`self.accepted`).
     idempotent_by_reference = True
 
-    def __init__(self) -> None:
+    def __init__(self, unique_ids: bool = False) -> None:
         self.accepted: dict[str, SendResult] = {}
         self.calls: list[SendRequest] = []
+        # M11-J/G-01: instanca default ka prefiks të rastësishëm, që pas rinisjes
+        # `fake-1` të mos përplaset me mesazhe historike. Testet: `FakeProvider()`.
+        self._prefix = f"fake-{uuid.uuid4().hex[:8]}-" if unique_ids else "fake-"
 
     def send(self, req: SendRequest) -> SendResult:
         self.calls.append(req)
@@ -21,5 +26,5 @@ class FakeProvider:
         if req.destination.endswith("0002"):
             raise ProviderError("fake_rejected", temporary=False)
         if req.reference not in self.accepted:
-            self.accepted[req.reference] = SendResult(f"fake-{len(self.accepted) + 1}")
+            self.accepted[req.reference] = SendResult(f"{self._prefix}{len(self.accepted) + 1}")
         return self.accepted[req.reference]

@@ -6,6 +6,7 @@ njëjtën transaksion, prandaj nuk mund të humbasë asnjë punë ose të rezerv
 
 import hashlib
 import json
+import logging
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -45,8 +46,13 @@ from app.services import (
 )
 from app.services import dispatch_outcome as outcome
 from app.services import wallet as wallets
+from app.services.provider_throttle import throttle
 from app.services.sms_text import count_segments
 
+log = logging.getLogger("sms.messages")
+DUPLICATE_PROVIDER_ID = (
+    "duplicate_provider_id"  # M11-J/G-01: provider-i ktheu një id që i përket tjetër mesazhi
+)
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30
 AUTO_RESOLVER = "system:dlr_reconciliation"
@@ -239,9 +245,11 @@ def submit(
 # --- Worker -----------------------------------------------------------------
 
 
-def claim_next(db: Session, now: datetime | None = None) -> Message | None:
-    """Merr një mesazh të gatshëm dhe e shënon SENDING. SKIP LOCKED lejon shumë workers."""
-    return queue.reserve(db, rates.as_utc(now or datetime.now(UTC)))
+def claim_next(db: Session, now: datetime | None = None, exclude_providers=()) -> Message | None:
+    """Merr një mesazh të gatshëm dhe e shënon SENDING. SKIP LOCKED lejon shumë workers.
+    `exclude_providers` (M11-J): provider-ët e kufizuar tani; mesazhet e tyre mbeten të paprekura në QUEUED."""
+    where = Message.provider.not_in(list(exclude_providers)) if exclude_providers else None
+    return queue.reserve(db, rates.as_utc(now or datetime.now(UTC)), where=where)
 
 
 def _fail(db: Session, m: Message, code: str) -> None:
@@ -300,10 +308,11 @@ def process_one(db: Session, now: datetime | None = None) -> Message | None:
     now = rates.as_utc(now or datetime.now(UTC))
     if not switches.is_enabled(db, switches.DISPATCH):
         return None
-    m = claim_next(db, now)
+    m = claim_next(db, now, exclude_providers=throttle.blocked(db, now))  # {} kur s'ka kufizime
     if m is None:
         return None
     db.commit()  # COMMIT#1: claim (SENDING, attempts+1)
+    throttle.consume(m.provider, now)
     claim = m.attempts
     try:  # PARA invokimit: gabimet këtu janë të sigurta për retry
         provider = get_provider(m.provider)
@@ -337,7 +346,7 @@ def process_one(db: Session, now: datetime | None = None) -> Message | None:
         db.commit()
         return m
     if err is None:
-        queue.acknowledge(db, m, result.provider_message_id)
+        _acknowledge(db, m, claim, result.provider_message_id)
     else:
         outcome.settle_error(
             queue, db, m, provider, code=code, temporary=temporary, ambiguous=ambiguous, now=now
@@ -346,10 +355,48 @@ def process_one(db: Session, now: datetime | None = None) -> Message | None:
     return m
 
 
+def _id_owned_by_other(db: Session, m: Message, provider_message_id: str) -> bool:
+    return (
+        db.scalar(
+            select(Message.id).where(
+                Message.provider == m.provider,
+                Message.provider_message_id == provider_message_id,
+                Message.id != m.id,
+            )
+        )
+        is not None
+    )
+
+
+def _acknowledge(db: Session, m: Message, claim: int, provider_message_id: str) -> None:
+    """SENDING → SENT me id-në e provider-it. M11-J/G-01: indeksi unik (provider, provider_message_id) është garancia; rruga normale
+    s'ka kërkesë SQL shtesë (flush-i bëhet para commit-it, të njëjtat deklarata). Nëse id-ja i përket tashmë një mesazhi tjetër
+    (gabim i provider-it ose garë mes worker-ave), transaksioni zhbëhet dhe mesazhi NUK merr id-në: bëhet UNKNOWN (hold i mbajtur,
+    pa ridërgim, pa mbishkrim) sepse provider-i e pranoi kërkesën. Zgjidhet nga stafi pas rakordimit me panelin e provider-it."""
+    try:
+        queue.acknowledge(db, m, provider_message_id)
+        db.flush()
+    except IntegrityError:
+        db.rollback()  # transaksioni mbante vetëm kyçin e claim-it dhe ndryshimin e dështuar
+        log.warning(
+            "duplicate provider message id provider=%s message=%s: marked UNKNOWN",
+            m.provider,
+            m.public_id,
+        )
+        if outcome.lock_claim(db, m, claim, MessageStatus.SENDING):
+            queue.unknown(db, m, DUPLICATE_PROVIDER_ID)
+
+
 def _lost_claim(db: Session, m: Message, result) -> None:
     """Punonjësi e humbi claim-in (p.sh. sweeper → UNKNOWN). Asnjë lëvizje parash/gjendjeje; nëse
     provider-i ktheu id dhe mesazhi është UNKNOWN pa id, ruhet id-ja që DLR-ja ta mbyllë vetë."""
     if result is not None and m.status == MessageStatus.UNKNOWN and not m.provider_message_id:
+        if _id_owned_by_other(
+            db, m, result.provider_message_id
+        ):  # M11-J/G-01: kurrë dy mesazhe me të njëjtën id
+            db.add(MessageEvent(message_id=m.id, from_status="unknown", to_status="unknown",
+                                detail="late_ack:duplicate_provider_id"))  # fmt: skip
+            return
         m.provider_message_id = result.provider_message_id
         db.add(MessageEvent(message_id=m.id, from_status="unknown", to_status="unknown",
                             detail="late_ack:provider_id_recorded"))  # fmt: skip

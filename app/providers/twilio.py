@@ -13,7 +13,8 @@ Siguria e parave: Twilio nuk ka çelës idempotence për Messages ⇒ `idempoten
 Pas një gabimi ku kërkesa mund të ketë mbërritur (read timeout, 500, 2xx pa sid) NUK riprovojmë dhe
 NUK dështojmë: `ProviderError("twilio_outcome_unknown", ambiguous=True)` ⇒ mesazhi bëhet UNKNOWN,
 hold-i mbahet (M9-a), stafi e zgjidh ose një DLR autoritativ e mbyll. Vetëm gabimet para lidhjes
-(connect) dhe 429/502/503/504 (s'u pranua) janë të përkohshme.
+(connect) dhe 429/502/503/504 (s'u pranua) janë të përkohshme. M11-J/G-04: 401 (`twilio_auth`) dhe 403
+(`twilio_<kod>` ose `twilio_forbidden`) janë të PËRHERSHME: FAILED menjëherë + release (jo 5 përpjekje).
 """
 
 import base64
@@ -43,6 +44,16 @@ def verify_twilio_signature(
     if not auth_token or not header:
         return False
     return hmac.compare_digest(twilio_signature(auth_token, url, params), header)
+
+
+def _numeric_code(r: httpx.Response) -> int | None:
+    """Kodi i gabimit Twilio nga trupi (vetëm numër i plotë; asnjë tekst nga trupi nuk futet kurrë në gabim)."""
+    try:
+        data = r.json()
+    except ValueError:
+        return None
+    code = data.get("code") if isinstance(data, dict) else None
+    return code if isinstance(code, int) and not isinstance(code, bool) else None
 
 
 def _from(sender: str) -> str:
@@ -90,10 +101,15 @@ class TwilioProvider:
             raise ProviderError(f"network:{type(e).__name__}", temporary=True) from e  # s'u dërgua
         except httpx.HTTPError as e:
             raise ProviderError("twilio_outcome_unknown", temporary=False, ambiguous=True) from e
-        if r.status_code in (401, 403):
-            raise ProviderError(
-                "twilio_auth", temporary=True
-            )  # konfigurim: rregullohet dhe rikthehet
+        if (
+            r.status_code == 401
+        ):  # M11-J/G-04: kredenciale të pavlefshme — përhershëm, pa djegur 5 përpjekje për çdo mesazh
+            raise ProviderError("twilio_auth", temporary=False)
+        if (
+            r.status_code == 403
+        ):  # leje/politikë (p.sh. 20003/20008): përhershëm; kodi vjen vetëm nga fusha numerike `code`
+            code = _numeric_code(r)
+            raise ProviderError(f"twilio_{code}" if code else "twilio_forbidden", temporary=False)
         if r.status_code == 429 or r.status_code in (502, 503, 504):
             raise ProviderError(f"http_{r.status_code}", temporary=True)  # s'u pranua
         if r.status_code >= 500:  # 500: e papritur, mund të jetë krijuar mesazhi → pa riprovë

@@ -1485,6 +1485,15 @@
  },
  "sms_dlr_receipts": {
   "columns": {
+   "fingerprint": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "VARCHAR(64)"
+   },
    "id": {
     "default": null,
     "fks": [],
@@ -1493,6 +1502,15 @@
     "pk": true,
     "server_default": null,
     "type": "BIGINT"
+   },
+   "last_seen_at": {
+    "default": null,
+    "fks": [],
+    "nullable": true,
+    "onupdate": null,
+    "pk": false,
+    "server_default": null,
+    "type": "DATETIME"
    },
    "outcome": {
     "default": null,
@@ -1539,6 +1557,15 @@
     "server_default": null,
     "type": "DATETIME"
    },
+   "seen_count": {
+    "default": "scalar:1",
+    "fks": [],
+    "nullable": false,
+    "onupdate": null,
+    "pk": false,
+    "server_default": "1",
+    "type": "INTEGER"
+   },
    "status": {
     "default": null,
     "fks": [],
@@ -1553,7 +1580,9 @@
    "PrimaryKeyConstraint:pk_sms_dlr_receipts"
   ],
   "indexes": [
-   "ix_sms_dlr_receipts_pmid:['provider', 'provider_message_id']:False"
+   "ix_sms_dlr_receipts_pmid:['provider', 'provider_message_id']:False",
+   "ix_sms_dlr_receipts_received:['received_at']:False",
+   "uq_sms_dlr_receipts_fp:['fingerprint', 'outcome']:True"
   ]
  },
  "sms_email_billable_events": {
@@ -3596,7 +3625,8 @@
    "ix_sms_messages_enterprise_id:['enterprise_id']:False",
    "ix_sms_messages_owner_created:['owner_ref', 'created_at']:False",
    "ix_sms_messages_provider_msg:['provider', 'provider_message_id']:False",
-   "ix_sms_messages_queue:['status', 'next_attempt_at']:False"
+   "ix_sms_messages_queue:['status', 'next_attempt_at']:False",
+   "uq_sms_messages_provider_msg:['provider', 'provider_message_id']:True"
   ]
  },
  "sms_money_baselines": {

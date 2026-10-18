@@ -554,6 +554,7 @@ def _drift(conn):
                 "sender_central_",
                 "sms_sender_bootstrap_issues",
                 "sms_sender_cutover_evidence",
+                "uq_sms_messages_provider_msg",  # M11-J (0035): indeks i mëvonshëm
             )
         )
     ]

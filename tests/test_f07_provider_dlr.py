@@ -175,7 +175,9 @@ def test_http_adapter_is_not_idempotent_and_sends_the_reference_anyway():
 
 TWILIO_TABLE = [
     (reply(201, {"sid": "SM1", "status": "queued"}), ("ok", "SM1")),
-    *[(reply(s, {}), ("twilio_auth", True, False)) for s in (401, 403)],
+    (reply(401, {}), ("twilio_auth", False, False)),  # M11-J/G-04: përhershëm
+    (reply(403, {}), ("twilio_forbidden", False, False)),
+    (reply(403, {"code": 20003}), ("twilio_20003", False, False)),
     *[(reply(s, {}), (f"http_{s}", True, False)) for s in (429, 502, 503, 504)],
     (reply(500, {}), ("twilio_outcome_unknown", False, True)),
     (reply(400, {"code": 21211}), ("twilio_21211", False, False)),
@@ -306,7 +308,7 @@ def test_retry_schedule_and_exhaustion_release_the_hold_after_five_calls(db, wor
     assert svc.process_one(db, _t(9)) is None and len(p.calls) == 5  # terminal: s'riprovohet më
 
 
-def test_bad_twilio_credentials_burn_all_attempts_then_fail_each_message(db, world, prov, caplog):  # noqa: F811
+def test_bad_twilio_credentials_fail_fast_with_release_and_no_retries(db, world, prov, caplog):  # noqa: F811
     """401/403 trajtohen si të përkohshme (konfigurim i rregullueshëm): P1 te matrica e alarmeve, jo heshtje."""
     calls = []
     prov(
@@ -322,7 +324,8 @@ def test_bad_twilio_credentials_burn_all_attempts_then_fail_each_message(db, wor
     for i in range(5):
         svc.process_one(db, _t(i))
     db.refresh(m)
-    assert len(calls) == 5 and m.status == MessageStatus.FAILED and m.error_code == "twilio_auth"
+    assert len(calls) == 1 and m.status == MessageStatus.FAILED and m.error_code == "twilio_auth"
+    assert "bad f07-twilio-token-not-real" not in (m.error_code or "")
     assert held(db, w) == (D("10"), D("0"))
 
 
@@ -474,9 +477,10 @@ def test_replayed_signed_callback_is_idempotent_and_leaves_history_and_money_alo
     db.expire_all()
     assert db.query(MessageEvent).count() == events and held(db, w) == money
     assert db.get(Message, m.id).status == MessageStatus.DELIVERED
-    assert (
-        db.query(DlrReceipt).filter_by(outcome="applied").count() == 4
-    )  # rritje e dokumentuar: çdo replay regjistrohet
+    # M11-J/G-05: replay-et nuk shtojnë rreshta; numërohen në `seen_count` (1 origjinali + 3 replay)
+    applied = db.query(DlrReceipt).filter_by(outcome="applied").one()
+    assert applied.seen_count == 4
+    assert db.query(DlrReceipt).filter_by(outcome="conflict").one().seen_count == 1
 
 
 def test_forwarded_headers_admin_key_and_bearer_never_replace_the_signature(db, world, prov, wh):  # noqa: F811
@@ -520,36 +524,25 @@ def test_provider_registration_reads_only_settings_never_literals(monkeypatch):
     assert "Bearer " in src and KEY not in src
 
 
-def test_a_provider_that_returns_a_duplicate_id_is_detected_not_prevented(db, world, prov):  # noqa: F811
-    """Lacuna e dokumentuar: SENT s'refuzon id e dyfishtë; `provider_readiness` e flet (FAIL), një DLR zgjidh vetëm njërin."""
-    from scripts import provider_readiness as pr
-
+def test_a_provider_that_returns_a_duplicate_id_is_prevented_and_fails_safe(db, world, prov):  # noqa: F811
+    """M11-J/G-01: id e dyfishtë nuk i jepet mesazhit të dytë: ai bëhet UNKNOWN (hold i mbajtur, pa ridërgim)."""
     w, _ = world
-    prov(Scripted(SendResult("dup-1"), SendResult("dup-1")))
+    p = prov(Scripted(SendResult("dup-1"), SendResult("dup-1")))
     a, b = send(db, key="a"), send(db, key="b")
     svc.process_one(db)
     svc.process_one(db)
     db.refresh(a), db.refresh(b)
-    assert a.provider_message_id == b.provider_message_id == "dup-1"
+    assert (a.status, a.provider_message_id) == (MessageStatus.SENT, "dup-1")
+    assert (b.status, b.provider_message_id) == (MessageStatus.UNKNOWN, None)
+    assert b.error_code == svc.DUPLICATE_PROVIDER_ID and len(p.calls) == 2
+    svc.process_one(db), svc.recover_stuck(db, lease=timedelta(0))
+    db.commit()
+    assert len(p.calls) == 2  # asnjë ridërgim
     svc.apply_dlr(db, "fake", "dup-1", True)
     db.commit()
     db.refresh(a), db.refresh(b)
-    assert sorted([a.status.value, b.status.value]) == ["delivered", "sent"]
-    checks = {
-        c.name: c
-        for c in pr.metric_checks(
-            db,
-            "fake",
-            hours=24,
-            min_sample=1,
-            min_rate=0.5,
-            max_unknown=0,
-            max_sent_age=3600,
-            max_queued_age=900,
-            now=datetime.now(UTC),
-        )
-    }
-    assert checks["duplicate_provider_ids"].level == "FAIL"
+    assert (a.status, b.status) == (MessageStatus.DELIVERED, MessageStatus.UNKNOWN)
+    assert held(db, w) == (D("9.90"), PRICE)  # a u kap një herë; hold-i i b mbetet
     assert wallets.verify_wallet(db, w.id)
 
 

@@ -173,7 +173,7 @@ def test_backup_artifacts_contain_no_credentials_and_record_label_and_head(dbs, 
             and meta["bytes"] == dump.stat().st_size
             and len(meta["sha256"]) == 64
         )
-        assert meta["alembic_revision"] == {"enterprise": "0034", "central": "0031"}[label]
+        assert meta["alembic_revision"] == {"enterprise": "0035", "central": "0031"}[label]
         assert "NOT point-in-time" in meta["kind"]
         blob = (
             r.stdout

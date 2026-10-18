@@ -31,7 +31,7 @@ async def _verified(request: Request, signature: str) -> tuple[bytes, list[tuple
 
 @router.post("/webhooks/twilio/status")
 async def twilio_status(request: Request, x_twilio_signature: str = Header(default="")) -> Response:
-    raw, params = await _verified(request, x_twilio_signature)
+    _, params = await _verified(request, x_twilio_signature)
     p = dict(params)
     sid, status = p.get("MessageSid", ""), p.get("MessageStatus", "")
     if not sid:
@@ -45,7 +45,7 @@ async def twilio_status(request: Request, x_twilio_signature: str = Header(defau
         status="delivered" if status == "delivered" else "failed",
         code=(f"twilio_{p['ErrorCode']}" if p.get("ErrorCode") else f"twilio_{status}")[:64],
     )
-    code, outcome = await run_in_threadpool(_handle, "twilio", raw, dlr)
+    code, outcome = await run_in_threadpool(_handle, "twilio", dlr)
     if code == 409:
         return Response(
             EMPTY_TWIML, media_type="text/xml"

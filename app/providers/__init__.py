@@ -2,7 +2,7 @@ from app.providers.base import ProviderError, SendRequest, SendResult, SmsProvid
 from app.providers.email import EmailProvider, FakeEmailProvider  # noqa: E402
 from app.providers.fake import FakeProvider
 
-_registry: dict[str, SmsProvider] = {"fake": FakeProvider()}
+_registry: dict[str, SmsProvider] = {"fake": FakeProvider(unique_ids=True)}
 _email_registry: dict[str, EmailProvider] = {"fake": FakeEmailProvider()}
 
 

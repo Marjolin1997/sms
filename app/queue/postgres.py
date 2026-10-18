@@ -22,11 +22,16 @@ class PostgresDispatchQueue:
         db.flush()
         return item
 
-    def reserve(self, db, now: datetime):
+    def reserve(self, db, now: datetime, where=None):
         s = self.spec
+        cond = and_(s.pending, s.next_attempt_at <= now)
+        if (
+            where is not None
+        ):  # M11-J: p.sh. përjashto provider-ët e kufizuar (default: sjellja e vjetër)
+            cond = and_(cond, where)
         item = db.scalar(
             select(s.model)
-            .where(and_(s.pending, s.next_attempt_at <= now))
+            .where(cond)
             .order_by(s.next_attempt_at, s.id)
             .limit(1)
             .with_for_update(skip_locked=True)

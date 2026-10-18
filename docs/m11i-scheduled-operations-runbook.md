@@ -110,3 +110,6 @@ Gjetjet nga leximi i kodit dhe testet. **Asnjë job financiar ose sender nuk ka 
 | Agregimi i statistikave (`stats aggregation` si job) | NOT APPLICABLE | `GET /v1/admin/stats` llogaritet sipas kërkesës; s'ka job agregimi |
 | Heartbeat për `send_notifications --loop` | MBULUAR | përdor një kalim çdo minutë përmes `job_runner` (`central-send-notifications`) |
 | Metrika e pishinës së DB-së / lidhjeve (AL-19) | PRODUCTION-ONLY | `pg_stat_activity` nga host-i/provider-i |
+
+## Operacione manuale të pa-planifikuara (M11-J)
+`python -m scripts.dlr_receipt_retention` (retention i `sms_dlr_receipts`) **nuk është në inventarin e job-eve** dhe nuk planifikohet: dry-run për raport; `--apply` vetëm me vendim njeriu (shih `m11i-provider-dlr-runbook.md` §9). Nëse më vonë planifikohet, duhet të kalojë nga `scripts.job_runner` dhe të shtohet te `deploy/scheduled-jobs.json` me alarm.

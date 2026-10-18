@@ -4,9 +4,10 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.errors import DomainError
 from app.core.security import Principal, require
@@ -355,6 +356,57 @@ def unresolved_messages(
     ]  # fmt: skip
 
 
+def _provider_safety(db: Session, now: datetime, since: datetime, recent) -> dict:
+    """M11-J: sinjale vetëm-lexim nga DB, pa sekrete/PII."""
+    n = lambda q: int(db.scalar(q) or 0)  # noqa: E731
+    caps = {*settings.provider_rate_per_sec, *settings.provider_max_concurrency}
+    due = (
+        dict(
+            db.execute(
+                select(Message.provider, func.count())
+                .where(
+                    Message.status == MessageStatus.QUEUED,
+                    Message.next_attempt_at <= now,
+                    Message.provider.in_(sorted(caps)),
+                )
+                .group_by(Message.provider)
+            ).all()
+        )
+        if caps
+        else {}
+    )
+    return {
+        "duplicate_provider_id": n(
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.error_code == msg_svc.DUPLICATE_PROVIDER_ID,
+                Message.status == MessageStatus.UNKNOWN,
+            )
+        ),
+        "twilio_auth_failures_24h": n(
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.status == MessageStatus.FAILED,
+                or_(
+                    Message.error_code.in_(("twilio_auth", "twilio_forbidden")),
+                    Message.error_code.like("twilio_200%"),  # 20003/20008…: autentikim/leje
+                ),
+                Message.updated_at > since,
+            )
+        ),
+        "dlr_replays_24h": n(
+            select(func.coalesce(func.sum(DlrReceipt.seen_count - 1), 0)).where(recent)
+        ),
+        "throttle": {
+            "rate_per_sec": settings.provider_rate_per_sec,
+            "max_concurrency": settings.provider_max_concurrency,
+            "queued_due": {p: int(due.get(p, 0)) for p in sorted(caps)},
+        },
+    }
+
+
 @router.get("/stats")
 def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor:read"))):
     now = datetime.now(UTC)
@@ -369,9 +421,12 @@ def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor
         select(func.min(Message.next_attempt_at)).where(Message.status == MessageStatus.QUEUED)
     )
     stuck = msg_svc.stuck_sending(db, timedelta(minutes=10), now)
+    since = now - timedelta(hours=24)
+    recent = or_(DlrReceipt.received_at > since, DlrReceipt.last_seen_at > since)
+    # M11-J: një rresht për (gjurmë, rezultat); numërohen callback-et (seen_count), jo rreshtat
     bad_dlr = db.execute(
-        select(DlrReceipt.outcome, func.count())
-        .where(DlrReceipt.outcome != "applied", DlrReceipt.received_at > now - timedelta(hours=24))
+        select(DlrReceipt.outcome, func.coalesce(func.sum(DlrReceipt.seen_count), 0))
+        .where(DlrReceipt.outcome != "applied", recent)
         .group_by(DlrReceipt.outcome)
     )
     return {
@@ -381,7 +436,8 @@ def stats(db: Session = Depends(get_db), _: Principal = Depends(require("monitor
         ),
         "stuck_sending": len(stuck),
         "unknown_outcome": _unknown_summary(db, now),
-        "dlr_problems_24h": {o: n for o, n in bad_dlr},
+        "dlr_problems_24h": {o: int(n) for o, n in bad_dlr},
+        "provider_safety": _provider_safety(db, now, since, recent),
         "switches": [_switch_out(db, n) for n in sorted(switches.NAMES)],
     }
 

@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     dlr_secrets: dict[str, str] = {}
     # Sa kohë presim DLR pas SENT para se ta konsiderojmë të humbur.
     dlr_timeout_hours: int = 72
+    # M11-J/G-03: kufizime për provider (çelësi = emri i provider-it; mungesa = pa kufi = sjellja e vjetër).
+    #   provider_rate_per_sec     — thirrje/sekondë për PROCES worker (kovë tokenësh; kufiri global ≤ vlera × numri i worker-ave SMS)
+    #   provider_max_concurrency  — thirrje njëkohësisht në ajër NË TË GJITHË DB-në (numërim i SENDING; best-effort: kalim ≤ workers−1)
+    provider_rate_per_sec: dict[str, float] = {}
+    provider_max_concurrency: dict[str, int] = {}
+    # M11-J/G-07: retention i `sms_dlr_receipts` (ditë). Komanda `scripts.dlr_receipt_retention` është dry-run pa `--apply`; s'ka fshirje automatike.
+    dlr_receipt_retention_days: int = Field(default=90, ge=7, le=3650)
     # M9-a: SENDING pa progres mbi këtë afat merret nga sweeper-i (UNKNOWN/riradhitje sipas fazës)
     sending_lease_seconds: int = Field(default=600, ge=60, le=86400)
 
@@ -322,6 +329,16 @@ class Settings(BaseSettings):
     def validate_production(self) -> None:
         if self.env == "production" and (problems := self.production_problems()):
             raise RuntimeError("unsafe production configuration:\n - " + "\n - ".join(problems))
+
+    @model_validator(mode="after")
+    def _provider_limits_valid(self):
+        for name, v in self.provider_rate_per_sec.items():
+            if not 0 < v <= 1000:
+                raise ValueError(f"SMS_PROVIDER_RATE_PER_SEC['{name}'] must be in (0, 1000]")
+        for name, v in self.provider_max_concurrency.items():
+            if not 1 <= v <= 100:
+                raise ValueError(f"SMS_PROVIDER_MAX_CONCURRENCY['{name}'] must be in 1..100")
+        return self
 
     @model_validator(mode="after")
     def _scoping_needs_dual_write(self):

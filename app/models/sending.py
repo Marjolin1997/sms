@@ -148,6 +148,8 @@ class Message(TenantOwned, Base):
         UniqueConstraint("owner_ref", "idempotency_key"),
         Index("ix_sms_messages_queue", "status", "next_attempt_at"),
         Index("ix_sms_messages_provider_msg", "provider", "provider_message_id"),
+        # M11-J/G-01: një provider_message_id jo-NULL i përket më së shumti një mesazhi për provider (NULL-et janë të ndryshme).
+        Index("uq_sms_messages_provider_msg", "provider", "provider_message_id", unique=True),
         Index("ix_sms_messages_owner_created", "owner_ref", "created_at"),
     )
 
@@ -185,10 +187,21 @@ class DlrReceipt(Base):
     provider_message_id: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[str | None] = mapped_column(String(16))
     outcome: Mapped[str] = mapped_column(String(24))  # applied | unknown_message | conflict
+    # M11-J/G-07: nga tani JSON i minimizuar (vetëm id/status/kod/reference), jo trupi i papërpunuar i callback-ut.
+    # Rreshtat historikë mund të mbajnë trupin e plotë (përfshirë numra telefoni): nuk rishkruhen, hiqen nga retention.
     raw_body: Mapped[str] = mapped_column(Text)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # M11-J/G-05: gjurma e përcaktuar e callback-ut (sha256 mbi provider|id|status|kod|reference; pa sekrete). NULL = historik.
+    fingerprint: Mapped[str | None] = mapped_column(String(64))
+    seen_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (Index("ix_sms_dlr_receipts_pmid", "provider", "provider_message_id"),)
+    __table_args__ = (
+        Index("ix_sms_dlr_receipts_pmid", "provider", "provider_message_id"),
+        Index("ix_sms_dlr_receipts_received", "received_at"),
+        # një rresht për (gjurmë, rezultat): replay-i rrit `seen_count`, nuk shton rresht (NULL = historik, i lejuar shumëfish)
+        Index("uq_sms_dlr_receipts_fp", "fingerprint", "outcome", unique=True),
+    )
 
 
 MESSAGE_PRICE_FROZEN = (

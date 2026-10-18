@@ -53,7 +53,9 @@ def test_delivered_and_duplicate(client, db, world):  # noqa: F811
     db.expire_all()
     assert m.status == MessageStatus.DELIVERED
     assert wallets.balances(db, w.id) == (D("9.95"), D("0"))
-    assert db.query(DlrReceipt).count() == 2
+    # M11-J/G-05: callback-u identik (replay/retry) nuk shton rresht: një receipt me seen_count=2
+    r = db.query(DlrReceipt).one()
+    assert r.outcome == "applied" and r.seen_count == 2
 
 
 def test_failed_dlr_releases(client, db, world):  # noqa: F811

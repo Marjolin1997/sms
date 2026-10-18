@@ -177,15 +177,17 @@ class Ctx:
         self.db.expire_all()
         return wallets.balances(self.db, self.wallet_id)
 
-    def receipts(self, outcome: str | None = None) -> int:
+    def receipts(self, outcome: str | None = None, rows: bool = False) -> int:
+        """Callback-e të audituar (shuma e seen_count) ose, me rows=True, numri i rreshtave (M11-J: replay-et bashkohen)."""
         from sqlalchemy import func, select
 
         from app.models.sending import DlrReceipt
 
-        q = select(func.count()).select_from(DlrReceipt).where(DlrReceipt.provider == PROVIDER)
+        what = func.count() if rows else func.coalesce(func.sum(DlrReceipt.seen_count), 0)
+        q = select(what).select_from(DlrReceipt).where(DlrReceipt.provider == PROVIDER)
         if outcome:
             q = q.where(DlrReceipt.outcome == outcome)
-        return self.db.scalar(q)
+        return int(self.db.scalar(q) or 0)
 
     def trail(self, m) -> list[str]:
         from sqlalchemy import select
@@ -364,7 +366,7 @@ def sc_duplicate_dlr(c: Ctx, r: Report) -> None:
     m = c.submit(3)
     svc.process_one(c.db)
     c.db.refresh(m)
-    before, receipts = c.balances(), c.receipts("applied")
+    before, receipts, rows = c.balances(), c.receipts("applied"), c.receipts("applied", rows=True)
     body = {"provider_message_id": m.provider_message_id, "status": "delivered"}
     codes = [c.dlr(body).status_code for _ in range(3)]
     after = c.balances()
@@ -377,7 +379,10 @@ def sc_duplicate_dlr(c: Ctx, r: Report) -> None:
         "duplicate DLR: money moved once",
         after[1] == before[1] - D(PRICE) and after[0] == before[0],
     )
-    r.check("duplicate DLR: every callback audited", c.receipts("applied") - receipts == 3)
+    r.check("duplicate DLR: every callback counted", c.receipts("applied") - receipts == 3)
+    r.check(
+        "duplicate DLR: replays share one receipt row", c.receipts("applied", rows=True) - rows == 1
+    )
 
 
 def sc_out_of_order(c: Ctx, r: Report) -> None:
