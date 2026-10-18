@@ -1,4 +1,5 @@
 import base64
+import email
 import hashlib
 import hmac
 import json
@@ -256,7 +257,11 @@ def test_transactional_has_no_unsubscribe_footer(db, verified, fake_email_provid
     send(db)
     emails.process_one(db, datetime.now(UTC) + timedelta(seconds=1))
     raw = fake_email_provider.calls[0].raw
-    assert b"List-Unsubscribe" not in raw and b"/u/" not in raw
+    # Nënshkrimi DKIM është base64 i rastësishëm: "/u/" shfaqet aty rastësisht (~0.13% e nënshkrimeve, matur mbi 12000), prandaj
+    # kontrollojmë mungesën e lidhjes së çregjistrimit në mesazhin PA kokën DKIM-Signature (List-Unsubscribe kontrollohet në të gjithë).
+    msg = email.message_from_bytes(raw)
+    del msg["DKIM-Signature"]
+    assert b"List-Unsubscribe" not in raw and b"/u/" not in msg.as_bytes()
 
 
 def test_header_injection_blocked_in_mime():
