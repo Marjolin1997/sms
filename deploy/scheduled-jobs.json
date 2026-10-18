@@ -1,0 +1,644 @@
+{
+  "schema_version": 1,
+  "comment": "Burimi i vetëm i të vërtetës për çfarë ekzekutohet periodikisht. Vetëm komanda që ekzistojnë në repo; testohet te tests/test_f06_operations.py.",
+  "severity_classes": {
+    "P1": "ndikim klienti / integritet financiar / ndërprerje e gjerë (page)",
+    "P2": "shërbim i degraduar / backlog në rritje / dështim provider-i (page gjatë orarit ose kanal)",
+    "P3": "paralajmërim / ndjekje operacionale (tiketë)"
+  },
+  "jobs": [
+    {
+      "name": "queue-readiness",
+      "subsystem": "enterprise-queue",
+      "kind": "oneshot",
+      "command": [
+        "python",
+        "-m",
+        "scripts.queue_readiness"
+      ],
+      "schedule": "*/5 * * * *",
+      "cadence_seconds": 300,
+      "timeout_seconds": 120,
+      "max_age_seconds": 900,
+      "ok_codes": [
+        0
+      ],
+      "lock": "vetëm-lexim; pa kyç (s'ka mutacion)",
+      "idempotent": "vetëm-lexim",
+      "expected_runtime": "< 5 s",
+      "failure_behavior": "kod 1 = FAIL (UNKNOWN/SENDING i ngecur) ⇒ alarm; kod 2 = gabim i brendshëm",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "SMS_DATABASE_URL"
+      ],
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P1",
+      "runbook": "docs/m11i-alert-matrix.md#al-07",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "financial-ops",
+      "subsystem": "enterprise-financial",
+      "kind": "oneshot",
+      "command": [
+        "python",
+        "-m",
+        "scripts.financial_ops",
+        "--json"
+      ],
+      "schedule": "*/5 * * * *",
+      "cadence_seconds": 300,
+      "timeout_seconds": 120,
+      "max_age_seconds": 900,
+      "ok_codes": [
+        0
+      ],
+      "lock": "vetëm-lexim; pa kyç",
+      "idempotent": "vetëm-lexim",
+      "expected_runtime": "< 5 s",
+      "failure_behavior": "kod 1 = ka CRITICAL ⇒ alarm; kod 2 = gabim i brendshëm",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "SMS_DATABASE_URL"
+      ],
+      "owner": "Financa",
+      "missed_severity": "P2",
+      "failed_severity": "P1",
+      "runbook": "docs/m11i-alert-matrix.md#al-09",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "sender-alerts",
+      "subsystem": "enterprise-sender",
+      "kind": "oneshot",
+      "command": [
+        "python",
+        "-m",
+        "scripts.sender_alerts",
+        "--json"
+      ],
+      "schedule": "*/5 * * * *",
+      "cadence_seconds": 300,
+      "timeout_seconds": 120,
+      "max_age_seconds": 900,
+      "ok_codes": [
+        0
+      ],
+      "lock": "vetëm-lexim; pa kyç",
+      "idempotent": "vetëm-lexim",
+      "expected_runtime": "< 5 s",
+      "failure_behavior": "kod 1 = alertë critical (S2 para cutover-it `central`, S1 pas tij) ⇒ alarm",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "SMS_DATABASE_URL"
+      ],
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "runbook": "docs/m11i-alert-matrix.md#al-11",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "verify-ledger",
+      "subsystem": "enterprise-financial",
+      "kind": "oneshot",
+      "command": [
+        "python",
+        "-m",
+        "scripts.verify_ledger"
+      ],
+      "schedule": "15 2 * * *",
+      "cadence_seconds": 86400,
+      "timeout_seconds": 1800,
+      "max_age_seconds": 93600,
+      "ok_codes": [
+        0
+      ],
+      "lock": "vetëm-lexim; pa kyç",
+      "idempotent": "vetëm-lexim",
+      "expected_runtime": "sekonda–minuta (varet nga numri i wallet-eve)",
+      "failure_behavior": "kod 1 = ledger nuk mbyllet ⇒ alarm P1",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "SMS_DATABASE_URL"
+      ],
+      "owner": "Financa + DBA",
+      "missed_severity": "P2",
+      "failed_severity": "P1",
+      "runbook": "docs/m11i-alert-matrix.md#al-10",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "backup-enterprise",
+      "subsystem": "backup",
+      "kind": "oneshot",
+      "command": [
+        "scripts/backup.sh"
+      ],
+      "schedule": "30 2 * * *",
+      "cadence_seconds": 86400,
+      "timeout_seconds": 3600,
+      "max_age_seconds": 93600,
+      "ok_codes": [
+        0
+      ],
+      "lock": "kyç `flock` i runner-it (një host); pg_dump është snapshot transaksional; skedarët me emër unik me UTC",
+      "idempotent": "Çdo ekzekutim krijon skedar të ri; rotacioni fshin vetëm skedarët e së njëjtës etiketë më të vjetër se KEEP_DAYS",
+      "expected_runtime": "minuta (varet nga madhësia e DB-së)",
+      "failure_behavior": "dalje ≠ 0 pa artefakt të gjysmë; `.partial` fshihet",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "BACKUP_LABEL=enterprise",
+        "DATABASE_URL",
+        "BACKUP_DIR",
+        "KEEP_DAYS"
+      ],
+      "owner": "DBA",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "runbook": "docs/m11i-alert-matrix.md#al-14",
+      "required": true,
+      "environment": "production",
+      "escalate_after_failures": 2,
+      "escalated_severity": "P1",
+      "backup_label": "enterprise"
+    },
+    {
+      "name": "backup-central",
+      "subsystem": "backup",
+      "kind": "oneshot",
+      "command": [
+        "scripts/backup.sh"
+      ],
+      "schedule": "45 2 * * *",
+      "cadence_seconds": 86400,
+      "timeout_seconds": 3600,
+      "max_age_seconds": 93600,
+      "ok_codes": [
+        0
+      ],
+      "lock": "kyç `flock` i runner-it (një host); pg_dump është snapshot transaksional; skedarët me emër unik me UTC",
+      "idempotent": "Çdo ekzekutim krijon skedar të ri; rotacioni fshin vetëm skedarët e së njëjtës etiketë më të vjetër se KEEP_DAYS",
+      "expected_runtime": "minuta (varet nga madhësia e DB-së)",
+      "failure_behavior": "dalje ≠ 0 pa artefakt të gjysmë; `.partial` fshihet",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "BACKUP_LABEL=central",
+        "DATABASE_URL",
+        "BACKUP_DIR",
+        "KEEP_DAYS"
+      ],
+      "owner": "DBA",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "runbook": "docs/m11i-alert-matrix.md#al-14",
+      "required": true,
+      "environment": "production",
+      "escalate_after_failures": 2,
+      "escalated_severity": "P1",
+      "backup_label": "central"
+    },
+    {
+      "name": "recovery-drill",
+      "subsystem": "backup",
+      "kind": "oneshot",
+      "command": [
+        "python",
+        "-m",
+        "scripts.recovery_drill"
+      ],
+      "schedule": "0 4 1 * *",
+      "cadence_seconds": 2592000,
+      "timeout_seconds": 3600,
+      "max_age_seconds": 3024000,
+      "ok_codes": [
+        0
+      ],
+      "lock": "kyç `flock` i runner-it; punon vetëm me baza `f05drill_*` që krijon vetë",
+      "idempotent": "Idempotent në efekt: krijon dhe fshin bazat e veta të përkohshme",
+      "expected_runtime": "~25 s (lokal, bazë e vogël); varet nga madhësia",
+      "failure_behavior": "dalje 1 = drill dështoi (baza e përkohshme fshihet)",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "ADMIN_URL (host restore/staging, JO baza e prodhimit)"
+      ],
+      "owner": "DBA",
+      "missed_severity": "P3",
+      "failed_severity": "P3",
+      "runbook": "docs/m11i-alert-matrix.md#al-15",
+      "required": true,
+      "environment": "restore-host"
+    },
+    {
+      "name": "central-billing-run",
+      "subsystem": "central-billing",
+      "kind": "oneshot",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "--env-file",
+        ".env",
+        "--profile",
+        "central-jobs",
+        "run",
+        "--rm",
+        "central-billing-run"
+      ],
+      "schedule": "10 3 * * *",
+      "cadence_seconds": 86400,
+      "timeout_seconds": 1800,
+      "max_age_seconds": 93600,
+      "ok_codes": [
+        0
+      ],
+      "lock": "kyç advisory `pg_try_advisory_lock(RUN_LOCK_KEY)` (kod 4 nëse një ekzekutim tjetër është në vazhdim) + `FOR UPDATE` i abonimit për çdo periudhë",
+      "idempotent": "IDEMPOTENT: `process_period` krijon të shumtën një periudhë/faturë për (abonim, indeks); rirunimi/paralelizmi s'dyfishon",
+      "expected_runtime": "sekonda–minuta (kufizuar me `--limit`/`--max-periods`)",
+      "failure_behavior": "kod 1 = ka periudha `failed`; kod 3 = autoriteti i faturimit s'është `central` (pritet para cutover-it); kod 4 = mbivendosje (e padëmshme)",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "CENTRAL_DATABASE_URL",
+        "CENTRAL_BILLING_RUN_STALE_SECONDS (default 93600)"
+      ],
+      "owner": "Financa",
+      "missed_severity": "P2",
+      "failed_severity": "P1",
+      "runbook": "docs/m11i-alert-matrix.md#al-05",
+      "required": false,
+      "environment": "production",
+      "enabled_when": "autoriteti i faturimit = central (pas cutover-it)"
+    },
+    {
+      "name": "central-send-notifications",
+      "subsystem": "central-registration",
+      "kind": "oneshot",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "--env-file",
+        ".env",
+        "--profile",
+        "central-jobs",
+        "run",
+        "--rm",
+        "central-send-notifications"
+      ],
+      "schedule": "* * * * *",
+      "cadence_seconds": 60,
+      "timeout_seconds": 120,
+      "max_age_seconds": 300,
+      "ok_codes": [
+        0
+      ],
+      "lock": "`FOR UPDATE SKIP LOCKED` te outbox-i ⇒ ekzekutim paralel i sigurt",
+      "idempotent": "Retry i kufizuar (5 përpjekje, backoff 1m·4^n); asnjë dërgim i dyfishtë i të njëjtit rresht",
+      "expected_runtime": "< 30 s",
+      "failure_behavior": "kod 2 = konfigurim i munguar (`CENTRAL_MAILER`, `CENTRAL_REGISTRATION_VERIFY_KEY`)",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "CENTRAL_DATABASE_URL",
+        "CENTRAL_MAILER",
+        "CENTRAL_REGISTRATION_VERIFY_KEY"
+      ],
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "runbook": "docs/m11i-alert-matrix.md#al-12",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "central-money-reconciliation",
+      "subsystem": "central-financial",
+      "kind": "oneshot",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "--env-file",
+        ".env",
+        "--profile",
+        "central-jobs",
+        "run",
+        "--rm",
+        "central-tool",
+        "apps.central.tools.money_reconciliation"
+      ],
+      "schedule": "*/15 * * * *",
+      "cadence_seconds": 900,
+      "timeout_seconds": 300,
+      "max_age_seconds": 2700,
+      "ok_codes": [
+        0
+      ],
+      "lock": "vetëm-lexim; pa kyç",
+      "idempotent": "vetëm-lexim (asnjë korrigjim automatik)",
+      "expected_runtime": "sekonda",
+      "failure_behavior": "kod 1 = FAIL/CRITICAL (mospërputhje financiare) ⇒ alarm P1",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "CENTRAL_DATABASE_URL",
+        "CENTRAL_MONEY_* (pragjet)"
+      ],
+      "owner": "Financa",
+      "missed_severity": "P2",
+      "failed_severity": "P1",
+      "runbook": "docs/m11i-alert-matrix.md#al-08",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "central-ledger-integrity",
+      "subsystem": "central-financial",
+      "kind": "oneshot",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "--env-file",
+        ".env",
+        "--profile",
+        "central-jobs",
+        "run",
+        "--rm",
+        "central-tool",
+        "apps.central.tools.recovery_ledger"
+      ],
+      "schedule": "30 2 * * *",
+      "cadence_seconds": 86400,
+      "timeout_seconds": 1800,
+      "max_age_seconds": 93600,
+      "ok_codes": [
+        0
+      ],
+      "lock": "vetëm-lexim; pa kyç",
+      "idempotent": "vetëm-lexim",
+      "expected_runtime": "sekonda",
+      "failure_behavior": "kod 1 = ledger/sekuencë e paqëndrueshme ⇒ alarm P1",
+      "retry": "Pa retry të brendshëm; përpjekja e radhës është ekzekutimi i planifikuar",
+      "env": [
+        "CENTRAL_DATABASE_URL"
+      ],
+      "owner": "Financa + DBA",
+      "missed_severity": "P2",
+      "failed_severity": "P1",
+      "runbook": "docs/m11i-alert-matrix.md#al-10",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "worker",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "worker"
+      ],
+      "process": "python -m app.worker",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 90` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 90,
+      "lock": "`FOR UPDATE SKIP LOCKED` ⇒ replika të shumta të lejuara",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "dërgim SMS/email, sweep i UNKNOWN/SENDING",
+      "owner": "Operacione",
+      "missed_severity": "P1",
+      "failed_severity": "P1",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "webhook-worker",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "webhook-worker"
+      ],
+      "process": "python -m app.worker --role webhooks",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 90` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 90,
+      "lock": "`SKIP LOCKED`; purge i ngjarjeve çdo orë (`SMS_EVENT_RETENTION_DAYS`, default 30)",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "webhooks/DLR + purge",
+      "owner": "Operacione",
+      "missed_severity": "P1",
+      "failed_severity": "P1",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": true,
+      "environment": "production"
+    },
+    {
+      "name": "cp-sync",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "cp-sync"
+      ],
+      "process": "python -m app.worker --role control_plane",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory `LOCK_KEY` (një aktiv për DB)",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "sinkron i politikave nga Central",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    },
+    {
+      "name": "money-sync",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "money-sync"
+      ],
+      "process": "python -m app.worker --role money_control_plane",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory i parave",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "kursori i granteve",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    },
+    {
+      "name": "money-report",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "money-report"
+      ],
+      "process": "python -m app.worker --role money_usage_reporter",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory i raportuesit",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "raporte përdorimi parash",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    },
+    {
+      "name": "billing-report",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "billing-report"
+      ],
+      "process": "python -m app.worker --role billing_usage_reporter",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory i raportuesit",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "raporte përdorimi faturimi",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    },
+    {
+      "name": "pricing-sync",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "pricing-sync"
+      ],
+      "process": "python -m app.worker --role pricing_control_plane",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory i çmimeve",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "sinkron i çmimeve",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    },
+    {
+      "name": "sender-sync",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "sender-sync"
+      ],
+      "process": "python -m app.worker --role sender_control_plane",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory i sender-ave",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "sinkron i autorizimit të sender-ave",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    },
+    {
+      "name": "sender-report",
+      "subsystem": "enterprise-workers",
+      "kind": "service",
+      "command": [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.prod.yml",
+        "up",
+        "-d",
+        "sender-report"
+      ],
+      "process": "python -m app.worker --role sender_request_reporter",
+      "liveness": "healthcheck Docker: `python -m scripts.worker_health 180` (skedar heartbeat, çdo 30 s)",
+      "heartbeat_max_age_seconds": 180,
+      "lock": "kyç advisory i outbox-it",
+      "idempotent": "po (shih lock/outbox-in përkatës)",
+      "purpose": "outbox i kërkesave + snapshot operacional",
+      "owner": "Operacione",
+      "missed_severity": "P2",
+      "failed_severity": "P2",
+      "restart": "`restart: unless-stopped`",
+      "runbook": "docs/m11i-alert-matrix.md#al-02",
+      "required": false,
+      "environment": "production"
+    }
+  ]
+}

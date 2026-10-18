@@ -1,0 +1,485 @@
+[
+ {
+  "name": "empty",
+  "body_file": "empty.body",
+  "snapshot_hash": "47b41cb39731ee75d6857366ddc5d8b3ffdf3975c10aab58ef1530da57bdaa98",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [],
+   "enterprises": [],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 0,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "47b41cb39731ee75d6857366ddc5d8b3ffdf3975c10aab58ef1530da57bdaa98"
+  }
+ },
+ {
+  "name": "single_book_sms",
+  "body_file": "single_book_sms.body",
+  "snapshot_hash": "a3913f08e90d909f109ed920968453fc436c8017d66309fbcddb31a41c0b82a9",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "fe0aef053436fa2dc338a47c91a23e82eb1f3c1a87c6930b7c7ea9a80960a763",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000301",
+         "unit_price": "0.050000"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 1,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "a3913f08e90d909f109ed920968453fc436c8017d66309fbcddb31a41c0b82a9"
+  }
+ },
+ {
+  "name": "operator_and_prefix_precedence",
+  "body_file": "operator_and_prefix_precedence.body",
+  "snapshot_hash": "dda8eb90b22fe3bfd5e8bd59df380f5acbb3b73646d75d19244c8cae61e23c7d",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "84830365a6a58d3a93870060f89f4dd703112e2fce5aa558ec177ebdca41c6ec",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000301",
+         "unit_price": "0.050000"
+        },
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "35569",
+         "rule_id": "00000000-0000-0000-0000-000000000302",
+         "unit_price": "0.050000"
+        },
+        {
+         "channel": "sms",
+         "operator": "27601",
+         "prefix": "35569",
+         "rule_id": "00000000-0000-0000-0000-000000000303",
+         "unit_price": "0.045000"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 2,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "dda8eb90b22fe3bfd5e8bd59df380f5acbb3b73646d75d19244c8cae61e23c7d"
+  }
+ },
+ {
+  "name": "two_versions_one_retired",
+  "body_file": "two_versions_one_retired.body",
+  "snapshot_hash": "09df7b60ddf61d075f1975e588037c47c6af8c037a514f8c182dbdce07370bd3",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "fe0aef053436fa2dc338a47c91a23e82eb1f3c1a87c6930b7c7ea9a80960a763",
+       "effective_from": "2029-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000301",
+         "unit_price": "0.050000"
+        }
+       ],
+       "status": "retired",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      },
+      {
+       "content_hash": "7056280a3e3b14d932c8a51ebf58e6a4d9c70b6195ee1492fa8ce2f4012a4527",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000304",
+         "unit_price": "0.060000"
+        }
+       ],
+       "status": "active",
+       "version": 2,
+       "version_id": "00000000-0000-0000-0000-000000000202"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 3,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "09df7b60ddf61d075f1975e588037c47c6af8c037a514f8c182dbdce07370bd3"
+  }
+ },
+ {
+  "name": "sms_and_email_books",
+  "body_file": "sms_and_email_books.body",
+  "snapshot_hash": "a9e5481bae888bb625a7972f0a510a8f6dafcc2bf6641604c02cb00b6612e7dc",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "fe0aef053436fa2dc338a47c91a23e82eb1f3c1a87c6930b7c7ea9a80960a763",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000301",
+         "unit_price": "0.050000"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    },
+    {
+     "book_id": "00000000-0000-0000-0000-000000000102",
+     "code": "email-std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "558d17c03dbefd4ae02690ae8c802466baca9fee23a742c5c952513a10ae6273",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "email",
+         "operator": "",
+         "prefix": "",
+         "rule_id": "00000000-0000-0000-0000-000000000305",
+         "unit_price": "0.001500"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000202"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      },
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000402",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000102",
+       "product_id": "00000000-0000-0000-0000-0000000000a2"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 4,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "a9e5481bae888bb625a7972f0a510a8f6dafcc2bf6641604c02cb00b6612e7dc"
+  }
+ },
+ {
+  "name": "two_enterprises_assignment_history",
+  "body_file": "two_enterprises_assignment_history.body",
+  "snapshot_hash": "a314c9d070a05b3b38dcb1cc5f8a598d165530ce060701fe082f78a2d9c3c0c8",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "fe0aef053436fa2dc338a47c91a23e82eb1f3c1a87c6930b7c7ea9a80960a763",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000301",
+         "unit_price": "0.050000"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      },
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000403",
+       "effective_from": "2031-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    },
+    {
+     "assignments": [],
+     "enterprise_id": "00000000-0000-0000-0000-000000000502"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 5,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "a314c9d070a05b3b38dcb1cc5f8a598d165530ce060701fe082f78a2d9c3c0c8"
+  }
+ },
+ {
+  "name": "edge_micro_price",
+  "body_file": "edge_micro_price.body",
+  "snapshot_hash": "036e751db64c816e237fd0a78c3db9cc874805ef78f6ee8909755b620810b7c0",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "748bcff602713d05f66aa7c40f6cf3ef21212e7331cc9aa5dd41025f8fabf937",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000306",
+         "unit_price": "0.000001"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 6,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "036e751db64c816e237fd0a78c3db9cc874805ef78f6ee8909755b620810b7c0"
+  }
+ },
+ {
+  "name": "edge_zero_price",
+  "body_file": "edge_zero_price.body",
+  "snapshot_hash": "ee5a74e0313ea7111f91c060f100e04ba47b0bdf9a8047ec95a098fc5531814d",
+  "parsed": {
+   "authorization_generation": 1,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "7c3439ab98ed1c534cc1c61e01784bea9fdd6485e46a83cc70bb5bc9828cb016",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000307",
+         "unit_price": "0.000000"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 7,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "ee5a74e0313ea7111f91c060f100e04ba47b0bdf9a8047ec95a098fc5531814d"
+  }
+ },
+ {
+  "name": "edge_large_revision",
+  "body_file": "edge_large_revision.body",
+  "snapshot_hash": "a3913f08e90d909f109ed920968453fc436c8017d66309fbcddb31a41c0b82a9",
+  "parsed": {
+   "authorization_generation": 2,
+   "books": [
+    {
+     "book_id": "00000000-0000-0000-0000-000000000101",
+     "code": "std",
+     "currency": "EUR",
+     "versions": [
+      {
+       "content_hash": "fe0aef053436fa2dc338a47c91a23e82eb1f3c1a87c6930b7c7ea9a80960a763",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "rules": [
+        {
+         "channel": "sms",
+         "operator": "",
+         "prefix": "355",
+         "rule_id": "00000000-0000-0000-0000-000000000301",
+         "unit_price": "0.050000"
+        }
+       ],
+       "status": "active",
+       "version": 1,
+       "version_id": "00000000-0000-0000-0000-000000000201"
+      }
+     ]
+    }
+   ],
+   "enterprises": [
+    {
+     "assignments": [
+      {
+       "assignment_id": "00000000-0000-0000-0000-000000000401",
+       "effective_from": "2030-01-01T00:00:00.000000+00:00",
+       "price_book_id": "00000000-0000-0000-0000-000000000101",
+       "product_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+     ],
+     "enterprise_id": "00000000-0000-0000-0000-000000000501"
+    }
+   ],
+   "epoch": "00000000-0000-0000-0000-0000000000e0",
+   "revision": 9007199254740993,
+   "schema": "cp.pricing.v1",
+   "snapshot_hash": "a3913f08e90d909f109ed920968453fc436c8017d66309fbcddb31a41c0b82a9"
+  }
+ }
+]

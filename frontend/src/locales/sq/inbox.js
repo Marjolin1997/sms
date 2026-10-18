@@ -1,0 +1,15 @@
+export default {
+  "Inbox": "Kutia hyrëse", "Replies from your recipients, and automatic answers to keywords.": "Përgjigjet e marrësve tuaj dhe përgjigjet automatike për fjalët kyçe.",
+  "Received messages": "Mesazhet e marra", "SMS people send to your numbers. STOP and START are handled automatically.": "SMS që njerëzit dërgojnë në numrat tuaj. STOP dhe START trajtohen automatikisht.",
+  "{n} unread": "{n} të palexuara", "All marked as read": "Të gjitha u shënuan si të lexuara", "Mark all as read": "Shëno të gjitha si të lexuara",
+  "Search by number or text": "Kërko sipas numrit ose tekstit", "Unread only": "Vetëm të palexuarat", "No messages yet": "Ende pa mesazhe",
+  "When someone replies to one of your numbers, it shows up here.": "Kur dikush i përgjigjet një prej numrave tuaj, shfaqet këtu.",
+  "Auto-reply": "Përgjigje automatike", "sent": "dërguar", "Received": "Marrë", "Reply": "Përgjigju", "Messages": "Mesazhet", "Keywords": "Fjalët kyçe",
+  "What are keywords?": "Çfarë janë fjalët kyçe?",
+  "When a message starts with a word you define (for example HELP), we can answer automatically. The reply is sent as a normal SMS and costs the usual price. STOP and START always work and can't be changed.": "Kur një mesazh fillon me një fjalë që përcaktoni (p.sh. HELP), mund të përgjigjemi automatikisht. Përgjigjja dërgohet si SMS normal me çmimin e zakonshëm. STOP dhe START punojnë gjithmonë dhe nuk ndryshohen.",
+  "Add a keyword": "Shtoni një fjalë kyçe", "Keyword": "Fjala kyçe", "2-32 letters or digits, no spaces": "2-32 shkronja ose shifra, pa hapësira", "Use only letters and digits": "Përdorni vetëm shkronja dhe shifra",
+  "Automatic reply": "Përgjigje automatike", "Leave empty to only record the message": "Lëreni bosh që të regjistrohet vetëm mesazhi", "Keyword saved": "Fjala kyçe u ruajt", "Save keyword": "Ruaj fjalën kyçe",
+  "Your keywords": "Fjalët tuaja kyçe", "No keywords yet": "Ende pa fjalë kyçe", "Add one above.": "Shtoni një më sipër.", "Delete “{name}”?": "Ta fshij “{name}”?",
+  "Messages starting with this word will no longer get an automatic reply.": "Mesazhet që fillojnë me këtë fjalë nuk do të marrin më përgjigje automatike.", "Keyword deleted": "Fjala kyçe u fshi",
+  "Try a different search.": "Provoni një kërkim tjetër.",
+};

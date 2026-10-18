@@ -1,0 +1,27 @@
+# Skanim sekretesh: VETËM peme aktuale e checkout-it (jo historia). Rregullat bazë të gitleaks + një
+# allowlist e ngushtë për vlera/fixtures sintetike të njohura. Asnjë direktori (tests/, docs/, .github/,
+# shembujt .env) nuk përjashtohet në tërësi: çdo përjashtim lidhet me një vlerë ose një skedar të emërtuar.
+title = "sms gitleaks (current tree)"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vlera sintetike të njohura (jo sekrete prodhimi)"
+regexes = [
+  # Çelës Fernet VETËM për teste/CI/dev (tests/conftest.py, ci.yml, docker-compose.yml, bench).
+  '''wV0dVQ1nH7xk2m3bYw0m8y7QbKpZ0o1o9mGQ0mF0dJQ=''',
+  # Sekreti TOTP i vektorit të provës RFC 6238 (tests/test_totp.py).
+  '''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''',
+  # Çelës HMAC sintetik i benchmark-ut lokal (scripts/bench_ab.py).
+  '''^bench-pii-key-[0-9a-f]+$''',
+  # Anotim tipi (`private_key: Ed25519PrivateKey`), jo vlerë.
+  '''^Ed25519PrivateKey$''',
+]
+
+# Fixture që ndërton qëllimisht një PEM të prishur nga bajte të gjeneruara gjatë testit.
+[[rules]]
+id = "private-key"
+[rules.allowlist]
+description = "PEM i prishur i ndërtuar në test (tests/test_control_plane_client.py)"
+paths = ['''^tests/test_control_plane_client\.py$''']

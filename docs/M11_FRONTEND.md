@@ -1,0 +1,156 @@
+# M11 — Frontend / Console: konventat e bazës (M11-A)
+
+Zbatohet te `frontend/` (React 18 + Vite, JSX, pa TypeScript). Ky dokument është kontrata për ekranet e radhës (M11-B/C).
+
+## 1. Gjendja e gjetur (audit)
+
+| Fusha | Gjendja |
+|---|---|
+| Aplikacione | **Vetëm një: konsola Enterprise** (`frontend/`). **Nuk ekziston frontend Central.** |
+| Framework | React 18.3, Vite 5, `@vitejs/plugin-react`; JS/JSX (pa TS, pa ESLint, pa typecheck) |
+| Routing | hash (`#senders`), pa librari; tabela e rrugëve tani te `src/routes.js` |
+| Gjendje | `useState`/`useLoad`; pa Redux/Query. Auth = `/v1/me` + çelës API në `sessionStorage` |
+| API | `src/api.js` (fetch i vogël): Bearer, `owner_ref` automatik, Idempotency/TOTP hap-i-dytë |
+| Role/leje | `permissions[]` nga `/v1/me`; `can(me, "a|b")`; serveri vendos |
+| UI | `src/ui.jsx` + `styles.css` (230 rreshta, variabla CSS); pa librari komponentësh |
+| Forma/tabela | native + `Field`, `Table` (kartë në mobile); pa librari |
+| Toast/dialog | `UiProvider` (`toast`, `confirm`) |
+| i18n | `i18n.jsx`, çelës = anglisht, fjalor shqip; `npm run i18n:check` (pjesë e build) |
+| Teste | Vitest + Testing Library (jsdom). Komanda: `npm test`, `npm run build` |
+| Lint/typecheck | **nuk ka** (borxh, shih §10) |
+
+## 2. Kufiri Enterprise vs Central
+
+**Enterprise UI (`frontend/`, çelës API i klientit/stafit, `/v1/*`)** — përdoruesi/klienti i tenant-it dhe stafi i platformës:
+mesazhet, kampanjat, kontaktet/listat, sender ID të klientit (+ statusi efektiv), API keys/webhooks, portofoli, faturat/raportet, ekipi/lejet.
+Faqet "Staff" aktuale (miratime lokale, tarifa, finance, provider health) mbeten këtu për kohën që autoriteti është `local`.
+
+**Central UI (aplikacion i ri, `/admin/*` i `apps/central`, auth i adminit Central)** — vetëm operatorët e platformës:
+enterprises, katalogu i produkteve, produktet e enterprise, **politikat e sender-ave dhe regjistri/vendimet**, çmimet, pagesat/top-up, faturimi periodik,
+provisioning, reconciliation, readiness/operacione, audit.
+
+Rregulla: veprimet admin të Central **nuk hyjnë kurrë** në UI-në e klientit. Dy aplikacione, dy auth-e, dy `api.js` (i njëjti dizajn, baza URL ndryshe).
+Primitivët (`ui.jsx`) janë të përbashkët; kur të ndërtohet Central, nxirren në paketë të përbashkët (`packages/ui`) pa ndryshuar API-n e tyre.
+
+## 3. Shell, rrugë, guard-e (`src/routes.js`, `src/App.jsx`)
+- **Një tabelë rrugësh** (`NAV`): `id, label, perm, global, load()`; menyja, guard-et dhe breadcrumb-et dalin nga ajo. Faqet ngarkohen lazy (`import()`), bundle kryesor 350→246 kB.
+- `resolveRoute(me, hash)` kthen `ok | forbidden | not_found`. **403** dhe **404** janë faqe të vërteta (`pages/ErrorPages.jsx`), kurrë riudhëzim i heshtur.
+- Deep-link i sigurt: vetëm `[a-z0-9-]{1,40}` pranohet si id rruge; nën-rrugë `#senders/12?x=1` → `rest: ["12"]` për faqet e detajit.
+- Faqet NUK bëjnë kontroll roli vetë: shtoni `perm` në tabelë. Brenda faqes përdoret `can(me, perm)` vetëm për të fshehur/çaktivizuar butona.
+- `PageHeader` (titull, përshkrim, breadcrumbs, veprime), `ErrorBoundary` (gabim renderimi → mesazh i rikuperueshëm), `Suspense` skeleton, banner offline, skip-link, `<nav aria-label>`.
+
+## 4. Auth / sesion
+- Burim i vetëm: `me` te `App` + çelësi në `sessionStorage` (kurrë `localStorage`, kurrë në DOM/log).
+- **401 gjatë sesionit** → `setSessionExpiredHandler` pastron çelësin dhe kthen te hyrja me njoftim. **403 nuk e mbyll sesionin** (vetëm gabim).
+- Roli/lejet vijnë nga `/v1/me`; UI nuk i llogarit vetë. Backend-i rikontrollon çdo veprim.
+
+## 5. API client (`src/api.js`)
+- `api.get/post/put/patch/del`, `api.page`, `api.download`; **mos përdorni `fetch` direkt në faqe**.
+- Timeout 30 s (`timeoutMs`), anulim me `{ signal }` (`useLoad(fn)` e kalon `signal` dhe e anulon automatikisht), përgjigjet e vjetra nuk mbishkruajnë të rejat.
+- `ApiError`: `status, code, kind, fields, retryAfter, retryable, friendly`.
+  `kind` ∈ `network | unauthenticated | forbidden | not_found | conflict | rate_limited | validation | server | other`.
+- `fields` = gabime për fushë nga 422 (`{value: "too short"}`) — shfaqen te `Field error=`; serveri mbetet autoritet.
+- Faqosje: `api.page(path, {limit, offset, ...filters})` → `{items, hasMore, limit, offset}` (kontrata Central `has_more` ose varg Enterprise). `Pagination` e shfaq.
+
+## 6. Modeli i gabimeve
+| HTTP | kind | Sjellja në UI |
+|---|---|---|
+| 0 / timeout | network | "Jeni jashtë linje"/serveri vonon + Provo përsëri |
+| 400/422 | validation | gabim për fushë + mesazh i përgjithshëm |
+| 401 | unauthenticated | logout me njoftim |
+| 403 | forbidden | mesazh leje, pa retry |
+| 404 | not_found | "S'u gjet", pa retry |
+| 409 | conflict | "Ndryshoi ndërkohë, rifreskoni" |
+| 429 | rate_limited | koha e pritjes nga `Retry-After`, retry |
+| 5xx | server | tekst i përgjithshëm; **teksti i serverit nuk shfaqet** nëse kodi s'është i njohur |
+
+Kodet e sender-it me tekst të qartë (`api.js` FRIENDLY): `sender_authority_frozen`, `sender_policy_denied`, `sender_revoked`, `sender_rejected`, `sender_pending`, `not_synchronized`, `sender_not_allowed`.
+Komponentët: `ErrorBox` (inline, formular), `ErrorState` (bllok/faqe, me titull sipas `kind`, retry, `stale`), `displayMessage(err)`.
+
+## 7. Gjendje loading / empty / retry
+`Skeleton` (fillim), `Table loading`, `Button busy`, `Empty`/`emptyTitle`, `ErrorState retry`, `useLoad().stale` (të dhëna të vjetra + gabim i fundit → shfaq të dhënat dhe njoftimin). Pa ekran të bardhë: `Suspense` + `ErrorBoundary` në çdo faqe.
+
+## 8. Primitivë dhe statuset
+`PageHeader, Breadcrumbs, Card, Stat/MetricCard, StatusBadge(=Badge), Table, Pagination, FilterBar, SearchInput, Field/FormField, Empty, ErrorBox, ErrorState, ErrorBoundary, DetailList/DetailRow, AuditTimeline, Tabs, SecretBanner, confirm()` (dialog me kapje fokusi dhe Esc).
+**Statuset**: një hartë `STATUS_TONES` (`good|info|warn|bad|muted`) — faqet kalojnë vetëm statusin e serverit te `<StatusBadge>`; teksti dhe simboli shfaqen gjithmonë (jo vetëm ngjyra); i panjohur → neutral, kurrë jeshil.
+Të ardhshme (M11-B): `DateRange`, `Select` i përbashkët, `FilterBar` me URL-state.
+
+## 9. Sender-policy: kontrata e frontend-it (`src/senders/`)
+Frontend-i **shfaq** gjendjen e serverit dhe **dërgon** veprime; nuk vendos miratim/politikë/autoritet.
+- `adaptSender` (Enterprise `GET/POST /v1/sender-ids`): `localStatus, effectiveStatus, centralStatus, syncStatus, authorityMode, canResubmit, canReviewLocally` (+ admin: `drift, cpRevision, policyRevision, bootstrapIssues`). Fushat M10 që mungojnë → gjendje lokale e sigurt. Klienti shfaq **`effectiveStatus`**, ndërsa `status` mbetet lokal.
+- `isAwaitingSync`: `not_synchronized`/`stale` shfaqen si "po verifikohet", kurrë "miratuar".
+- Central (për M11-C): `adaptRegistrySender`, `adaptDecision` (→ `AuditTimeline`), `adaptCountryPolicy` (`allowed`, `requires_approval`, `revision`), `adaptPage`.
+- `useSenderIds(filters)` (Enterprise). Hook-et Central shtohen me aplikacionin Central.
+- `DRIFT_CATEGORIES`/`SENDER_DOMAIN_CODES` janë konstante shfaqjeje, jo rregulla.
+
+## 10. Navigimi i propozuar
+**Enterprise** (përdor terminologjinë ekzistuese): Overview · Messaging (Send, Message history, Inbox, Reports, Campaigns) · Audience (Contacts) · Setup (**Sender IDs & templates**, Email domains, Webhooks) · Money (Wallet, Billing) · Developers (Guide, API keys) · Staff (Approvals, Accounts, Rates & routes, Finance, Provider health, Security, Admin).
+Ndryshimi i vetëm i planifikuar: te Sender IDs shtohen kolonat *effective status* + *sync*, dhe `Approvals` merr shenjën "menaxhohet nga Central" kur autoriteti është `central`.
+**Central** (aplikacion i ri): Dashboard · Enterprises · Products · Sender governance (Sender registry, Country policies) · Commercial (Pricing, Payments, Billing) · Provisioning · Reconciliation · Operations (readiness) · Audit.
+
+## 11. Borxh i mbetur
+1. Nuk ka ESLint/Prettier/typecheck (propozim: ESLint + `// @ts-check`/JSDoc, pa migrim të plotë në TS).
+2. Faqet ekzistuese ende përdorin `ErrorBox` + `useAction` për forma; `Field error` nga `err.fields` duhet lidhur forma-nga-forma (M11-B kur preken).
+3. Lista pa faqosje server-side (Messages, Contacts, Accounts) — backend-i i Enterprise kthen vargje të kufizuara (p.sh. `/v1/sender-ids` max 300).
+4. Faqet nuk përdorin ende `AuditTimeline`/`Pagination`/`FilterBar` (shtohen me ekranet e reja).
+5. Routing me hash; librari routing nuk u fut (rrezik/rishkrim pa nevojë). Rivlerësohet kur Central të ketë detaje të thella.
+6. Pa testet e shfletuesit (e2e Playwright ekziston vetëm për API/console të thjeshtë).
+7. Aplikacioni Central nuk ekziston dhe paketa e përbashkët `ui` nuk është nxjerrë.
+
+## 12. M11-B — Sender IDs (Enterprise): sjellja dhe kufizimet e API-së
+**Fusha të serverit që UI shfaq (asnjë nuk rillogaritet):** `effective_status` (shenja kryesore), `authority_mode`, `sync_status`, `can_resubmit`, `can_review_locally`; vetëm staf: `central_status`, `drift`, `cp_revision`, `policy_revision`, `bootstrap_issues`.
+- **Lista** (`senders/components.jsx` `SenderList`): Sender, Country, Type, Status (efektiv; stafit i shtohet "Local record: …" kur ndryshon), Sync, Authority, Requested, veprime. Në mobile fshihen Type/Sync/Authority/Requested (`hideSm`).
+- **Detaji** `#senders/<id>` (`SenderDetail`); stafi e hap pa zgjedhur llogari (route `detail: true`). Klienti nuk sheh diagnostikën.
+- **Ridërgim**: vetëm `can_resubmit`; POST `/v1/sender-ids` me `owner_ref` të rreshtit; lista rikërkohet nga serveri para njoftimit të suksesit.
+- **Shqyrtim lokal** (`SenderReviewActions`): vetëm staf (pa `owner_ref`, leje `sender:review`) dhe vetëm kur `can_review_locally`; në `central` shfaqet "Sender approvals are managed centrally." Cili veprim (approve/reject kundrejt revoke) zgjidhet nga statusi LOKAL (`pending` / `approved`) sepse vendimet lokale veprojnë mbi rekordin lokal; serveri rikontrollon tranzicionin. Veprimet dërgohen me `noOwner` (skema strikte `extra=forbid`). 409 (`sender_authority_frozen`/konflikt) → njoftim miqësor + rikërkim.
+- **Forma e kërkesës**: API pranon vetëm `country` + `value` (lloji nnxirret nga serveri; nuk ka fushë `kind`/`evidence`). Validim vetëm `≥3` karaktere; gabimet 422 `err.fields` dhe `invalid_sender` shfaqen te fusha me fokus; të tjerat si gabim i përgjithshëm.
+- **Njoftimi sync**: `not_synchronized` paralajmëron vetëm kur `effective_status` është `not_synchronized`; `stale` vetëm në autoritet `central`. Në local/shadow `sync_status` është diagnostikë e stafit.
+
+**Kufizime të API-së Enterprise (të dokumentuara, jo të zgjidhura me hile në frontend):**
+1. `GET /v1/sender-ids` kthen max 300 rreshta, pa faqosje, pa kërkim, pa filtër shteti/lloji; `status` filtron statusin LOKAL. UI filtron (kërkim, status EFEKTIV, shtet, lloj) dhe faqoson 20/faqe vetëm mbi rreshtat e ngarkuar dhe e thotë kur arrihet kufiri.
+2. `GET /v1/sender-ids/{id}` nuk ka `created_at`/`reviewed_by` (vetëm lista); detaji i merr nga lista e ngarkuar së fundi, përndryshe "-". Nuk ka `updated_at` askund.
+3. Nuk ka endpoint të historikut të vendimeve lokale (`SenderDecision` ekziston në DB, jo në API); historiku Central është në `/admin/senders/{id}/history`. `AuditTimeline` përdoret në M11-C.
+4. Filtrim sipas autoritetit/sync në server nuk ekziston.
+
+## 13. M11-C — Central Sender Governance (`frontend-central/`)
+Aplikacion i veçantë (React + Vite): hyrje, rrugë, API client, build dhe port të vet (dev 5174, proxy `/auth` `/admin` → Central). Nuk importon kod Enterprise dhe nuk flet me `/v1/*`.
+
+**Vendimi i kodit të përbashkët: B (dublim i vogël, i qëndrueshëm).** `ui.jsx`, `i18n.jsx` dhe `styles.css` u kopjuan nga M11-A/B (pa TOTP/SMS/çelësin API) dhe `Modal` u shtua; `api.js`, `routes.js`, auth dhe fjalori janë të veçantë. Paketë e përbashkët do kërkonte workspace/lockfile të ri dhe do prekte build-in Enterprise; kostoja e dublimit (~350 rreshta) është më e ulët se rreziku. Rivlerësohet kur të ketë një faqe të tretë të përbashkët.
+
+**Hartë ekran → endpoint** (shembujt e kontratës janë verifikuar në `apps/central/api/admin_senders.py`):
+| Ekrani | Endpoint |
+|---|---|
+| Hyrje / profil | `POST /auth/token`, `GET /auth/me` (JWT 900 s, pa refresh) |
+| Sender Registry | `GET /admin/senders` (`status, country, sender_kind, enterprise_id, limit≤200, offset` → `{items, limit, offset, has_more}`) |
+| Detaj sender | `GET /admin/senders/{id}`, `GET /admin/senders/{id}/history`, `GET /admin/sender-policies/effective` |
+| Veprime | `POST /admin/senders/{id}/approve|reject|revoke|resubmit` (admin; `reason` ≤500 i detyrueshëm për reject/revoke; `evidence_ref` ≤128 opsional) |
+| Country Policies | `GET /admin/sender-policies` (`country, sender_kind, latest_only, limit, offset`), `GET /admin/sender-policies/{id}` |
+| Parashikim | `GET /admin/sender-policies/effective?country&sender_kind` |
+| Revizion i ri | `POST /admin/sender-policies` → `{…policy, created, revoked_senders}` |
+
+**Roli:** admin = shkrim; operator = lexim (403 `forbidden` nga serveri për shkrim). UI fsheh veprimet për operator (`canWrite`), por 403 i trajtohet pa mbyllur sesionin.
+**Pa flamuj `can_*` në Central:** veprimet e ofruara sipas statusit (pending→approve|reject, approved→revoke, rejected|revoked→resubmit) janë afordancë e UI-së mbi makinën e gjendjeve të dokumentuar; serveri është autoritet dhe 409 rifreskon detajin.
+**URL state:** filtrat/faqja në hash (`#senders?status=pending&offset=50`), pa vlera sender; ID-të e detajit vetëm UUID.
+**Kufizime të API-së Central (të dokumentuara):** (1) nuk ka kërkim me tekst/emër sender-i dhe nuk ka emër ndërmarrjeje (vetëm UUID; filtri `enterprise_id`); (2) readiness/drift i sender-ave është vetëm CLI (`sender_central_readiness`) — "Overview" tregon vetëm numërime nga endpoint-et ekzistuese (kufizuar në 200), HTTP readiness për M11-D; (3) `GET /admin/sender-policies` nuk shënon "më e fundit" — shfaqet me `latest_only` (shënim "active") ose si listë e plotë pa shënim; (4) nuk ka numërues "sa sender do të revokohen" para ndryshimit — UI paralajmëron dhe shfaq `revoked_senders` të kthyer pas ruajtjes; (5) Central nuk është ende në `docker-compose`/nginx, ndaj shërbimi statik i `dist/` nga i njëjti origin është punë deployment-i.
+**Siguri/UX:** token në `sessionStorage` (jo URL/log/DOM), fjalëkalimi nuk ruhet; revoke dhe `allowed=false` shpjegojnë se mesazhet e dorëzuara tashmë te ofruesi nuk kthehen mbrapsht; konflikti i unicitetit global shfaq "already approved for another account" pa identitet tjetër.
+
+## 14. M11-D — Operations / Sender Readiness (Central)
+**Endpoint i vetëm (READ-ONLY):** `GET /admin/operations/sender` (`apps/central/api/admin_operations.py`, shërbimi `apps/central/services/sender_operations.py`). Admin dhe operator; 401 pa token/token të pavlefshëm/përdorues i çaktivizuar; POST/PUT/PATCH/DELETE ⇒ 405. Pa skemë të re, pa shkrim, pa rresht auditi për lexim, pa rrjet, pa thirrje nga shtigjet SMS (submit, campaigns, process_one, dispatch, para, çmime, outbox).
+
+**Kontrata:** `{status, generated_at, readiness_computed_at, readiness_cached, readiness_ttl_seconds, sections[{code,status,checks[{code,status,summary,details}]}], metrics{registry,sync,requests,bootstrap}, alerts[{code,severity,check,section,summary,observed_at}]}` me statuse `pass|warn|fail|unknown` (gjithsej/seksion: fail > warn > unknown > pass). Frontend-i vetëm shfaq; status i panjohur/mungues ⇒ `unknown`.
+
+**Hartë karte → burim → endpoint**
+| Seksioni UI | Burimi në backend |
+|---|---|
+| Central readiness (9 kontrolle) | `sender_central_readiness.checks` (i njëjti kod si CLI; mapim 1:1, test krahasimi) |
+| Sync feed | `sender_sync_sequence` (epoch, floor, last) + 2 kërkime PK në `sender_sync_outbox`; kontroll `sync_sequence_consistent` |
+| Kërkesat e pranuara | agregate mbi `sender_request_operations` (rezultat, automatik, e fundit, 24 h) |
+| Bootstrap | `sender_bootstrap_runs` (e fundit + numërim sipas statusit; hash-e të shkurtuara 12 shenja; `source_revision` vetëm nëse duket si ID rishikimi) |
+| Alarme Central | projeksion nga kontrollet `warn/fail` (readiness_fail, sync_gap, bootstrap_unresolved, bootstrap_failed); `running` nuk alarmon |
+| **Enterprise runtime** (kursori/lag, outbox i kërkesave, kategoritë e çështjeve bootstrap, shadow/drift, cutover, `sender_alerts`) | **Nuk është e dukshme nga Central** ⇒ kontrolle `unknown` me `source:"enterprise"` dhe komandën read-only (`scripts.sender_sync_readiness`, `…_request_readiness`, `…_authority_readiness`, `…_policy_readiness`, `…_alerts`, `…_bootstrap`) |
+Opsioni i zgjedhur: **A** (vetëm Central-local + shpjegim i qartë). B (endpoint Enterprise + klient Central) do të fuste varësi të re Central→Enterprise dhe kredenciale që arkitektura s'i ka sot; C (agregim i vonuar) mbetet propozim M11-E.
+
+**Cache:** vetëm kontrollet e plota të konsistencës (lexojnë gjithë regjistrin) ruhen në proces `READINESS_TTL_SECONDS=30`; pjesa tjetër lexohet live. Pa invalidim (TTL e shkurtër; `readiness_computed_at`/`readiness_cached` shfaqen). Instanca të shumta kanë cache të veçantë. Nuk ruhet asnjë gjendje autorizimi të SMS.
+**Performancë (SQLite, 2000 sender-a):** i ftohtë 178 ms (17 pyetje me auth), i ngrohtë 8–14 ms (12 pyetje me auth, të pavarura nga numri i sender-ave: test), ~3.4 KB.
+**Frontend:** grupi Operations (Sender Readiness, Sync & Requests, Bootstrap & Cutover, Alerts), rifreskim manual + polling 45 s (ndalet kur skeda është e fshehur; kërkesat e vjetra anulohen), kohë në UTC + relative, këshilla veprimi për WARN/FAIL, asnjë kontroll mutues.
+**Kufizime:** kategoritë e çështjeve bootstrap, lag-u/kursori Enterprise, backlog/retry/failed i reporter-it, shadow/drift dhe cutover nuk shfaqen sepse Enterprise nuk i publikon te Central; kërkojnë (M11-E) një rrugë të vogël Enterprise→Central për snapshot operacional ose tool të veçantë.

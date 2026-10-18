@@ -1,0 +1,473 @@
+"""Teste që kanë kuptim vetëm mbi PostgreSQL të vërtetë: migrimet me triggers dhe
+konkurrenca reale mbi wallet-in. Kalojnë ose kapërcehen (skip) pa SMS_TEST_DATABASE_URL."""
+
+import os
+import subprocess
+import sys
+import threading
+import uuid
+from decimal import Decimal as D
+
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
+
+from app.core.db import SessionLocal
+from app.services import wallet as wallets
+from tests.test_pipeline import OK, fake, world  # noqa: F401
+
+URL = os.environ.get("SMS_TEST_DATABASE_URL", "")
+pytestmark = pytest.mark.skipif(not URL.startswith("postgresql"), reason="needs PostgreSQL")
+
+
+@pytest.fixture
+def migrated_url():
+    """Databazë e re e ngritur vetëm me Alembic (me triggers), e fshirë në fund."""
+    admin = create_engine(URL, isolation_level="AUTOCOMMIT")
+    name = f"sms_mig_{uuid.uuid4().hex[:8]}"
+    with admin.connect() as c:
+        c.execute(text(f'CREATE DATABASE "{name}"'))
+    url = make_url(URL).set(database=name).render_as_string(hide_password=False)
+    yield url
+    with admin.connect() as c:
+        c.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+
+
+def alembic(url, *args):
+    env = {**os.environ, "SMS_DATABASE_URL": url}
+    r = subprocess.run(
+        [sys.executable, "-m", "alembic", *args], env=env, capture_output=True, text=True
+    )
+    assert r.returncode == 0, r.stderr
+    return r
+
+
+def test_migrations_up_down_up_and_triggers_block_tampering(migrated_url):
+    alembic(migrated_url, "upgrade", "head")
+    eng = create_engine(migrated_url)
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "insert into sms_wallets (owner_ref, currency, created_at) values ('a','EUR',now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_ledger_entries (wallet_id, entry_type, available_delta, held_delta,"
+                " available_after, held_after, idempotency_key, created_at)"
+                " values (1,'TOPUP',5,0,5,0,'k',now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_audit_log (actor, role, action, target_type, target_id, created_at)"
+                " values ('a','r','x','t','1',now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_dlr_receipts (provider, provider_message_id, status, outcome,"
+                " raw_body, received_at) values ('p','m','delivered','applied','{}',now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_consent_events (owner_ref, channel, address_hash, action, reason,"
+                " source, actor, created_at) values ('a','sms','h','OPT_IN','opt_in','s','a',now())"
+            )
+        )
+    for stmt in (
+        "update sms_ledger_entries set available_delta = 999",
+        "delete from sms_ledger_entries",
+        "truncate sms_ledger_entries",
+        "update sms_audit_log set actor = 'evil'",
+        "delete from sms_audit_log",
+        "truncate sms_audit_log",
+        "truncate sms_message_events",
+        "truncate sms_email_events",
+        "update sms_dlr_receipts set outcome = 'x'",
+        "delete from sms_dlr_receipts",
+        "truncate sms_dlr_receipts",
+        "update sms_consent_events set evidence = 'forged'",
+        "truncate sms_consent_events",
+    ):
+        with pytest.raises(DBAPIError, match="append-only|cannot truncate"), eng.begin() as c:
+            c.execute(text(stmt))
+    with eng.connect() as c:
+        assert c.execute(text("select available_delta from sms_ledger_entries")).scalar() == 5
+    eng.dispose()
+    alembic(migrated_url, "downgrade", "base")
+    alembic(migrated_url, "upgrade", "head")
+
+
+def test_ledger_check_constraints_block_negative_balance(migrated_url):
+    alembic(migrated_url, "upgrade", "head")
+    eng = create_engine(migrated_url)
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "insert into sms_wallets (owner_ref, currency, created_at) values ('a','EUR',now())"
+            )
+        )
+    with pytest.raises(DBAPIError), eng.begin() as c:
+        c.execute(
+            text(
+                "insert into sms_ledger_entries (wallet_id, entry_type, available_delta, held_delta,"
+                " available_after, held_after, idempotency_key, created_at)"
+                " values (1,'ADJUSTMENT',-1,0,-1,0,'neg',now())"
+            )
+        )
+    eng.dispose()
+
+
+def test_concurrent_reservations_never_overspend(db):
+    """20 rezervime paralele × 1 EUR mbi një wallet me 5 EUR: saktësisht 5 kalojnë."""
+    w = wallets.create_wallet(db, "race", "EUR")
+    wallets.confirm_topup(db, wallets.create_topup(db, w.id, "5", wallets.TopupMethod.CASH).id)
+    db.commit()
+    ok, insufficient, errors = [], [], []
+    start = threading.Barrier(20)
+
+    def worker(i):
+        with SessionLocal() as s:
+            try:
+                start.wait()
+                wallets.reserve(s, w.id, "1", f"race-{i}")
+                s.commit()
+                ok.append(i)
+            except wallets.InsufficientFunds:
+                s.rollback()
+                insufficient.append(i)
+            except Exception as e:  # noqa: BLE001
+                s.rollback()
+                errors.append(repr(e))
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert not errors, errors
+    assert (len(ok), len(insufficient)) == (5, 15)
+    db.expire_all()
+    assert wallets.balances(db, w.id) == (D("0"), D("5"))
+    assert wallets.verify_wallet(db, w.id)
+
+
+def test_concurrent_same_topup_confirm_credits_once(db):
+    w = wallets.create_wallet(db, "race2", "EUR")
+    t = wallets.create_topup(db, w.id, "7", wallets.TopupMethod.ELECTRONIC, external_ref="pay-x")
+    db.commit()
+    start = threading.Barrier(10)
+    errors = []
+
+    def worker():
+        with SessionLocal() as s:
+            try:
+                start.wait()
+                wallets.confirm_topup(s, t.id)
+                s.commit()
+            except Exception as e:  # noqa: BLE001
+                s.rollback()
+                errors.append(repr(e))
+
+    threads = [threading.Thread(target=worker) for _ in range(10)]
+    [x.start() for x in threads]
+    [x.join() for x in threads]
+    assert not errors, errors
+    db.expire_all()
+    assert wallets.balances(db, w.id) == (D("7"), D("0"))
+
+
+def test_concurrent_capture_and_release_one_wins(db):
+    w = wallets.create_wallet(db, "race3", "EUR")
+    wallets.confirm_topup(db, wallets.create_topup(db, w.id, "3", wallets.TopupMethod.CASH).id)
+    h = wallets.reserve(db, w.id, "3", "h1")
+    db.commit()
+    outcomes = []
+    start = threading.Barrier(2)
+
+    def run(fn, name):
+        with Session(db.get_bind()) as s:
+            try:
+                start.wait()
+                fn(s, h.id)
+                s.commit()
+                outcomes.append((name, "ok"))
+            except wallets.Conflict:
+                s.rollback()
+                outcomes.append((name, "conflict"))
+
+    ts = [
+        threading.Thread(target=run, args=(wallets.capture, "capture")),
+        threading.Thread(target=run, args=(wallets.release, "release")),
+    ]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(o[1] for o in outcomes) == ["conflict", "ok"]
+    db.expire_all()
+    avail, held = wallets.balances(db, w.id)
+    assert held == D("0") and avail in (D("0"), D("3"))
+    assert wallets.verify_wallet(db, w.id)
+
+
+def _threads(n, fn):
+    ts = [threading.Thread(target=fn, args=(i,)) for i in range(n)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+
+
+def test_concurrent_submit_same_key_charges_once(db, world):  # noqa: F811
+    from app.services import messages as svc
+
+    w, _ = world
+    barrier = threading.Barrier(8)
+    ids, errors = [], []
+
+    def go(_):
+        with SessionLocal() as s:
+            try:
+                barrier.wait()
+                m = svc.submit(s, "c1", "same-key", OK, "ACME", text="hello")
+                s.commit()
+                ids.append(m.id)
+            except Exception as e:  # noqa: BLE001
+                s.rollback()
+                errors.append(repr(e))
+
+    _threads(8, go)
+    assert not errors, errors
+    assert len(set(ids)) == 1
+    db.expire_all()
+    assert wallets.balances(db, w.id) == (D("9.95"), D("0.05"))  # një rezervim i vetëm
+
+
+def test_parallel_workers_send_each_message_exactly_once(db, world, fake):  # noqa: F811
+    from app.services import messages as svc
+
+    for i in range(12):
+        svc.submit(db, "c1", f"w{i}", OK, "ACME", text="hello")
+    db.commit()
+
+    def worker(_):
+        with SessionLocal() as s:
+            while svc.process_one(s):
+                pass
+
+    _threads(4, worker)
+    refs = [c.reference for c in fake.calls]
+    assert len(refs) == 12 and len(set(refs)) == 12  # asnjë dërgim i dyfishtë, asnjë i humbur
+
+
+def test_parallel_workers_run_campaign_without_duplicates(db, world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from app.models.campaigns import CampaignRecipient, RecipientStatus
+    from app.models.sending import Message
+    from app.services import campaigns as camp
+    from app.services import consent
+    from app.services import contacts as contacts_svc
+
+    w, _ = world
+    lst = contacts_svc.create_list(db, "c1", "race")
+    ids = []
+    for i in range(40):
+        c, _ = contacts_svc.upsert(db, "c1", phone=str(355691232000 + i))
+        consent.record(db, "c1", "sms", c.phone, "opt_in", "x", "form", "u", "evidence")
+        ids.append(c.id)
+    contacts_svc.add_members(db, "c1", lst.id, ids)
+    c = camp.create(db, "c1", "race", lst.id, "ACME", "t", text="hello", rate_per_minute=10_000)
+    camp.schedule(db, "c1", c.id, None)
+    db.commit()
+
+    def worker(_):
+        with SessionLocal() as s:
+            for _ in range(12):
+                camp.run_due(s, datetime.now(UTC))
+
+    _threads(4, worker)
+    db.expire_all()
+    assert db.query(Message).count() == 40
+    assert db.query(CampaignRecipient).filter_by(status=RecipientStatus.QUEUED).count() == 40
+    assert wallets.balances(db, w.id) == (D("8"), D("2"))
+    assert wallets.verify_wallet(db, w.id)
+
+
+def test_parallel_workers_send_each_email_exactly_once(db, world):  # noqa: F811
+    from datetime import UTC, datetime, timedelta
+
+    import app.providers as providers
+    from app.providers.email import FakeEmailProvider
+    from app.services import dns_check as dns
+    from app.services import email_domains, emails
+    from tests.test_email import FakeDns, verified  # noqa: F401
+
+    fake_dns = FakeDns()
+    old = dns.get_resolver()
+    dns.set_resolver(fake_dns)
+    provider = FakeEmailProvider()
+    providers._email_registry["fake"] = provider
+    try:
+        d = email_domains.create(db, "c1", "example.com")
+        fake_dns.publish(d)
+        email_domains.verify(db, "c1", d.id)
+        for i in range(12):
+            emails.submit(db, "c1", f"e{i}", "news@example.com", f"u{i}@customer.org", "s", "t")
+        db.commit()
+        later = datetime.now(UTC) + timedelta(seconds=5)
+
+        def worker(_):
+            with SessionLocal() as s:
+                while emails.process_one(s, later):
+                    pass
+
+        _threads(4, worker)
+        refs = [c.reference for c in provider.calls]
+        assert len(refs) == 12 and len(set(refs)) == 12
+    finally:
+        dns.set_resolver(old)
+
+
+def test_parallel_webhook_workers_deliver_each_event_exactly_once(db):
+    from datetime import UTC, datetime, timedelta
+
+    import httpx
+
+    from app.services import events, net_guard, webhooks
+
+    net_guard.set_resolver(lambda host: ["93.184.216.34"])
+    seen: list[str] = []
+
+    def handler(request: httpx.Request):
+        seen.append(request.headers["x-sms-delivery-id"])
+        return httpx.Response(200)
+
+    webhooks.set_client(httpx.Client(transport=httpx.MockTransport(handler)))
+    try:
+        webhooks.create_endpoint(db, "c1", "https://hooks.example.com/x")
+        for i in range(20):
+            events.emit(db, "c1", "message.sent", "message", f"m{i}")
+        db.commit()
+        later = datetime.now(UTC) + timedelta(seconds=5)
+
+        def worker(_):
+            with SessionLocal() as s:
+                while webhooks.deliver_next(s, later):
+                    pass
+
+        _threads(4, worker)
+        assert len(seen) == 20 and len(set(seen)) == 20  # asnjë dërgim i dyfishtë
+    finally:
+        webhooks.set_client(None)
+
+
+def test_invoice_triggers_block_tampering(migrated_url):
+    alembic(migrated_url, "upgrade", "head")
+    eng = create_engine(migrated_url)
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "insert into sms_invoices (number, owner_ref, period_start, period_end, currency,"
+                " subtotal, vat_rate, tax, total, status, bill_to, issued_at, due_at)"
+                " values ('INV-2030-000001','a',now(),now(),'EUR',10,0.2,2,12,'OPEN','{}',now(),now())"
+            )
+        )
+        c.execute(
+            text(
+                "insert into sms_invoice_lines (invoice_id, description, quantity, unit_price, amount)"
+                " values (1,'fee',1,10,10)"
+            )
+        )
+    for stmt in (
+        "update sms_invoices set total = 1 where id = 1",
+        "update sms_invoices set number = 'INV-X' where id = 1",
+        "update sms_invoices set bill_to = 'changed' where id = 1",
+        "delete from sms_invoices",
+        "truncate sms_invoices",
+        "update sms_invoice_lines set amount = 0",
+        "delete from sms_invoice_lines",
+        "truncate sms_invoice_lines",
+    ):
+        with (
+            pytest.raises(DBAPIError, match="immutable|append-only|cannot truncate"),
+            eng.begin() as c,
+        ):
+            c.execute(text(stmt))
+    with eng.begin() as c:  # tranzicioni i lejuar: OPEN → PAID
+        c.execute(text("update sms_invoices set status = 'PAID', paid_via = 'wallet' where id = 1"))
+    with pytest.raises(DBAPIError, match="final"), eng.begin() as c:  # PAID është përfundimtar
+        c.execute(text("update sms_invoices set status = 'OPEN' where id = 1"))
+    with pytest.raises(DBAPIError, match="final"), eng.begin() as c:
+        c.execute(text("update sms_invoices set status = 'VOID' where id = 1"))
+    with eng.connect() as c:
+        assert c.execute(text("select total, status from sms_invoices")).one() == (12, "PAID")
+    eng.dispose()
+    alembic(migrated_url, "downgrade", "0012")
+    alembic(migrated_url, "upgrade", "head")
+
+
+def test_concurrent_billing_run_issues_each_period_once(db, world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from app.models.billing import Invoice
+    from app.services import billing
+
+    plan = billing.create_plan(db, "conc", "Conc", "EUR", "1.00")
+    billing.set_profile(db, "c1", "Acme Ltd", "Main 1", "AL", "a@acme.example")
+    billing.assign_plan(db, "c1", plan.id, auto_pay=False, now=datetime(2030, 1, 15, tzinfo=UTC))
+    db.commit()
+    now = datetime(2030, 4, 20, tzinfo=UTC)  # 3 periudha të afatuara
+
+    def worker(_):
+        with SessionLocal() as s:
+            billing.run_billing(s, now)
+
+    _threads(4, worker)
+    db.expire_all()
+    nums = sorted(i.number for i in db.query(Invoice))
+    assert nums == [
+        "INV-2030-000001",
+        "INV-2030-000002",
+        "INV-2030-000003",
+    ]  # pa boshllëqe, pa dyfishe
+
+
+def test_concurrent_invoice_payments_debit_once_and_webhook_credits_once(db, world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from app.models.billing import Invoice, Payment
+    from app.services import billing, payments
+
+    w, _ = world
+    plan = billing.create_plan(db, "c2", "C2", "EUR", "3.00")
+    billing.set_profile(db, "c1", "Acme Ltd", "Main 1", "AL", "a@acme.example")
+    sub = billing.assign_plan(
+        db, "c1", plan.id, auto_pay=False, now=datetime(2030, 1, 15, tzinfo=UTC)
+    )
+    inv = billing.generate_invoice(db, sub.id, datetime(2030, 2, 16, tzinfo=UTC))
+    top = payments.start_payment(db, "c1", "topup", "5", wallet_id=w.id)
+    db.commit()
+    inv_id, ext = inv.id, top.external_id
+    errors = []
+    barrier = threading.Barrier(8)
+
+    def worker(i):
+        with SessionLocal() as s:
+            try:
+                barrier.wait()
+                if i % 2 == 0:
+                    billing.pay_from_wallet(s, "c1", inv_id)
+                else:
+                    payments.complete(s, "fake", ext, "succeeded", "5", "EUR")
+                s.commit()
+            except Exception as e:  # noqa: BLE001
+                s.rollback()
+                errors.append(repr(e))
+
+    _threads(8, worker)
+    assert not errors, errors
+    db.expire_all()
+    assert db.get(Invoice, inv_id).status.value == "paid"
+    assert db.query(Payment).one().status.value == "succeeded"
+    assert wallets.balances(db, w.id) == (D("12"), D("0"))  # 10 + 5 - 3, jo më shumë e jo më pak
+    assert wallets.verify_wallet(db, w.id)
