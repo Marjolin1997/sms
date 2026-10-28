@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27", "ruff==0.17.0"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff==0.17.2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
