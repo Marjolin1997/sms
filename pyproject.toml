@@ -16,7 +16,7 @@ dependencies = [
   "dnspython>=2.4",
   "argon2-cffi>=23.1",
   "PyJWT>=2.8",
-  "reportlab>=4.2,<5",
+  "reportlab>=4.2,<6",
 ]
 
 [project.optional-dependencies]
